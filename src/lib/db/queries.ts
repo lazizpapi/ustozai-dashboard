@@ -1,7 +1,12 @@
 import "server-only";
 
 import { serviceClient } from "./client";
-import { EDUCATION_GENRE } from "@/lib/collectors/config";
+import {
+  ANDROID_PACKAGE,
+  COMPETITORS,
+  EDUCATION_GENRE,
+  IOS_APP_ID,
+} from "@/lib/collectors/config";
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS } from "@/lib/asc/discovery";
 import {
   countByBucket,
@@ -73,11 +78,20 @@ function trend<T>(current: T | null, previous: T | null, capturedAt: string | nu
   return { current, previous, capturedAt, noHistory: previous === null };
 }
 
+/**
+ * Our own listing for a platform.
+ *
+ * The role filter is not optional. The apps table also holds competitors now,
+ * and without it this lookup matches several rows and every page that reports
+ * on our app fails at once. A partial unique index in migration 0007 keeps the
+ * "exactly one own row per platform" side of that promise in the database.
+ */
 async function appId(platform: "ios" | "android"): Promise<string | null> {
   const { data } = await serviceClient()
     .from("apps")
     .select("id")
     .eq("platform", platform)
+    .eq("role", "own")
     .maybeSingle();
   return (data?.id as string) ?? null;
 }
@@ -396,7 +410,9 @@ export interface ReviewRow {
 export async function recentReviews(limit = 25, since?: string): Promise<ReviewRow[]> {
   const base = serviceClient()
     .from("reviews")
-    .select("id, country, rating, title, body, author, submitted_at, apps!inner(platform)");
+    .select("id, country, rating, title, body, author, submitted_at, apps!inner(platform, role)")
+    // Same guard as reviewTimestamps: the digest reads through here.
+    .eq("apps.role", "own");
 
   const { data, error } = await (since ? base.gte("submitted_at", since) : base)
     .order("submitted_at", { ascending: false, nullsFirst: false })
@@ -526,6 +542,138 @@ export async function socialTrends(days = 30): Promise<SocialTrend[]> {
  * refresh and quietly turn the live path back into a polled one.
  */
 // ---------------------------------------------------------------------------
+// Market comparison
+// ---------------------------------------------------------------------------
+
+export interface MarketApp {
+  slug: string;
+  name: string;
+  isOurs: boolean;
+  /** Education chart, UZ, top free. Null rank means outside the feed. */
+  rank: number | null;
+  rankPrevious: number | null;
+  feedSize: number | null;
+  iosRating: number | null;
+  iosRatingCount: number | null;
+  playInstalls: number | null;
+  playInstallsPrevious: number | null;
+  playRating: number | null;
+  playRatingCount: number | null;
+}
+
+/** Newest row, and the newest at or before the cutoff, from newest-first rows. */
+function latestAndPrior<T extends { captured_at: string }>(
+  rows: T[],
+  cutoff: string,
+): { latest: T | undefined; prior: T | undefined } {
+  return {
+    latest: rows[0],
+    prior: rows.find((row) => row.captured_at <= cutoff),
+  };
+}
+
+/**
+ * Us against the apps we track, one row each.
+ *
+ * Three queries regardless of how many competitors are listed, rather than a
+ * few per app. The per-app reduction then happens here, which keeps the round
+ * trips flat as the list grows.
+ *
+ * Ours is pinned first because the question this page answers is always "where
+ * are we against them" rather than "who is winning".
+ */
+export async function marketOverview(): Promise<MarketApp[]> {
+  const { data: appRows, error } = await serviceClient()
+    .from("apps")
+    .select("id, platform, store_id, role");
+  if (error) throw new Error(`marketOverview apps: ${error.message}`);
+
+  const byKey = new Map<string, string>(
+    (appRows ?? []).map((row) => [`${row.platform}:${row.store_id}`, row.id as string]),
+  );
+  const allIds = (appRows ?? []).map((row) => row.id as string);
+  if (allIds.length === 0) return [];
+
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = weekAgoIso();
+
+  const [ranks, snaps] = await Promise.all([
+    fetchAllPages<{ app_id: string; rank: number | null; feed_size: number; captured_at: string }>(
+      (from, to) =>
+        serviceClient()
+          .from("chart_ranks")
+          .select("app_id, rank, feed_size, captured_at")
+          .in("app_id", allIds)
+          .eq("country", "uz")
+          .eq("chart_type", "topfree")
+          .eq("genre", EDUCATION_GENRE)
+          .gte("captured_at", since)
+          .order("captured_at", { ascending: false })
+          .range(from, to),
+      "marketOverview ranks",
+    ),
+    fetchAllPages<{
+      app_id: string;
+      rating: number | null;
+      rating_count: number | null;
+      install_count: number | null;
+      captured_at: string;
+    }>(
+      (from, to) =>
+        serviceClient()
+          .from("metric_snapshots")
+          .select("app_id, rating, rating_count, install_count, captured_at")
+          .in("app_id", allIds)
+          .eq("country", "uz")
+          .gte("captured_at", since)
+          .order("captured_at", { ascending: false })
+          .range(from, to),
+      "marketOverview snapshots",
+    ),
+  ]);
+
+  const entries = [
+    { slug: "ustoz-ai", name: "Ustoz AI", iosId: IOS_APP_ID, androidPackage: ANDROID_PACKAGE, isOurs: true },
+    ...COMPETITORS.map((c) => ({ ...c, isOurs: false })),
+  ];
+
+  return entries.map((entry) => {
+    const iosId = entry.iosId ? byKey.get(`ios:${entry.iosId}`) : undefined;
+    const androidId = entry.androidPackage
+      ? byKey.get(`android:${entry.androidPackage}`)
+      : undefined;
+
+    const rank = latestAndPrior(
+      ranks.filter((row) => row.app_id === iosId),
+      cutoff,
+    );
+    const ios = latestAndPrior(
+      snaps.filter((row) => row.app_id === iosId && row.rating !== null),
+      cutoff,
+    );
+    const play = latestAndPrior(
+      snaps.filter((row) => row.app_id === androidId),
+      cutoff,
+    );
+
+    return {
+      slug: entry.slug,
+      name: entry.name,
+      isOurs: entry.isOurs,
+      rank: rank.latest?.rank ?? null,
+      rankPrevious: rank.prior?.rank ?? null,
+      feedSize: rank.latest?.feed_size ?? null,
+      iosRating: ios.latest?.rating ?? null,
+      iosRatingCount: ios.latest?.rating_count ?? null,
+      playInstalls: play.latest?.install_count ?? null,
+      playInstallsPrevious: play.prior?.install_count ?? null,
+      playRating: play.latest?.rating ?? null,
+      playRatingCount: play.latest?.rating_count ?? null,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Growth over time
 // ---------------------------------------------------------------------------
 
@@ -581,8 +729,11 @@ async function reviewTimestamps(platform: "ios" | "android"): Promise<string[]> 
     (from, to) =>
       serviceClient()
         .from("reviews")
-        .select("submitted_at, apps!inner(platform)")
+        .select("submitted_at, apps!inner(platform, role)")
         .eq("apps.platform", platform)
+        // Competitor reviews are not collected, so this cannot leak today. It
+        // is here so that it still cannot if they ever are.
+        .eq("apps.role", "own")
         .not("submitted_at", "is", null)
         .order("submitted_at", { ascending: true })
         .range(from, to),

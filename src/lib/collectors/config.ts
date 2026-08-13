@@ -87,3 +87,75 @@ export const PLAY_REVIEW_LANGS = ["uz", "ru"] as const;
 
 /** One page. Deduplication on Play's own review id makes overlap free. */
 export const PLAY_REVIEW_COUNT = 100;
+
+export interface Competitor {
+  /** Stable key for health-panel step names and table rows. */
+  slug: string;
+  name: string;
+  /** Null when the app is not on that store. */
+  iosId: string | null;
+  androidPackage: string | null;
+}
+
+/**
+ * The apps worth watching, chosen from the live UZ Education chart on
+ * 2026-08-13, when Ustoz AI sat at #21.
+ *
+ * Picked for comparability rather than for proximity in the chart. The
+ * positions above us are thick with driving-test apps and astronomy apps, which
+ * share a chart and nothing else. These five are education products competing
+ * for the same students.
+ *
+ * Their standing that day, which is the baseline every later reading is
+ * measured against:
+ *
+ *   #4  InTalim Students      360,985 installs   4.42 Play   3.70 iOS
+ *   #5  Qizlar Akademiyasi    429,181 installs   4.20 Play   4.61 iOS
+ *   #9  Praktika AI Tutor  19,607,405 installs   4.51 Play   4.68 iOS
+ *   #13 Ibrat Academy       3,305,898 installs   4.68 Play   4.60 iOS
+ *   #16 Englify               493,021 installs   4.68 Play   4.46 iOS
+ *   #21 Ustoz AI              531,001 installs   4.76 Play   4.68 iOS
+ *
+ * Worth keeping in view: three of the five rank above us with fewer installs.
+ * Apple's chart follows recent download velocity, not accumulated size, so the
+ * position is a momentum reading rather than a size ranking.
+ *
+ * Praktika is a global app rather than a local rival and is tracked as the
+ * category's ceiling, not as a like-for-like comparison.
+ *
+ * Only the UZ storefront is ever polled for these. This list must stay in step
+ * with the seed in migration 0008; if it drifts, the poll says so loudly,
+ * because persist throws on an unknown platform and store id pair.
+ */
+export const COMPETITORS: readonly Competitor[] = [
+  {
+    slug: "intalim",
+    name: "InTalim Students",
+    iosId: "6504232456",
+    androidPackage: "uz.intalim",
+  },
+  {
+    slug: "qizlar-akademiyasi",
+    name: "Qizlar Akademiyasi",
+    iosId: "6557054918",
+    androidPackage: "uz.globalmove.girls_academy",
+  },
+  {
+    slug: "praktika",
+    name: "Praktika AI Tutor",
+    iosId: "1624701477",
+    androidPackage: "ai.praktika.android",
+  },
+  {
+    slug: "ibrat-academy",
+    name: "Ibrat Academy",
+    iosId: "6447472950",
+    androidPackage: "uz.ibrat.farzandlari",
+  },
+  {
+    slug: "englify",
+    name: "Englify",
+    iosId: "6499320034",
+    androidPackage: "uz.englify.englify_client_mobile",
+  },
+] as const;

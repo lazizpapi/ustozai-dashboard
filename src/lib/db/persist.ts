@@ -77,12 +77,35 @@ function appIdFor(ids: Map<AppKey, string>, platform: Platform, storeId: string)
   return id;
 }
 
+/**
+ * The app map, re-read once if a key is missing.
+ *
+ * appIdCache is held for the life of the instance, which is right almost
+ * always and wrong exactly when a new app row is added: a warm instance keeps
+ * the map it resolved before the row existed and rejects every write for that
+ * app until it happens to recycle, which can be hours. Since a miss is the only
+ * symptom, a miss is what triggers the re-read.
+ *
+ * Still throws when the row genuinely is not there, so a competitor listed in
+ * config but never seeded is a loud failure rather than a silent gap.
+ */
+async function resolveAppIdsIncluding(
+  keys: readonly { platform: Platform; storeId: string }[],
+): Promise<Map<AppKey, string>> {
+  const ids = await resolveAppIds();
+  const missing = keys.some((key) => !ids.has(`${key.platform}:${key.storeId}`));
+  if (!missing) return ids;
+
+  appIdCache = null;
+  return resolveAppIds();
+}
+
 export async function saveSnapshots(
   snapshots: MetricSnapshot[],
   capturedAt: string,
 ): Promise<number> {
   if (snapshots.length === 0) return 0;
-  const ids = await resolveAppIds();
+  const ids = await resolveAppIdsIncluding(snapshots);
 
   const rows = snapshots.map((snapshot) => ({
     app_id: appIdFor(ids, snapshot.platform, snapshot.storeId),
@@ -107,7 +130,7 @@ export async function saveChartRanks(
   capturedAt: string,
 ): Promise<number> {
   if (ranks.length === 0) return 0;
-  const ids = await resolveAppIds();
+  const ids = await resolveAppIdsIncluding(ranks);
 
   const rows = ranks.map((rank) => ({
     app_id: appIdFor(ids, rank.platform, rank.storeId),

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { fetchLookup } from "./itunes-lookup";
-import { fetchChart } from "./itunes-charts";
+import { fetchChartMany } from "./itunes-charts";
 import { fetchReviews } from "./itunes-reviews";
 import { fetchPlayDetails } from "./play-details";
 import { fetchPlayReviews } from "./play-reviews";
@@ -13,7 +13,14 @@ import {
   type SocialSnapshot,
 } from "./social";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
-import { CHART_COUNTRIES, CHART_TYPES, COUNTRIES, PLAY_REVIEW_LANGS } from "./config";
+import {
+  CHART_COUNTRIES,
+  CHART_TYPES,
+  COMPETITORS,
+  COUNTRIES,
+  IOS_APP_ID,
+  PLAY_REVIEW_LANGS,
+} from "./config";
 import {
   hourBucket,
   recordRuns,
@@ -51,16 +58,29 @@ export async function runPoll(): Promise<PollSummary> {
     ),
   );
 
+  /*
+   * Every tracked app's rank comes out of the same four feeds we already pull.
+   * A chart payload is the same hundred entries whoever is asking, so adding
+   * competitors here costs parsing and not a single extra request.
+   */
+  const trackedIosIds = [
+    IOS_APP_ID,
+    ...COMPETITORS.flatMap((c) => (c.iosId ? [c.iosId] : [])),
+  ];
+
   const chartSteps = await Promise.all(
     CHART_COUNTRIES.flatMap((country) =>
       CHART_TYPES.map((chart) =>
         step(`itunes-charts:${country}:${chart.key}:${chart.genre}`, () =>
-          fetchChart({
-            country,
-            feed: chart.feed,
-            genre: chart.genre,
-            chartType: chart.key,
-          }),
+          fetchChartMany(
+            {
+              country,
+              feed: chart.feed,
+              genre: chart.genre,
+              chartType: chart.key,
+            },
+            trackedIosIds,
+          ),
         ),
       ),
     ),
@@ -97,6 +117,33 @@ export async function runPoll(): Promise<PollSummary> {
     playReviewSteps.push(
       await step(`play-reviews:${lang}`, () => fetchPlayReviews(lang)),
     );
+  }
+
+  /*
+   * Competitor store readings, UZ only and one step each so a single dead
+   * listing is one red badge rather than a failed poll.
+   *
+   * Sequential for the same reason as the keyword searches: several
+   * near-identical requests to one endpoint at the same instant is the shape
+   * that gets rate limited. Ours are fetched first, above, so a competitor
+   * being slow can never delay our own numbers.
+   */
+  const competitorSteps: StepResult<MetricSnapshot | null>[] = [];
+  for (const competitor of COMPETITORS) {
+    if (competitor.iosId) {
+      competitorSteps.push(
+        await step(`competitor:lookup:${competitor.slug}`, () =>
+          fetchLookup("uz", competitor.iosId!),
+        ),
+      );
+    }
+    if (competitor.androidPackage) {
+      competitorSteps.push(
+        await step(`competitor:play:${competitor.slug}`, () =>
+          fetchPlayDetails("uz", competitor.androidPackage!),
+        ),
+      );
+    }
   }
 
   /*
@@ -138,6 +185,7 @@ export async function runPoll(): Promise<PollSummary> {
     playStep,
     reviewStep,
     ...playReviewSteps,
+    ...competitorSteps,
     ...socialSteps,
   ];
 
@@ -146,8 +194,9 @@ export async function runPoll(): Promise<PollSummary> {
   const snapshots: MetricSnapshot[] = [
     ...values(lookupSteps).filter((s): s is MetricSnapshot => s !== null),
     ...values([playStep]),
+    ...values(competitorSteps).filter((s): s is MetricSnapshot => s !== null),
   ];
-  const ranks: ChartRank[] = values(chartSteps);
+  const ranks: ChartRank[] = values(chartSteps).flat();
 
   const socialSnapshots = values(socialSteps);
 

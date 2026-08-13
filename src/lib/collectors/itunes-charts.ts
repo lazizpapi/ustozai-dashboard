@@ -66,13 +66,38 @@ export function parseChart(
   };
 }
 
-export async function fetchChart(query: ChartQuery): Promise<ChartRank> {
+/**
+ * Every tracked app's position in one feed.
+ *
+ * Pure, and the reason competitor tracking costs no extra requests. A chart
+ * payload is the same hundred entries whoever is asking, so the feed is fetched
+ * once and read once per app rather than once per app.
+ */
+export function parseChartMany(
+  payload: unknown,
+  query: ChartQuery,
+  appIds: readonly string[],
+): ChartRank[] {
+  return appIds.map((appId) => parseChart(payload, { ...query, appId }));
+}
+
+async function fetchChartPayload(query: ChartQuery): Promise<unknown> {
   const genrePath =
     query.genre === OVERALL_GENRE ? "" : `genre=${encodeURIComponent(query.genre)}/`;
   const url =
     `https://itunes.apple.com/${encodeURIComponent(query.country)}/rss/${query.feed}` +
     `/limit=${CHART_FEED_LIMIT}/${genrePath}json`;
 
-  const payload = await fetchJson(url);
-  return parseChart(payload, query);
+  return fetchJson(url);
+}
+
+export async function fetchChart(query: ChartQuery): Promise<ChartRank> {
+  return parseChart(await fetchChartPayload(query), query);
+}
+
+export async function fetchChartMany(
+  query: ChartQuery,
+  appIds: readonly string[],
+): Promise<ChartRank[]> {
+  return parseChartMany(await fetchChartPayload(query), query, appIds);
 }

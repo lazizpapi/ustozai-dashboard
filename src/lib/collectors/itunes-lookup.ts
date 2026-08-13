@@ -32,6 +32,7 @@ interface LookupResponse {
 export function parseLookup(
   payload: unknown,
   country: string,
+  appId: string = IOS_APP_ID,
 ): MetricSnapshot | null {
   const body = payload as LookupResponse;
   if (!body || !Array.isArray(body.results)) {
@@ -42,7 +43,15 @@ export function parseLookup(
 
   return {
     platform: "ios",
-    storeId: String(app.trackId ?? IOS_APP_ID),
+    /*
+     * Falls back to the id that was asked for, not to ours.
+     *
+     * This is now polled for competitors too. A response missing trackId would
+     * previously have been filed against the Ustoz AI row, quietly overwriting
+     * our rating with somebody else's, and every panel downstream would have
+     * shown it without complaint.
+     */
+    storeId: String(app.trackId ?? appId),
     country,
     rating: typeof app.averageUserRating === "number" ? app.averageUserRating : null,
     ratingCount: typeof app.userRatingCount === "number" ? app.userRatingCount : null,
@@ -58,5 +67,5 @@ export async function fetchLookup(
 ): Promise<MetricSnapshot | null> {
   const url = `https://itunes.apple.com/lookup?id=${encodeURIComponent(appId)}&country=${encodeURIComponent(country)}`;
   const payload = await fetchJson(url);
-  return parseLookup(payload, country);
+  return parseLookup(payload, country, appId);
 }

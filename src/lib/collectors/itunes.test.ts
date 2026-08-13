@@ -10,8 +10,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { parseLookup } from "./itunes-lookup";
-import { parseChart, type ChartQuery } from "./itunes-charts";
+import { parseChart, parseChartMany, type ChartQuery } from "./itunes-charts";
 import { parseSearch } from "./itunes-search";
+import { IOS_APP_ID } from "./config";
 import { parseReviews } from "./itunes-reviews";
 import { ParseError } from "./types";
 import { EDUCATION_GENRE } from "./config";
@@ -25,6 +26,50 @@ const CHART_QUERY: ChartQuery = {
   genre: EDUCATION_GENRE,
   chartType: "topfree",
 };
+
+describe("competitor tracking", () => {
+  const query: ChartQuery = {
+    country: "uz",
+    feed: "topfreeapplications",
+    genre: "6017",
+    chartType: "topfree",
+  };
+
+  it("reads several apps out of one chart payload", () => {
+    // This is what makes competitor ranks free: the feed is the same hundred
+    // entries whoever is asking, so it is fetched once and read many times.
+    const payload = fixture("itunes-chart-uz-education.json");
+    const ours = parseChart(payload, query);
+    const many = parseChartMany(payload, query, [IOS_APP_ID, "000000000"]);
+
+    expect(many).toHaveLength(2);
+    expect(many[0].rank).toBe(ours.rank);
+    expect(many[0].storeId).toBe(IOS_APP_ID);
+  });
+
+  it("reports an app missing from the feed as null rank, not as absent", () => {
+    // Null means polled fine and outside the chart. A competitor that drops out
+    // must be distinguishable from one we failed to read.
+    const [missing] = parseChartMany(
+      fixture("itunes-chart-uz-education.json"),
+      query,
+      ["000000000"],
+    );
+
+    expect(missing.rank).toBeNull();
+    expect(missing.feedSize).toBeGreaterThan(0);
+  });
+
+  it("attributes a lookup to the app that was requested", () => {
+    // The bug this pins: the fallback used to be our own app id, so a
+    // competitor response without trackId would have overwritten our rating
+    // with theirs, and every panel downstream would have shown it.
+    const withoutId = { resultCount: 1, results: [{ averageUserRating: 4.42 }] };
+
+    expect(parseLookup(withoutId, "uz", "6504232456")?.storeId).toBe("6504232456");
+    expect(parseLookup(withoutId, "uz")?.storeId).toBe(IOS_APP_ID);
+  });
+});
 
 describe("parseLookup", () => {
   it("reads rating, count and version from a real UZ response", () => {
