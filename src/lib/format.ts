@@ -37,6 +37,33 @@ export function formatRank(value: number | null | undefined): string {
   return `#${value}`;
 }
 
+/**
+ * A growth bucket's axis label, at the resolution that period deserves.
+ *
+ * A year of daily bars cannot show a day number on every tick, and a yearly
+ * chart showing "1 Jan 2025" says nothing "2025" does not. Each period gets the
+ * shortest label that still identifies the bucket.
+ */
+export function formatBucket(bucket: string | null | undefined, period: string): string {
+  if (!bucket) return "—";
+  if (period === "year") return bucket.slice(0, 4);
+
+  const date = new Date(`${bucket}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  if (period === "month") {
+    return date.toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" });
+  }
+  // Days and weeks both name the day the bucket starts.
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+/** Signed, so a net loss reads as one at a glance rather than as a smaller gain. */
+export function formatSigned(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return `${value > 0 ? "+" : ""}${value.toLocaleString("en-US")}`;
+}
+
 /** Spelled out, because a bare code beside a store name reads as a country. */
 const LANGUAGE_NAMES: Record<string, string> = {
   uz: "Uzbek",

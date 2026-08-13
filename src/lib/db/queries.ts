@@ -3,6 +3,14 @@ import "server-only";
 import { serviceClient } from "./client";
 import { EDUCATION_GENRE } from "@/lib/collectors/config";
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS } from "@/lib/asc/discovery";
+import {
+  countByBucket,
+  netChangeByBucket,
+  sumByBucket,
+  type GrowthPoint,
+  type Period,
+  type Reading,
+} from "@/lib/growth";
 
 /**
  * Read side.
@@ -517,6 +525,154 @@ export async function socialTrends(days = 30): Promise<SocialTrend[]> {
  * broad question there would let a fresh Instagram reading suppress a Telegram
  * refresh and quietly turn the live path back into a polled one.
  */
+// ---------------------------------------------------------------------------
+// Growth over time
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything the growth page can draw, and where each one comes from.
+ *
+ * The `kind` is load bearing rather than cosmetic. A counter reports a running
+ * total and its growth is a difference; an event describes one period already
+ * and its growth is a sum. Applying the wrong arithmetic to either produces a
+ * number that looks reasonable and is not, so the reducer is chosen from this
+ * table rather than from anything at the call site.
+ */
+export const GROWTH_SERIES = {
+  telegram: { label: "Telegram", kind: "counter", since: "2026-08-12" },
+  instagram: { label: "Instagram", kind: "counter", since: "2026-08-12" },
+  youtube: { label: "YouTube", kind: "counter", since: "2026-08-12" },
+  iosReviews: { label: "App Store reviews", kind: "event", since: "2026-03-25" },
+  playReviews: { label: "Google Play reviews", kind: "event", since: "2026-07-23" },
+  iosDownloads: { label: "App Store downloads", kind: "event", since: "2025-08-12" },
+  playInstalls: { label: "Google Play installs", kind: "counter", since: "2026-08-12" },
+} as const;
+
+export type GrowthSeriesKey = keyof typeof GROWTH_SERIES;
+
+export interface GrowthSeries {
+  key: GrowthSeriesKey;
+  label: string;
+  points: GrowthPoint[];
+}
+
+/** Follower readings for one platform, oldest first. */
+async function socialReadings(platform: string): Promise<Reading[]> {
+  const rows = await fetchAllPages<{ checked_at: string | null; captured_at: string; followers: number }>(
+    (from, to) =>
+      serviceClient()
+        .from("social_snapshots")
+        .select("checked_at, captured_at, followers")
+        .eq("platform", platform)
+        .order("captured_at", { ascending: true })
+        .range(from, to),
+    `socialReadings(${platform})`,
+  );
+
+  // checked_at is when we actually reached the platform; captured_at is only
+  // the hour it is filed under. The real time is the one that decides which
+  // day a reading belongs to.
+  return rows.map((row) => ({ at: row.checked_at ?? row.captured_at, value: row.followers }));
+}
+
+/** Review timestamps for one platform. */
+async function reviewTimestamps(platform: "ios" | "android"): Promise<string[]> {
+  const rows = await fetchAllPages<{ submitted_at: string | null }>(
+    (from, to) =>
+      serviceClient()
+        .from("reviews")
+        .select("submitted_at, apps!inner(platform)")
+        .eq("apps.platform", platform)
+        .not("submitted_at", "is", null)
+        .order("submitted_at", { ascending: true })
+        .range(from, to),
+    `reviewTimestamps(${platform})`,
+  );
+
+  return rows.map((row) => row.submitted_at).filter((at): at is string => at !== null);
+}
+
+/**
+ * One series, bucketed.
+ *
+ * Reduction happens here in JavaScript rather than in SQL because PostgREST
+ * cannot group without a stored function, and because the bucketing rules are
+ * worth testing without a database attached. The volumes are small: a year of
+ * daily download rows is the largest of these and it pages cleanly.
+ */
+export async function growthSeries(
+  key: GrowthSeriesKey,
+  period: Period,
+): Promise<GrowthSeries> {
+  const spec = GROWTH_SERIES[key];
+  const points = await growthPoints(key, period);
+  return { key, label: spec.label, points };
+}
+
+async function growthPoints(key: GrowthSeriesKey, period: Period): Promise<GrowthPoint[]> {
+  if (key === "telegram" || key === "instagram" || key === "youtube") {
+    return netChangeByBucket(await socialReadings(key), period);
+  }
+
+  if (key === "iosReviews") return countByBucket(await reviewTimestamps("ios"), period);
+  if (key === "playReviews") return countByBucket(await reviewTimestamps("android"), period);
+
+  if (key === "iosDownloads") {
+    const id = await appId("ios");
+    if (!id) return [];
+
+    const rows = await fetchAllPages<{ date: string; download_type: string; units: number }>(
+      (from, to) =>
+        serviceClient()
+          .from("ios_downloads_daily")
+          .select("date, download_type, units")
+          .eq("app_id", id)
+          .eq("source", "sales")
+          .order("date", { ascending: true })
+          .range(from, to),
+      "growth iosDownloads",
+    );
+
+    /*
+     * Updates are excluded. They are re-downloads by people who already have
+     * the app, so counting them as growth would make a big release look like a
+     * surge of new users. This matches what the downloads page already counts.
+     *
+     * Apple dates each row to its own reporting day, which is not the Tashkent
+     * day used elsewhere on this page. Noon is used as the timestamp so that
+     * converting to a local date cannot shift the row into a neighbouring day.
+     */
+    return sumByBucket(
+      rows
+        .filter((row) => row.download_type !== "update")
+        .map((row) => ({ at: `${row.date}T12:00:00Z`, amount: row.units })),
+      period,
+    );
+  }
+
+  // playInstalls: a cumulative counter, same as followers.
+  const id = await appId("android");
+  if (!id) return [];
+
+  const rows = await fetchAllPages<{ captured_at: string; install_count: number | null }>(
+    (from, to) =>
+      serviceClient()
+        .from("metric_snapshots")
+        .select("captured_at, install_count")
+        .eq("app_id", id)
+        .eq("country", "uz")
+        .not("install_count", "is", null)
+        .order("captured_at", { ascending: true })
+        .range(from, to),
+    "growth playInstalls",
+  );
+
+  return netChangeByBucket(
+    rows.map((row) => ({ at: row.captured_at, value: row.install_count as number })),
+    period,
+  );
+}
+
 export interface DiscoveryFunnel {
   impressions: number;
   pageViews: number;
