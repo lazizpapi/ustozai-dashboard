@@ -2,6 +2,7 @@ import "server-only";
 
 import { serviceClient } from "./client";
 import { EDUCATION_GENRE } from "@/lib/collectors/config";
+import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS } from "@/lib/asc/discovery";
 
 /**
  * Read side.
@@ -374,10 +375,22 @@ export interface ReviewRow {
   submittedAt: string | null;
 }
 
-export async function recentReviews(limit = 25): Promise<ReviewRow[]> {
-  const { data, error } = await serviceClient()
+/**
+ * @param since Optional ISO cutoff on submitted_at.
+ *
+ * The digest passes it. Without it, "reviews from the last day" had to be
+ * approximated by taking the newest N and filtering in JavaScript, which is
+ * only correct while N exceeds the number of reviews that can arrive in a day.
+ * Collecting Google Play as well as the App Store roughly doubled that rate,
+ * so the window is now a condition on the query rather than a guess about the
+ * limit.
+ */
+export async function recentReviews(limit = 25, since?: string): Promise<ReviewRow[]> {
+  const base = serviceClient()
     .from("reviews")
-    .select("id, country, rating, title, body, author, submitted_at, apps!inner(platform)")
+    .select("id, country, rating, title, body, author, submitted_at, apps!inner(platform)");
+
+  const { data, error } = await (since ? base.gte("submitted_at", since) : base)
     .order("submitted_at", { ascending: false, nullsFirst: false })
     .limit(limit);
 
@@ -495,6 +508,107 @@ export async function socialTrends(days = 30): Promise<SocialTrend[]> {
  * whether to go and fetch a new reading, so it has to be the cheapest query in
  * the file.
  */
+/**
+ * When one platform was last successfully read.
+ *
+ * Deliberately not the same query as latestAudienceCheck, which answers "any
+ * platform" and is right for the page renderer because it refreshes all of
+ * them together. The Telegram webhook refreshes only Telegram, so asking the
+ * broad question there would let a fresh Instagram reading suppress a Telegram
+ * refresh and quietly turn the live path back into a polled one.
+ */
+export interface DiscoveryFunnel {
+  impressions: number;
+  pageViews: number;
+  firstTimeDownloads: number;
+  /** The dates actually covered, so the UI can say what window this is. */
+  from: string;
+  to: string;
+}
+
+/**
+ * Impressions, product page views and first-time downloads over one window.
+ *
+ * The window is taken from the discovery rows and then applied to the download
+ * rows, rather than both being asked for "the last 30 days" independently. The
+ * two reports do not land at the same time, so a fixed window would routinely
+ * compare a complete set of impressions against a downloads set missing its
+ * most recent day, and quietly understate conversion.
+ *
+ * Downloads come from the analytics rows rather than sales for the same
+ * reason: those are the ones that share Apple's analytics processing schedule.
+ */
+export async function iosDiscoveryFunnel(days = 30): Promise<DiscoveryFunnel | null> {
+  const id = await appId("ios");
+  if (!id) return null;
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  // Paged: one row per country per event per page type per source per device
+  // passes a thousand rows quickly. See the PostgREST note at the top.
+  const discovery = await fetchAllPages<{ date: string; event: string; units: number }>(
+    (from, to) =>
+      serviceClient()
+        .from("ios_discovery_daily")
+        .select("date, event, units")
+        .eq("app_id", id)
+        .gte("date", since)
+        .order("date", { ascending: true })
+        .range(from, to),
+    "iosDiscoveryFunnel",
+  );
+
+  if (discovery.length === 0) return null;
+
+  const dates = discovery.map((row) => row.date).sort();
+  const from = dates[0];
+  const to = dates[dates.length - 1];
+
+  let impressions = 0;
+  let pageViews = 0;
+  for (const row of discovery) {
+    if (IMPRESSION_EVENTS.includes(row.event)) impressions += row.units;
+    else if (PAGE_VIEW_EVENTS.includes(row.event)) pageViews += row.units;
+  }
+
+  const downloads = await fetchAllPages<{ units: number }>(
+    (rangeFrom, rangeTo) =>
+      serviceClient()
+        .from("ios_downloads_daily")
+        .select("units")
+        .eq("app_id", id)
+        .eq("source", "analytics")
+        .eq("download_type", "first_time")
+        .gte("date", from)
+        .lte("date", to)
+        .range(rangeFrom, rangeTo),
+    "iosDiscoveryFunnel downloads",
+  );
+
+  return {
+    impressions,
+    pageViews,
+    firstTimeDownloads: downloads.reduce((total, row) => total + row.units, 0),
+    from,
+    to,
+  };
+}
+
+export async function latestPlatformCheck(platform: string): Promise<string | null> {
+  const { data, error } = await serviceClient()
+    .from("social_snapshots")
+    .select("checked_at")
+    .eq("platform", platform)
+    .order("checked_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`latestPlatformCheck(${platform}): ${error.message}`);
+  return data?.checked_at ?? null;
+}
+
 export async function latestAudienceCheck(): Promise<string | null> {
   const { data, error } = await serviceClient()
     .from("social_snapshots")

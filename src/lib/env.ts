@@ -39,6 +39,22 @@ export function analyticsRequestId(): string | null {
   return process.env.ASC_ANALYTICS_REQUEST_ID?.trim() || null;
 }
 
+/**
+ * The secret Telegram echoes back on every webhook call, in the
+ * X-Telegram-Bot-Api-Secret-Token header. Set once at setWebhook time.
+ *
+ * Optional: without it the webhook route refuses everything, which is the
+ * correct closed state for a deploy that has not been given the secret. The
+ * five-minute pulse keeps the member count moving regardless, so the feature
+ * degrades from live to near-live rather than breaking.
+ *
+ * Telegram restricts this to 1 to 256 characters of A-Z, a-z, 0-9, _ and -,
+ * which is why the generated value is hex rather than base64url.
+ */
+export function telegramWebhookSecret(): string | null {
+  return process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || null;
+}
+
 const telegramSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(20),
   TELEGRAM_CHAT_ID: z.string().min(1),

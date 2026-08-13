@@ -4,6 +4,7 @@ import { fetchLookup } from "./itunes-lookup";
 import { fetchChart } from "./itunes-charts";
 import { fetchReviews } from "./itunes-reviews";
 import { fetchPlayDetails } from "./play-details";
+import { fetchPlayReviews } from "./play-reviews";
 import {
   fetchInstagramFollowers,
   fetchInstagramViaApi,
@@ -12,7 +13,7 @@ import {
   type SocialSnapshot,
 } from "./social";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
-import { CHART_COUNTRIES, CHART_TYPES, COUNTRIES } from "./config";
+import { CHART_COUNTRIES, CHART_TYPES, COUNTRIES, PLAY_REVIEW_LANGS } from "./config";
 import {
   hourBucket,
   recordRuns,
@@ -23,7 +24,7 @@ import {
 } from "@/lib/db/persist";
 import { socialEnv } from "@/lib/env";
 import { instagramToken } from "@/lib/db/tokens";
-import type { ChartRank, MetricSnapshot } from "./types";
+import type { ChartRank, MetricSnapshot, Review } from "./types";
 
 /**
  * The frequent poll: chart position, rating, and Play installs.
@@ -83,6 +84,22 @@ export async function runPoll(): Promise<PollSummary> {
   const reviewStep = await step("itunes-reviews:uz:poll", () => fetchReviews("uz"));
 
   /*
+   * Google Play reviews, one step per language.
+   *
+   * Sequential rather than parallel for the same reason as the keyword
+   * searches: two near-identical requests to the same Play endpoint at the
+   * same instant is the shape that gets rate limited. Deduplication happens in
+   * the database on Play's own review id, so the overlap between languages
+   * costs nothing.
+   */
+  const playReviewSteps: StepResult<Review[]>[] = [];
+  for (const lang of PLAY_REVIEW_LANGS) {
+    playReviewSteps.push(
+      await step(`play-reviews:${lang}`, () => fetchPlayReviews(lang)),
+    );
+  }
+
+  /*
    * Audience counts, one step per platform so a block on one never costs the
    * others. Each is independently configurable and an unset handle is skipped
    * rather than failed.
@@ -120,6 +137,7 @@ export async function runPoll(): Promise<PollSummary> {
     ...chartSteps,
     playStep,
     reviewStep,
+    ...playReviewSteps,
     ...socialSteps,
   ];
 
@@ -133,10 +151,17 @@ export async function runPoll(): Promise<PollSummary> {
 
   const socialSnapshots = values(socialSteps);
 
+  // Both stores land in one call: reviews are insert-only and deduplicated on
+  // the store's own id, so the shape of the write is identical either way.
+  const allReviews: Review[] = [
+    ...(reviewStep.value ?? []),
+    ...values(playReviewSteps).flat(),
+  ];
+
   const writes = await Promise.allSettled([
     saveSnapshots(snapshots, capturedAt),
     saveChartRanks(ranks, capturedAt),
-    saveReviews(reviewStep.value ?? []),
+    saveReviews(allReviews),
     saveSocialSnapshots(socialSnapshots, capturedAt),
   ]);
 

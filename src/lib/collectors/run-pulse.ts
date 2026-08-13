@@ -6,27 +6,61 @@ import {
   type SocialPlatform,
   type SocialSnapshot,
 } from "./social";
-import { hourBucket, saveSocialSnapshots } from "@/lib/db/persist";
+import { fetchLatestReviews } from "./itunes-reviews";
+import { hourBucket, saveReviews, saveSocialSnapshots } from "@/lib/db/persist";
 import { socialEnv, type SocialConfig } from "@/lib/env";
 import { instagramToken } from "@/lib/db/tokens";
 
 /**
- * The pulse: audience counts only, cheap enough to run every minute.
+ * The pulse: the handful of things that can change between two consecutive
+ * reads, cheap enough to run every few minutes.
  *
  * Separate from runPoll rather than a faster version of it, because most of
  * what runPoll collects cannot benefit. Apple recomputes its charts a few
  * times a day, publishes downloads a day in arrears, and moves the rating
- * average in the third decimal. Fetching those every minute would return the
- * same values while making us a nuisance to Apple.
+ * average in the third decimal. Google's public install counter sits still for
+ * about a day and then jumps by a whole day at once, measured. Fetching any of
+ * those every few minutes would return the same values while making us a
+ * nuisance to the people serving them.
  *
- * What is left is two API calls, which is the whole point: this can run on a
- * page load without anyone noticing.
+ * Audience counts run on every invocation and are light enough for a page
+ * render. Reviews are opt-in because they belong only to the scheduled caller:
+ * see the note on the option below.
  */
+
+export interface PulseOptions {
+  /**
+   * Fetch page one of the reviews feed as well.
+   *
+   * Off by default so the render-time path stays two API calls. The cron
+   * caller turns it on: a new review reaching the screen in minutes is worth
+   * one extra request every five minutes, but it is not worth adding latency
+   * to somebody loading a page.
+   */
+  includeReviews?: boolean;
+}
 
 export interface PulseSummary {
   platforms: SocialPlatform[];
   written: number;
+  /** Genuinely new reviews inserted, 0 when not requested. */
+  reviews: number;
   failures: string[];
+}
+
+/**
+ * Whether there is anything to do at all.
+ *
+ * Extracted and tested rather than inlined because the obvious version of this
+ * check is wrong in a way nothing would report: an early return that asks only
+ * whether a social platform qualifies will silently skip reviews on a run that
+ * was requested precisely for them.
+ */
+export function pulseHasWork(
+  platforms: SocialPlatform[],
+  includeReviews: boolean,
+): boolean {
+  return platforms.length > 0 || includeReviews;
 }
 
 /**
@@ -65,19 +99,25 @@ function message(error: unknown): string {
  * Deliberately does not write to collector_runs.
  *
  * The health panel shows the most recent run per source, so a source that
- * reports every sixty seconds would drown every other source in the table and
- * add half a million rows a year to answer a question already answered better
- * elsewhere. A pulse that stops working shows up as the audience readings
- * ceasing to advance, which is the staleness signal the wall was built around,
- * and the three-hourly poll still records real health for the same platforms.
+ * reports every few minutes would drown every other source in the table and
+ * add hundreds of thousands of rows a year to answer a question already
+ * answered better elsewhere. A pulse that stops working shows up as the
+ * readings ceasing to advance, which is the staleness signal the wall was
+ * built around, and the hourly poll still records real health for every source
+ * this touches, reviews included.
+ *
+ * Failures are returned instead, which the cron caller returns in its response
+ * body, which pg_net stores in net._http_response. That table is already the
+ * documented place to look when a scheduled call misbehaves.
  */
-export async function runPulse(): Promise<PulseSummary> {
+export async function runPulse(options: PulseOptions = {}): Promise<PulseSummary> {
+  const includeReviews = options.includeReviews ?? false;
   const social = socialEnv();
   const token = social.instagram ? await instagramToken() : null;
   const platforms = pulsePlatforms(social, token !== null);
 
-  if (platforms.length === 0) {
-    return { platforms: [], written: 0, failures: [] };
+  if (!pulseHasWork(platforms, includeReviews)) {
+    return { platforms: [], written: 0, reviews: 0, failures: [] };
   }
 
   const snapshots: SocialSnapshot[] = [];
@@ -97,7 +137,24 @@ export async function runPulse(): Promise<PulseSummary> {
     }
   });
 
-  await Promise.all(reads);
+  /*
+   * Reviews run alongside the audience reads rather than after them. They are
+   * independent sources, and the review fetch retries on an empty feed, so
+   * sequencing it would put that retry backoff in front of a Telegram count
+   * that was already in hand.
+   */
+  let reviews = 0;
+  const reviewRead = includeReviews
+    ? (async () => {
+        try {
+          reviews = await saveReviews(await fetchLatestReviews("uz"));
+        } catch (error) {
+          failures.push(`itunes-reviews:pulse: ${message(error)}`);
+        }
+      })()
+    : Promise.resolve();
+
+  await Promise.all([...reads, reviewRead]);
 
   // One platform failing must not discard another's good reading.
   let written = 0;
@@ -109,5 +166,5 @@ export async function runPulse(): Promise<PulseSummary> {
     }
   }
 
-  return { platforms, written, failures };
+  return { platforms, written, reviews, failures };
 }

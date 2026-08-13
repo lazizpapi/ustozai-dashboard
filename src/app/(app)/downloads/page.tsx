@@ -6,9 +6,10 @@ import { load } from "@/app/load";
 import {
   androidDailyInstalls,
   iosDailyDownloads,
+  iosDiscoveryFunnel,
   snapshotHistory,
 } from "@/lib/db/queries";
-import { delta, formatDay, formatNumber } from "@/lib/format";
+import { delta, formatDay, formatNumber, formatPercent } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +19,13 @@ function sum(values: number[]): number {
 
 export default async function DownloadsPage() {
   const result = await load(async () => {
-    const [ios, android, androidSnapshots] = await Promise.all([
+    const [ios, android, androidSnapshots, funnel] = await Promise.all([
       iosDailyDownloads(60),
       androidDailyInstalls(60),
       snapshotHistory("android", "uz", 60),
+      iosDiscoveryFunnel(30),
     ]);
-    return { ios, android, androidSnapshots };
+    return { ios, android, androidSnapshots, funnel };
   });
 
   if (result.kind === "unconfigured") {
@@ -31,7 +33,7 @@ export default async function DownloadsPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { ios, android, androidSnapshots } = result.data;
+  const { ios, android, androidSnapshots, funnel } = result.data;
 
   const iosLast7 = sum(ios.slice(-7).map((row) => row.downloads));
   const iosPrior7 = sum(ios.slice(-14, -7).map((row) => row.downloads));
@@ -81,6 +83,43 @@ export default async function DownloadsPage() {
           detail="most recent closed day"
         />
       </MetricStrip>
+
+      {/*
+        The funnel, and only once Apple has produced rows for it. An empty
+        conversion panel would be four dashes teaching people to ignore this
+        part of the page; absent, it simply appears the day there is something
+        to say.
+
+        Four figures rather than five: the two rates belong to the stages they
+        describe, so each sits as the qualifier under its own stage. Reading
+        left to right then gives how many saw it, how many opened it and at
+        what rate, how many installed and at what rate.
+      */}
+      {funnel ? (
+        <Section
+          title="Conversion"
+          note={`${formatDay(funnel.from)} to ${formatDay(funnel.to)}, App Store only`}
+        >
+          <MetricStrip>
+            <Metric label="Impressions" value={formatNumber(funnel.impressions)} />
+            <Metric
+              label="Product page views"
+              value={formatNumber(funnel.pageViews)}
+              detail={`${formatPercent(funnel.pageViews, funnel.impressions)} of impressions`}
+            />
+            <Metric
+              label="First-time downloads"
+              value={formatNumber(funnel.firstTimeDownloads)}
+              detail={`${formatPercent(funnel.firstTimeDownloads, funnel.pageViews)} of page views`}
+            />
+            <Metric
+              label="Impression to install"
+              value={formatPercent(funnel.firstTimeDownloads, funnel.impressions)}
+              detail="the whole funnel"
+            />
+          </MetricStrip>
+        </Section>
+      ) : null}
 
       <Section title="Daily installs" note="last 60 days, one shared axis">
         <DownloadsChart ios={ios} android={android} />

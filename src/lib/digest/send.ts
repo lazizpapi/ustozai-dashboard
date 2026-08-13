@@ -29,6 +29,8 @@ export interface DigestResult {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 async function gather(): Promise<DigestInput> {
+  const since = new Date(Date.now() - DAY_MS).toISOString();
+
   const [rank, ios, android, iosDownloads, androidInstalls, reviews, health, audience] =
     await Promise.all([
       rankTrend(),
@@ -36,7 +38,10 @@ async function gather(): Promise<DigestInput> {
       ratingTrend("android"),
       iosDailyDownloads(7),
       androidDailyInstalls(7),
-      recentReviews(50),
+      // The day's window is a condition on the query, not a slice of the
+      // newest N. Two stores feed this now, and a busy day on one could
+      // otherwise push the other out of the list before the filter ran.
+      recentReviews(200, since),
       collectorHealth(),
       socialTrends(),
     ]);
@@ -48,15 +53,15 @@ async function gather(): Promise<DigestInput> {
   const tokenExpiresInDays =
     remaining !== null && remaining < ESCALATE_WHEN_DAYS_LEFT ? remaining : null;
 
-  const since = new Date(Date.now() - DAY_MS).toISOString();
-  const newReviews = reviews
-    .filter((review) => (review.submittedAt ?? "") >= since)
-    .map((review) => ({
-      rating: review.rating,
-      title: review.title,
-      body: review.body,
-      country: review.country,
-    }));
+  const newReviews = reviews.map((review) => ({
+    rating: review.rating,
+    title: review.title,
+    body: review.body,
+    country: review.country,
+    // Carried through now that both stores feed this. A one star review that
+    // does not say which store it came from sends somebody to the wrong place.
+    platform: review.platform,
+  }));
 
   const lastIos = iosDownloads.at(-1) ?? null;
   const lastAndroid = androidInstalls.at(-1) ?? null;

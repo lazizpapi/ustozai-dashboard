@@ -37,6 +37,48 @@ export function formatRank(value: number | null | undefined): string {
   return `#${value}`;
 }
 
+/** Spelled out, because a bare code beside a store name reads as a country. */
+const LANGUAGE_NAMES: Record<string, string> = {
+  uz: "Uzbek",
+  ru: "Russian",
+  en: "English",
+};
+
+/**
+ * Where a review came from, said in a way that cannot be misread.
+ *
+ * reviews.country means two different things depending on the store: the
+ * storefront for the App Store, and the language the review was written in for
+ * Google Play, which publishes no reviewer country at all. Printing the raw
+ * code for both would label a Russian-language review from Tashkent as "RU"
+ * and quietly turn a language into a location.
+ */
+export function reviewSource(platform: string, country: string): string {
+  if (platform !== "android") return `App Store ${country.toUpperCase()}`;
+
+  const code = country.toLowerCase();
+  return `Google Play, ${LANGUAGE_NAMES[code] ?? code}`;
+}
+
+/**
+ * A conversion rate, as a share of a total.
+ *
+ * Returns the em dash rather than 0% when the denominator is zero. A funnel
+ * stage with nothing above it has no rate at all, and printing "0.0%" would
+ * read as "nobody converted" when the truth is "nothing arrived yet".
+ *
+ * One decimal place, because these figures sit in the low single digits where
+ * a whole number loses real movement, and two would imply a precision that
+ * daily analytics restatements do not support.
+ */
+export function formatPercent(part: number | null, whole: number | null): string {
+  if (part === null || whole === null || !Number.isFinite(part) || !Number.isFinite(whole)) {
+    return "—";
+  }
+  if (whole <= 0) return "—";
+  return `${((part / whole) * 100).toFixed(1)}%`;
+}
+
 /**
  * Delta for a metric where a bigger number is better: rating, installs, reviews.
  */

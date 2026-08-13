@@ -16,9 +16,19 @@ const PUBLIC_PREFIXES = ["/login", "/auth"];
 export function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
-  // Cron routes carry their own bearer secret and are called by a scheduler
-  // that has no cookie, so they must never be redirected to a login page.
-  if (path.startsWith("/api/cron")) return NextResponse.next();
+  /*
+   * Machine callers authenticate with their own secret and have no cookie, so
+   * they must never be redirected to a login page. Cron sends a bearer token;
+   * the Telegram webhook sends a secret header.
+   *
+   * Missing the webhook here is a silent failure rather than a loud one:
+   * Telegram would receive a 307 to /login, read any non-2xx as delivery
+   * failure, and retry the same update for hours while the member count never
+   * moved and nothing anywhere recorded an error.
+   */
+  if (path.startsWith("/api/cron") || path.startsWith("/api/webhook")) {
+    return NextResponse.next();
+  }
   if (PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix))) {
     return NextResponse.next();
   }

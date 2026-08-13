@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pulsePlatforms } from "./run-pulse";
+import { pulseHasWork, pulsePlatforms } from "./run-pulse";
 import { isDue, PULSE_MAX_AGE_MS } from "./freshen";
 import { audienceIsLive } from "@/components/tv/live-dot";
 import type { SocialConfig } from "@/lib/env";
@@ -42,6 +42,22 @@ describe("pulsePlatforms", () => {
   it("returns nothing when no account is configured", () => {
     const none: SocialConfig = { telegram: null, instagram: null, youtube: null };
     expect(pulsePlatforms(none, true)).toEqual([]);
+  });
+});
+
+describe("pulseHasWork", () => {
+  it("has work when a platform qualifies", () => {
+    expect(pulseHasWork(["telegram"], false)).toBe(true);
+  });
+
+  it("has work for reviews even when no platform qualifies", () => {
+    // The regression this exists for: an early return that asks only about
+    // social platforms silently skips the reviews the caller asked for.
+    expect(pulseHasWork([], true)).toBe(true);
+  });
+
+  it("has nothing to do when neither is wanted", () => {
+    expect(pulseHasWork([], false)).toBe(false);
   });
 });
 

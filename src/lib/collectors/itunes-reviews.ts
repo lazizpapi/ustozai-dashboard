@@ -94,6 +94,25 @@ async function fetchReviewPage(
   return parseReviews(payload, country, appId);
 }
 
+/**
+ * Page one only, for the five-minute pulse.
+ *
+ * The point is latency, not coverage: a new review should reach the wall in
+ * minutes rather than waiting up to an hour for the full walk. Page one sorted
+ * by most recent is where a new review appears, so the other three pages would
+ * be three extra requests every five minutes to re-read rows we already have.
+ *
+ * Nothing is lost when this misses something. Reviews are insert-only and
+ * deduplicated on Apple's own id, so the hourly four-page walk backfills
+ * anything that arrived faster than page one could hold it.
+ */
+export async function fetchLatestReviews(
+  country: string,
+  appId: string = IOS_APP_ID,
+): Promise<Review[]> {
+  return retryWhileEmpty(() => fetchReviewPage(1, country, appId));
+}
+
 export async function fetchReviews(
   country: string,
   appId: string = IOS_APP_ID,

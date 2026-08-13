@@ -13,6 +13,8 @@
  * yesterday at best, so every download line is dated explicitly.
  */
 
+import { reviewSource } from "@/lib/format";
+
 export interface DigestInput {
   date: string;
   rank: { current: number | null; previous: number | null; feedSize: number | null };
@@ -20,7 +22,13 @@ export interface DigestInput {
   androidRating: { current: number | null; previous: number | null; count: number | null };
   iosDownloads: { date: string; units: number } | null;
   androidInstalls: { date: string; units: number } | null;
-  newReviews: { rating: number; title: string | null; body: string | null; country: string }[];
+  newReviews: {
+    rating: number;
+    title: string | null;
+    body: string | null;
+    country: string;
+    platform: string;
+  }[];
   audience: { platform: string; current: number | null; previous: number | null; isExact: boolean }[];
   /** Days until the Instagram credential dies, when inside the warning window. */
   tokenExpiresInDays: number | null;
@@ -112,7 +120,8 @@ export function formatDigest(input: DigestInput): string {
     for (const review of low.slice(0, 5)) {
       const text = review.title || review.body || "(no text)";
       lines.push(
-        `  ${"★".repeat(review.rating)} ${escape(text.slice(0, 90))} [${escape(review.country.toUpperCase())}]`,
+        `  ${"★".repeat(review.rating)} ${escape(text.slice(0, 90))} ` +
+          `[${escape(reviewSource(review.platform, review.country))}]`,
       );
     }
   }

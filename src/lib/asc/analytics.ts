@@ -170,8 +170,8 @@ export function newestInstance(instances: NamedResource[]): NamedResource | null
   );
 }
 
-export interface AnalyticsFetchResult {
-  rows: AnalyticsRow[];
+export interface AnalyticsFetchResult<Row = AnalyticsRow> {
+  rows: Row[];
   processingDate: string | null;
   segments: number;
 }
@@ -182,12 +182,19 @@ export interface AnalyticsFetchResult {
  * Returns no rows rather than throwing when Apple has not produced an instance
  * yet, which is the normal state for the first day or two after the ongoing
  * request is created.
+ *
+ * The row parser is a parameter because everything above it, the four-level
+ * walk and the newest-instance rule, is identical for every report Apple
+ * publishes; only the TSV columns differ. Passing the parser in keeps that
+ * traversal in one place rather than copied per report, which matters because
+ * the restatement rule is the easiest thing here to get subtly wrong.
  */
-export async function fetchAnalyticsReport(
+export async function fetchAnalyticsReport<Row = AnalyticsRow>(
   config: AscConfig,
   requestId: string,
   reportName: string,
-): Promise<AnalyticsFetchResult> {
+  parseTsv: (tsv: string) => Row[] = parseAnalyticsTsv as unknown as (tsv: string) => Row[],
+): Promise<AnalyticsFetchResult<Row>> {
   const token = await createAscToken(config);
 
   const reports = await apiGet<ApiListResponse<NamedResource>>(
@@ -209,7 +216,7 @@ export async function fetchAnalyticsReport(
     token,
   );
 
-  const rows: AnalyticsRow[] = [];
+  const rows: Row[] = [];
   for (const segment of segments.data ?? []) {
     const url = segment.attributes?.url;
     if (!url) continue;
@@ -224,7 +231,7 @@ export async function fetchAnalyticsReport(
     const raw = Buffer.from(await response.arrayBuffer());
     // Segments are gzipped, same as the sales reports.
     const tsv = gunzipSync(raw).toString("utf8");
-    rows.push(...parseAnalyticsTsv(tsv));
+    rows.push(...parseTsv(tsv));
   }
 
   return {

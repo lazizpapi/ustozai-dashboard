@@ -1,0 +1,25 @@
+{
+  "update_id": 847392011,
+  "chat_member": {
+    "chat": {
+      "id": -1001234567890,
+      "title": "Ustoz AI",
+      "username": "ustozai",
+      "type": "channel"
+    },
+    "from": {
+      "id": 987654321,
+      "is_bot": false,
+      "first_name": "Sevara"
+    },
+    "date": 1786694400,
+    "old_chat_member": {
+      "user": { "id": 987654321, "is_bot": false, "first_name": "Sevara" },
+      "status": "left"
+    },
+    "new_chat_member": {
+      "user": { "id": 987654321, "is_bot": false, "first_name": "Sevara" },
+      "status": "member"
+    }
+  }
+}

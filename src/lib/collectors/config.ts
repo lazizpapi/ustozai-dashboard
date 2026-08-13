@@ -74,3 +74,16 @@ export const SEARCH_LIMIT = 100;
  * daily to catch anything newer.
  */
 export const REVIEW_PAGES = 4;
+
+/**
+ * Play review languages, not countries.
+ *
+ * Google filters reviews by the language they were written in and publishes no
+ * reviewer country at all, so these are the two axes worth querying for an
+ * Uzbek app: reviews are written in Uzbek and in Russian, and asking for one
+ * returns nothing written in the other. Verified 2026-08-13.
+ */
+export const PLAY_REVIEW_LANGS = ["uz", "ru"] as const;
+
+/** One page. Deduplication on Play's own review id makes overlap free. */
+export const PLAY_REVIEW_COUNT = 100;

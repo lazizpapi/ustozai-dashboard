@@ -10,7 +10,12 @@ import "server-only";
  * secret through response timing.
  */
 
-function safeEqual(a: string, b: string): boolean {
+/**
+ * Exported because the Telegram webhook compares a secret header rather than a
+ * bearer token, and a second hand-rolled comparison is how one of them ends up
+ * being the naive one.
+ */
+export function safeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);

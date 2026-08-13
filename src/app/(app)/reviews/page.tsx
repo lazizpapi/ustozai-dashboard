@@ -3,7 +3,7 @@ import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { recentReviews } from "@/lib/db/queries";
-import { formatDay, formatNumber, formatRating } from "@/lib/format";
+import { formatDay, formatNumber, formatRating, reviewSource } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -66,8 +66,9 @@ export default async function ReviewsPage() {
                   </p>
                 ) : null}
                 <p className="text-muted-foreground/80 text-xs">
-                  {review.author ?? "anonymous"} · {review.platform} ·{" "}
-                  {review.country.toUpperCase()} · {formatDay(review.submittedAt)}
+                  {review.author ?? "anonymous"} ·{" "}
+                  {reviewSource(review.platform, review.country)} ·{" "}
+                  {formatDay(review.submittedAt)}
                 </p>
               </div>
             </li>
@@ -76,10 +77,13 @@ export default async function ReviewsPage() {
       )}
 
       <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
-        The public reviews feed goes intermittently empty and runs dry after
-        roughly 200 entries, so this is a rolling window rather than a complete
-        archive. Connecting an App Store Connect key replaces it with the full
-        review history and makes replies possible.
+        App Store reviews come from the public feed, which goes intermittently
+        empty and runs dry after roughly 200 entries, so this is a rolling
+        window rather than a complete archive. Google Play reviews are fetched
+        in Uzbek and Russian; the code beside an Android review is the language
+        it was written in, because Google publishes no reviewer country.
+        Connecting an App Store Connect key would replace the Apple side with
+        the full history and make replies possible.
       </p>
     </div>
   );

@@ -3,12 +3,43 @@ import { describe, expect, it } from "vitest";
 import {
   delta,
   formatDay,
+  formatPercent,
   formatRank,
   formatRating,
   formatRatingDelta,
   rankDelta,
   timeAgo,
 } from "./format";
+
+describe("formatPercent", () => {
+  it("gives one decimal place", () => {
+    expect(formatPercent(210, 800)).toBe("26.3%");
+  });
+
+  it("keeps movement visible in the low single digits", () => {
+    // Impression to install rates live here, where rounding to a whole number
+    // would hide a real week-on-week change.
+    expect(formatPercent(212, 5000)).toBe("4.2%");
+  });
+
+  it("returns a dash rather than 0% when nothing arrived", () => {
+    // A stage with an empty stage above it has no rate. Printing 0.0% would
+    // read as "nobody converted" when the truth is "there was nothing to
+    // convert yet", which is the opposite conclusion.
+    expect(formatPercent(0, 0)).toBe("—");
+    expect(formatPercent(5, 0)).toBe("—");
+  });
+
+  it("returns a dash for missing figures rather than NaN", () => {
+    expect(formatPercent(null, 100)).toBe("—");
+    expect(formatPercent(10, null)).toBe("—");
+  });
+
+  it("handles a rate of zero from a real denominator", () => {
+    // Genuinely nobody installed, which is a fact worth printing.
+    expect(formatPercent(0, 500)).toBe("0.0%");
+  });
+});
 
 describe("rankDelta", () => {
   it("treats a falling rank number as an improvement", () => {

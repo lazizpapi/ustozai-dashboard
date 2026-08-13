@@ -76,6 +76,26 @@ export async function runDaily(): Promise<DailySummary> {
         );
 
   /*
+   * The top of the same funnel: impressions and product page views.
+   *
+   * Its own step rather than part of asc-analytics because it is a separate
+   * report that can be missing, restated or broken independently, and because
+   * its parser was written against Apple's documented columns rather than an
+   * observed payload. If those disagree, this step should fail on its own and
+   * say so while the download breakdown keeps working.
+   */
+  const discoveryStep: StepResult<unknown> =
+    asc && analyticsRequest
+      ? await step("asc-discovery", async () => {
+          const { collectIosDiscovery } = await import("@/lib/asc/collect-discovery");
+          return collectIosDiscovery(asc, analyticsRequest);
+        })
+      : skipped(
+          "asc-discovery",
+          asc ? "no analytics request id configured" : "App Store Connect is not configured",
+        );
+
+  /*
    * Keep the Instagram credential alive.
    *
    * Runs daily but only acts inside the refresh window, so ordinarily this is
@@ -136,7 +156,14 @@ export async function runDaily(): Promise<DailySummary> {
   );
 
   const all = [
-    ...outcomes([...keywordSteps, reviewStep, iosDownloadStep, analyticsStep, tokenStep]),
+    ...outcomes([
+      ...keywordSteps,
+      reviewStep,
+      iosDownloadStep,
+      analyticsStep,
+      discoveryStep,
+      tokenStep,
+    ]),
     ...writeOutcomes,
   ];
   await recordRuns(all);

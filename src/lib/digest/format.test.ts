@@ -57,11 +57,43 @@ describe("formatDigest", () => {
     expect(digest({ iosDownloads: null })).toContain("App Store Connect key not connected");
   });
 
+  it("names the store a low review came from", () => {
+    const text = digest({
+      newReviews: [
+        { rating: 1, title: "sekin", body: null, country: "uz", platform: "android" },
+      ],
+    });
+
+    expect(text).toContain("Google Play");
+  });
+
+  it("never prints a Play review's language as if it were a country", () => {
+    // reviews.country holds the storefront for iOS but the review language for
+    // Android, so "[UZ]" beside a Play review would read as geography and be
+    // wrong for every Russian-language review from anywhere.
+    const text = digest({
+      newReviews: [
+        { rating: 2, title: "medlenno", body: null, country: "ru", platform: "android" },
+      ],
+    });
+
+    expect(text).toContain("Google Play, Russian");
+    expect(text).not.toContain("[RU]");
+  });
+
+  it("keeps the storefront on App Store reviews, where it is a real country", () => {
+    const text = digest({
+      newReviews: [{ rating: 2, title: "slow", body: null, country: "uz", platform: "ios" }],
+    });
+
+    expect(text).toContain("App Store UZ");
+  });
+
   it("pulls out reviews at three stars and below", () => {
     const text = digest({
       newReviews: [
-        { rating: 5, title: "Zo'r", body: null, country: "uz" },
-        { rating: 2, title: "Sekin ishlayapti", body: null, country: "uz" },
+        { rating: 5, title: "Zo'r", body: null, country: "uz", platform: "ios" },
+        { rating: 2, title: "Sekin ishlayapti", body: null, country: "uz", platform: "ios" },
       ],
     });
 
@@ -105,7 +137,7 @@ describe("formatDigest", () => {
 
   it("escapes HTML so review text cannot break the message", () => {
     const text = digest({
-      newReviews: [{ rating: 1, title: "<b>bad</b> & broken", body: null, country: "uz" }],
+      newReviews: [{ rating: 1, title: "<b>bad</b> & broken", body: null, country: "uz", platform: "ios" }],
     });
 
     expect(text).toContain("&lt;b&gt;bad&lt;/b&gt; &amp; broken");
@@ -114,7 +146,7 @@ describe("formatDigest", () => {
   it("contains no em-dashes or en-dashes anywhere", () => {
     // House style, and it applies to generated copy as much as handwritten.
     const text = digest({
-      newReviews: [{ rating: 1, title: "x", body: null, country: "uz" }],
+      newReviews: [{ rating: 1, title: "x", body: null, country: "uz", platform: "ios" }],
       failures: ["a: b"],
     });
 
