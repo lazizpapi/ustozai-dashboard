@@ -1,0 +1,91 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  delta,
+  formatDay,
+  formatRank,
+  formatRating,
+  formatRatingDelta,
+  rankDelta,
+  timeAgo,
+} from "./format";
+
+describe("rankDelta", () => {
+  it("treats a falling rank number as an improvement", () => {
+    // #24 to #21 is movement up the chart. Getting this backwards would show a
+    // red down-arrow on the app's best week.
+    const result = rankDelta(21, 24);
+
+    expect(result.direction).toBe("up");
+    expect(result.magnitude).toBe(3);
+    expect(result.label).toContain("up");
+  });
+
+  it("treats a rising rank number as a decline", () => {
+    expect(rankDelta(30, 21).direction).toBe("down");
+  });
+
+  it("distinguishes no history from no change", () => {
+    expect(rankDelta(21, null).direction).toBe("unknown");
+    expect(rankDelta(21, null).label).toBe("no history yet");
+    expect(rankDelta(21, 21).direction).toBe("flat");
+    expect(rankDelta(21, 21).label).toBe("no change");
+  });
+});
+
+describe("delta", () => {
+  it("points up when a bigger number is better", () => {
+    // The opposite polarity to rankDelta, which is the whole reason they are
+    // separate functions.
+    expect(delta(530577, 529100).direction).toBe("up");
+  });
+
+  it("distinguishes no history from no change", () => {
+    expect(delta(10, null).label).toBe("no history yet");
+    expect(delta(10, 10).label).toBe("no change");
+  });
+});
+
+describe("formatRatingDelta", () => {
+  it("ignores changes below the displayed precision", () => {
+    // Ratings show two decimals. A 0.001 wobble is not a movement worth an arrow.
+    expect(formatRatingDelta(4.6876, 4.6874).direction).toBe("flat");
+  });
+
+  it("reports a real change with a sign", () => {
+    expect(formatRatingDelta(4.69, 4.62).label).toBe("+0.07");
+  });
+});
+
+describe("value formatting", () => {
+  it("renders missing values as a dash, never as zero", () => {
+    expect(formatRating(null)).toBe("—");
+    expect(formatRank(null)).toBe("—");
+  });
+
+  it("prefixes ranks with a hash", () => {
+    expect(formatRank(21)).toBe("#21");
+  });
+});
+
+describe("timeAgo", () => {
+  const now = Date.parse("2026-08-11T12:00:00Z");
+
+  it("describes recent runs in minutes and hours", () => {
+    expect(timeAgo("2026-08-11T11:30:00Z", now)).toBe("30m ago");
+    expect(timeAgo("2026-08-11T06:00:00Z", now)).toBe("6h ago");
+    expect(timeAgo("2026-08-08T12:00:00Z", now)).toBe("3d ago");
+  });
+
+  it("says never when a source has no run at all", () => {
+    expect(timeAgo(null, now)).toBe("never");
+  });
+});
+
+describe("formatDay", () => {
+  it("renders a plain date without shifting it across time zones", () => {
+    // A download figure is a whole day, not a moment. Local-time parsing of a
+    // bare date can move it to the previous day west of UTC.
+    expect(formatDay("2026-08-10")).toBe("10 Aug");
+  });
+});
