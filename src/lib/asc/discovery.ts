@@ -41,9 +41,22 @@ export function normaliseEvent(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, "_") || "unknown";
 }
 
-/** Matches the funnel query. Kept here so the two cannot drift apart. */
+/**
+ * The event names Apple actually sends, confirmed against the first real
+ * instance on 2026-08-14: `impression`, `tap` and `page_view`.
+ *
+ * Written before any data existed, this list guessed `product_page_view` and
+ * was wrong. Nothing was lost, because normaliseEvent stores whatever arrives
+ * rather than dropping what it does not recognise, so the fix was widening
+ * these constants and the history was already in the table. That is the whole
+ * argument for not whitelisting at the parser.
+ *
+ * The alternatives are kept alongside the confirmed names: Apple varies its
+ * labels between report variants, and matching a superset costs nothing.
+ */
 export const IMPRESSION_EVENTS = ["impression", "impressions", "impressions_unique"];
-export const PAGE_VIEW_EVENTS = ["product_page_view", "product_page_views"];
+export const TAP_EVENTS = ["tap", "taps"];
+export const PAGE_VIEW_EVENTS = ["page_view", "page_views", "product_page_view", "product_page_views"];
 
 export function parseDiscoveryTsv(tsv: string): DiscoveryRow[] {
   const lines = tsv.split("\n").filter((line) => line.trim().length > 0);

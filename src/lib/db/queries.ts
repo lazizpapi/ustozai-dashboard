@@ -7,7 +7,7 @@ import {
   EDUCATION_GENRE,
   IOS_APP_ID,
 } from "@/lib/collectors/config";
-import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS } from "@/lib/asc/discovery";
+import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
 import {
   countByBucket,
   netChangeByBucket,
@@ -826,6 +826,8 @@ async function growthPoints(key: GrowthSeriesKey, period: Period): Promise<Growt
 
 export interface DiscoveryFunnel {
   impressions: number;
+  /** Somebody tapped the listing in search or browse. */
+  taps: number;
   pageViews: number;
   firstTimeDownloads: number;
   /** The dates actually covered, so the UI can say what window this is. */
@@ -874,9 +876,11 @@ export async function iosDiscoveryFunnel(days = 30): Promise<DiscoveryFunnel | n
   const to = dates[dates.length - 1];
 
   let impressions = 0;
+  let taps = 0;
   let pageViews = 0;
   for (const row of discovery) {
     if (IMPRESSION_EVENTS.includes(row.event)) impressions += row.units;
+    else if (TAP_EVENTS.includes(row.event)) taps += row.units;
     else if (PAGE_VIEW_EVENTS.includes(row.event)) pageViews += row.units;
   }
 
@@ -896,6 +900,7 @@ export async function iosDiscoveryFunnel(days = 30): Promise<DiscoveryFunnel | n
 
   return {
     impressions,
+    taps,
     pageViews,
     firstTimeDownloads: downloads.reduce((total, row) => total + row.units, 0),
     from,

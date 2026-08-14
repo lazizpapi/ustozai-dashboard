@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { normaliseEvent, parseDiscoveryTsv } from "./discovery";
+import {
+  IMPRESSION_EVENTS,
+  PAGE_VIEW_EVENTS,
+  TAP_EVENTS,
+  normaliseEvent,
+  parseDiscoveryTsv,
+} from "./discovery";
 
 /**
  * The column names here are Apple's documented ones, not observed ones: this
@@ -133,6 +139,30 @@ describe("parseDiscoveryTsv", () => {
   it("returns nothing for a header-only segment", () => {
     expect(parseDiscoveryTsv(HEADER.join("\t"))).toEqual([]);
     expect(parseDiscoveryTsv("")).toEqual([]);
+  });
+});
+
+describe("the funnel event names", () => {
+  it("matches what Apple actually sends", () => {
+    // Confirmed against the first real instance on 2026-08-14. The list
+    // originally guessed "product_page_view" and Apple sends "page_view", so
+    // the funnel showed impressions against zero page views: a wrong number
+    // rather than an error, which is exactly what these constants exist to
+    // prevent. Pinned so the guess cannot come back.
+    expect(IMPRESSION_EVENTS).toContain("impression");
+    expect(TAP_EVENTS).toContain("tap");
+    expect(PAGE_VIEW_EVENTS).toContain("page_view");
+  });
+
+  it("normalises Apple's labels onto those names", () => {
+    expect(normaliseEvent("Impression")).toBe("impression");
+    expect(normaliseEvent("Tap")).toBe("tap");
+    expect(normaliseEvent("Page view")).toBe("page_view");
+  });
+
+  it("keeps the three stages disjoint, so nothing is counted twice", () => {
+    const all = [...IMPRESSION_EVENTS, ...TAP_EVENTS, ...PAGE_VIEW_EVENTS];
+    expect(new Set(all).size).toBe(all.length);
   });
 });
 

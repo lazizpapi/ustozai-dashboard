@@ -98,24 +98,24 @@ export default async function DownloadsPage() {
       {funnel ? (
         <Section
           title="Conversion"
-          note={`${formatDay(funnel.from)} to ${formatDay(funnel.to)}, App Store only`}
+          note={`${formatDay(funnel.from)} to ${formatDay(funnel.to)}, App Store only, ${formatPercent(funnel.firstTimeDownloads, funnel.impressions)} end to end`}
         >
           <MetricStrip>
-            <Metric label="Impressions" value={formatNumber(funnel.impressions)} />
+            <Metric label="Impressions" value={formatNumber(funnel.impressions)} detail="saw the listing" />
             <Metric
-              label="Product page views"
+              label="Taps"
+              value={formatNumber(funnel.taps)}
+              detail={`${formatPercent(funnel.taps, funnel.impressions)} of impressions`}
+            />
+            <Metric
+              label="Page views"
               value={formatNumber(funnel.pageViews)}
-              detail={`${formatPercent(funnel.pageViews, funnel.impressions)} of impressions`}
+              detail={`${formatPercent(funnel.pageViews, funnel.taps)} of taps`}
             />
             <Metric
               label="First-time downloads"
               value={formatNumber(funnel.firstTimeDownloads)}
               detail={`${formatPercent(funnel.firstTimeDownloads, funnel.pageViews)} of page views`}
-            />
-            <Metric
-              label="Impression to install"
-              value={formatPercent(funnel.firstTimeDownloads, funnel.impressions)}
-              detail="the whole funnel"
             />
           </MetricStrip>
         </Section>
