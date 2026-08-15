@@ -9,6 +9,7 @@ import {
 } from "@/lib/collectors/config";
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
 import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
+import { counterVelocity, dailyRankSeries, priorWithinWindow } from "@/lib/compare";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import type { AnalystReport } from "@/lib/analyst/schema";
 import {
@@ -69,6 +70,14 @@ export interface Trend<T = number> {
   capturedAt: string | null;
   /** True when there is simply no history to compare against yet. */
   noHistory: boolean;
+  /**
+   * Days the comparison actually spans. Null when there is no comparison.
+   *
+   * Present because it is usually not seven. Collection for a given app can
+   * be days old, and a movement measured over four days must not be presented
+   * as a week's worth. The formatters turn this into "over 4 days".
+   */
+  spanDays: number | null;
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -77,8 +86,36 @@ function weekAgoIso(): string {
   return new Date(Date.now() - WEEK_MS).toISOString();
 }
 
-function trend<T>(current: T | null, previous: T | null, capturedAt: string | null): Trend<T> {
-  return { current, previous, capturedAt, noHistory: previous === null };
+function trend<T>(
+  current: T | null,
+  previous: T | null,
+  capturedAt: string | null,
+  spanDays: number | null = null,
+): Trend<T> {
+  return {
+    current,
+    previous,
+    capturedAt,
+    noHistory: previous === null,
+    spanDays: previous === null ? null : spanDays,
+  };
+}
+
+/**
+ * The reading to compare the newest against, over whatever span exists.
+ *
+ * Wraps the tested reduction in compare.ts. Readings without a value are
+ * dropped first: a null rank means the app was outside the chart that hour,
+ * which is a real state but not a number this can subtract.
+ */
+function windowedPrior(
+  readings: { capturedAt: string; value: number | null }[],
+): { value: number; spanDays: number } | null {
+  const usable = readings
+    .filter((row): row is { capturedAt: string; value: number } => row.value !== null)
+    .map((row) => ({ capturedAt: row.capturedAt, value: row.value }));
+
+  return priorWithinWindow(usable, weekAgoIso());
 }
 
 /**
@@ -156,11 +193,12 @@ export async function rankTrend(
   }
 
   const latest = history[history.length - 1];
-  const cutoff = weekAgoIso();
-  const older = [...history].reverse().find((point) => point.capturedAt <= cutoff);
+  const older = windowedPrior(
+    history.map((point) => ({ capturedAt: point.capturedAt, value: point.rank })),
+  );
 
   return {
-    ...trend(latest.rank, older?.rank ?? null, latest.capturedAt),
+    ...trend(latest.rank, older?.value ?? null, latest.capturedAt, older?.spanDays ?? null),
     feedSize: latest.feedSize,
   };
 }
@@ -222,11 +260,12 @@ export async function ratingTrend(
   if (history.length === 0) return { ...trend<number>(null, null, null), ratingCount: null };
 
   const latest = history[history.length - 1];
-  const cutoff = weekAgoIso();
-  const older = [...history].reverse().find((row) => row.capturedAt <= cutoff);
+  const older = windowedPrior(
+    history.map((row) => ({ capturedAt: row.capturedAt, value: row.rating })),
+  );
 
   return {
-    ...trend(latest.rating, older?.rating ?? null, latest.capturedAt),
+    ...trend(latest.rating, older?.value ?? null, latest.capturedAt, older?.spanDays ?? null),
     ratingCount: latest.ratingCount,
   };
 }
@@ -525,14 +564,15 @@ export async function socialTrends(days = 30): Promise<SocialTrend[]> {
     "socialTrends",
   );
 
-  const cutoff = weekAgoIso();
   const now = Date.now();
 
   return SOCIAL_PLATFORMS.map((platform) => {
     // Already newest-first from the query.
     const forPlatform = rows.filter((row) => row.platform === platform);
     const latest = forPlatform[0];
-    const older = forPlatform.find((row) => row.captured_at <= cutoff);
+    const older = windowedPrior(
+      forPlatform.map((row) => ({ capturedAt: row.captured_at, value: row.followers })),
+    );
 
     if (!latest) {
       return {
@@ -557,7 +597,12 @@ export async function socialTrends(days = 30): Promise<SocialTrend[]> {
       isExact: latest.is_exact,
       checkedAt,
       isStale: now - new Date(checkedAt).getTime() > SOCIAL_STALE_AFTER_MS,
-      ...trend(latest.followers, older?.followers ?? null, latest.captured_at),
+      ...trend(
+        latest.followers,
+        older?.value ?? null,
+        latest.captured_at,
+        older?.spanDays ?? null,
+      ),
     };
   });
 }
@@ -589,24 +634,25 @@ export interface MarketApp {
   /** Education chart, UZ, top free. Null rank means outside the feed. */
   rank: number | null;
   rankPrevious: number | null;
+  /** Days the rank comparison spans, which is often fewer than seven. */
+  rankSpanDays: number | null;
   feedSize: number | null;
   iosRating: number | null;
   iosRatingCount: number | null;
   playInstalls: number | null;
   playInstallsPrevious: number | null;
+  playInstallsSpanDays: number | null;
+  /**
+   * Installs per day, averaged across the readings we hold.
+   *
+   * The comparable figure. Lifetime totals say how old an app is more than
+   * how fast it is growing: Praktika's 19.6 million against our half million
+   * is nineteen million installs of history, not of this week.
+   */
+  playInstallsPerDay: number | null;
+  playVelocitySpanDays: number | null;
   playRating: number | null;
   playRatingCount: number | null;
-}
-
-/** Newest row, and the newest at or before the cutoff, from newest-first rows. */
-function latestAndPrior<T extends { captured_at: string }>(
-  rows: T[],
-  cutoff: string,
-): { latest: T | undefined; prior: T | undefined } {
-  return {
-    latest: rows[0],
-    prior: rows.find((row) => row.captured_at <= cutoff),
-  };
 }
 
 /**
@@ -632,7 +678,6 @@ export async function marketOverview(): Promise<MarketApp[]> {
   if (allIds.length === 0) return [];
 
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const cutoff = weekAgoIso();
 
   const [ranks, snaps] = await Promise.all([
     fetchAllPages<{ app_id: string; rank: number | null; feed_size: number; captured_at: string }>(
@@ -680,34 +725,110 @@ export async function marketOverview(): Promise<MarketApp[]> {
       ? byKey.get(`android:${entry.androidPackage}`)
       : undefined;
 
-    const rank = latestAndPrior(
-      ranks.filter((row) => row.app_id === iosId),
-      cutoff,
+    // Rows arrive newest-first from the query, so [0] is the current reading.
+    const rankRows = ranks.filter((row) => row.app_id === iosId);
+    const iosRows = snaps.filter((row) => row.app_id === iosId && row.rating !== null);
+    const playRows = snaps.filter((row) => row.app_id === androidId);
+
+    const rankPrior = windowedPrior(
+      rankRows.map((row) => ({ capturedAt: row.captured_at, value: row.rank })),
     );
-    const ios = latestAndPrior(
-      snaps.filter((row) => row.app_id === iosId && row.rating !== null),
-      cutoff,
+    const playPrior = windowedPrior(
+      playRows.map((row) => ({ capturedAt: row.captured_at, value: row.install_count })),
     );
-    const play = latestAndPrior(
-      snaps.filter((row) => row.app_id === androidId),
-      cutoff,
+    const playVelocity = counterVelocity(
+      playRows
+        .filter((row) => row.install_count !== null)
+        .map((row) => ({ capturedAt: row.captured_at, value: row.install_count as number })),
     );
 
     return {
       slug: entry.slug,
       name: entry.name,
       isOurs: entry.isOurs,
-      rank: rank.latest?.rank ?? null,
-      rankPrevious: rank.prior?.rank ?? null,
-      feedSize: rank.latest?.feed_size ?? null,
-      iosRating: ios.latest?.rating ?? null,
-      iosRatingCount: ios.latest?.rating_count ?? null,
-      playInstalls: play.latest?.install_count ?? null,
-      playInstallsPrevious: play.prior?.install_count ?? null,
-      playRating: play.latest?.rating ?? null,
-      playRatingCount: play.latest?.rating_count ?? null,
+      rank: rankRows[0]?.rank ?? null,
+      rankPrevious: rankPrior?.value ?? null,
+      rankSpanDays: rankPrior?.spanDays ?? null,
+      feedSize: rankRows[0]?.feed_size ?? null,
+      iosRating: iosRows[0]?.rating ?? null,
+      iosRatingCount: iosRows[0]?.rating_count ?? null,
+      playInstalls: playRows[0]?.install_count ?? null,
+      playInstallsPrevious: playPrior?.value ?? null,
+      playInstallsSpanDays: playPrior?.spanDays ?? null,
+      playInstallsPerDay: playVelocity?.perDay ?? null,
+      playVelocitySpanDays: playVelocity?.spanDays ?? null,
+      playRating: playRows[0]?.rating ?? null,
+      playRatingCount: playRows[0]?.rating_count ?? null,
     };
   });
+}
+
+/**
+ * Every tracked app's chart position over time, one row per day.
+ *
+ * The race chart's data. Same filters as marketOverview so the two agree, and
+ * the same single query for all apps rather than one per competitor. Apps we
+ * hold no iOS id for are absent rather than drawn as an empty line.
+ */
+export async function competitorRankSeries(days = 30): Promise<{
+  points: ReturnType<typeof dailyRankSeries>;
+  apps: { slug: string; name: string; isOurs: boolean }[];
+}> {
+  const { data: appRows, error } = await serviceClient()
+    .from("apps")
+    .select("id, platform, store_id");
+  if (error) throw new Error(`competitorRankSeries apps: ${error.message}`);
+
+  const idByStore = new Map<string, string>(
+    (appRows ?? [])
+      .filter((row) => row.platform === "ios")
+      .map((row) => [row.store_id as string, row.id as string]),
+  );
+
+  const entries = [
+    { slug: "ustoz-ai", name: "Ustoz AI", iosId: IOS_APP_ID, isOurs: true },
+    ...COMPETITORS.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      iosId: c.iosId,
+      isOurs: false,
+    })),
+  ].filter((entry) => entry.iosId && idByStore.has(entry.iosId));
+
+  if (entries.length === 0) return { points: [], apps: [] };
+
+  const slugById = new Map(entries.map((entry) => [idByStore.get(entry.iosId!)!, entry.slug]));
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const rows = await fetchAllPages<{
+    app_id: string;
+    rank: number | null;
+    captured_at: string;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("chart_ranks")
+        .select("app_id, rank, captured_at")
+        .in("app_id", [...slugById.keys()])
+        .eq("country", "uz")
+        .eq("chart_type", "topfree")
+        .eq("genre", EDUCATION_GENRE)
+        .gte("captured_at", since)
+        .order("captured_at", { ascending: true })
+        .range(from, to),
+    "competitorRankSeries",
+  );
+
+  return {
+    points: dailyRankSeries(
+      rows.map((row) => ({
+        capturedAt: row.captured_at,
+        slug: slugById.get(row.app_id)!,
+        rank: row.rank,
+      })),
+    ),
+    apps: entries.map(({ slug, name, isOurs }) => ({ slug, name, isOurs })),
+  };
 }
 
 // ---------------------------------------------------------------------------

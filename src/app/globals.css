@@ -159,6 +159,26 @@
   --status-critical: #e34948;
 
   /*
+   * Competitor lines on the rank race chart.
+   *
+   * Neutral by design, and it follows from rule 2 above. Five rivals cannot
+   * each take a hue without inventing five new meanings for colour on a
+   * dashboard where colour already means iOS or Android. They separate by
+   * lightness instead, which leaves ours as the only chromatic line on the
+   * chart. That is also the hierarchy the page wants: the question is where
+   * we stand against them, so our line should be the one that reads first.
+   *
+   * The ramp stops at 0.62 rather than fading toward the page, because that
+   * is roughly where a hairline stroke drops under 3:1 against white and a
+   * competitor would look absent rather than trailing.
+   */
+  --rival-1: oklch(0.30 0 0);
+  --rival-2: oklch(0.38 0 0);
+  --rival-3: oklch(0.46 0 0);
+  --rival-4: oklch(0.54 0 0);
+  --rival-5: oklch(0.62 0 0);
+
+  /*
    * Field border, kept separate from --input.
    *
    * --input is also the dark-mode field background (dark:bg-input/30), so it
@@ -202,6 +222,13 @@
   --series-android: #d95926;
   --status-critical: #e66767;
 
+  /* The same ramp stepped for the dark surface, not an automatic inversion. */
+  --rival-1: oklch(0.87 0 0);
+  --rival-2: oklch(0.79 0 0);
+  --rival-3: oklch(0.71 0 0);
+  --rival-4: oklch(0.63 0 0);
+  --rival-5: oklch(0.55 0 0);
+
   /* 3.22:1 against #171b26. The stock 15% managed 1.59:1. */
   --input-line: oklch(1 0 0 / 35%);
 
@@ -214,6 +241,11 @@
   --color-series-android: var(--series-android);
   --color-status-critical: var(--status-critical);
   --color-input-line: var(--input-line);
+  --color-rival-1: var(--rival-1);
+  --color-rival-2: var(--rival-2);
+  --color-rival-3: var(--rival-3);
+  --color-rival-4: var(--rival-4);
+  --color-rival-5: var(--rival-5);
 }
 
 @layer base {

@@ -63,6 +63,27 @@ describe("rankDelta", () => {
     expect(rankDelta(21, 21).direction).toBe("flat");
     expect(rankDelta(21, 21).label).toBe("no change");
   });
+
+  it("names the span when the comparison is not a full week", () => {
+    // Collection started four days ago. Showing this movement unqualified
+    // would present four days as a week; the span is what makes it honest.
+    expect(rankDelta(21, 24, 4).spanLabel).toBe("over 4 days");
+  });
+
+  it("stays silent about the span at exactly a week", () => {
+    // A week is what the pages already claim in their own headings, so
+    // repeating it on every figure is noise.
+    expect(rankDelta(21, 24, 7).spanLabel).toBeNull();
+    expect(rankDelta(21, 24).spanLabel).toBeNull();
+  });
+
+  it("says one day in the singular", () => {
+    expect(rankDelta(21, 24, 1).spanLabel).toBe("over 1 day");
+  });
+
+  it("carries no span when there is nothing to compare", () => {
+    expect(rankDelta(21, null, 4).spanLabel).toBeNull();
+  });
 });
 
 describe("delta", () => {
@@ -76,6 +97,11 @@ describe("delta", () => {
     expect(delta(10, null).label).toBe("no history yet");
     expect(delta(10, 10).label).toBe("no change");
   });
+
+  it("names a short span the same way rankDelta does", () => {
+    expect(delta(530577, 529100, 4).spanLabel).toBe("over 4 days");
+    expect(delta(530577, 529100, 7).spanLabel).toBeNull();
+  });
 });
 
 describe("formatRatingDelta", () => {
@@ -86,6 +112,10 @@ describe("formatRatingDelta", () => {
 
   it("reports a real change with a sign", () => {
     expect(formatRatingDelta(4.69, 4.62).label).toBe("+0.07");
+  });
+
+  it("carries a short span too", () => {
+    expect(formatRatingDelta(4.69, 4.62, 3).spanLabel).toBe("over 3 days");
   });
 });
 
@@ -119,6 +149,17 @@ describe("formatDay", () => {
     // A download figure is a whole day, not a moment. Local-time parsing of a
     // bare date can move it to the previous day west of UTC.
     expect(formatDay("2026-08-10")).toBe("10 Aug");
+  });
+
+  it("names the Tashkent day a moment fell on", () => {
+    // 20:00 UTC is already the next morning in Tashkent. Labelling it "14
+    // Aug" put chart ticks a day behind the buckets they marked, and made
+    // two different days print the same date on the axis.
+    expect(formatDay("2026-08-14T20:00:00Z")).toBe("15 Aug");
+  });
+
+  it("keeps a daytime moment on its own day", () => {
+    expect(formatDay("2026-08-14T06:00:00Z")).toBe("14 Aug");
   });
 });
 

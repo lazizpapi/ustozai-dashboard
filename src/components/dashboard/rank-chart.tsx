@@ -1,6 +1,5 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 import {
@@ -9,7 +8,10 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { dayTicks } from "@/lib/compare";
 import { formatDay } from "@/lib/format";
+import { useReducedMotion } from "@/lib/use-reduced-motion";
+import { cn } from "@/lib/utils";
 import type { RankPoint } from "@/lib/db/queries";
 
 /**
@@ -29,31 +31,13 @@ const config = {
   rank: { label: "Rank", color: "var(--series-ios)" },
 } satisfies ChartConfig;
 
-const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-
-function subscribeToMotionPreference(onChange: () => void) {
-  const query = window.matchMedia(MOTION_QUERY);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
+interface RankChartProps {
+  points: RankPoint[];
+  /** Height override, so a view that owns its vertical space can fill it. */
+  className?: string;
 }
 
-/**
- * Reads the OS reduced-motion setting.
- *
- * useSyncExternalStore rather than an effect writing state: this is a
- * subscription to something outside React, which is exactly what that hook is
- * for, and it avoids the extra render an effect would cost. The server
- * snapshot is false so the markup matches, and the client corrects on hydrate.
- */
-function useReducedMotion(): boolean {
-  return useSyncExternalStore(
-    subscribeToMotionPreference,
-    () => window.matchMedia(MOTION_QUERY).matches,
-    () => false,
-  );
-}
-
-export function RankChart({ points }: { points: RankPoint[] }) {
+export function RankChart({ points, className }: RankChartProps) {
   const reducedMotion = useReducedMotion();
 
   if (points.length === 0) {
@@ -79,8 +63,8 @@ export function RankChart({ points }: { points: RankPoint[] }) {
   const worst = ranked.length ? Math.min(feedSize, Math.max(...ranked) + 3) : feedSize;
 
   return (
-    <div className="space-y-2">
-      <ChartContainer config={config} className="h-[280px] w-full">
+    <div className="flex min-h-0 flex-col gap-2">
+      <ChartContainer config={config} className={cn("h-[280px] w-full", className)}>
         <LineChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
           <CartesianGrid vertical={false} strokeOpacity={0.35} />
           <XAxis
@@ -88,7 +72,12 @@ export function RankChart({ points }: { points: RankPoint[] }) {
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            minTickGap={40}
+            /*
+             * Explicit ticks, one per day. Readings are hourly and every
+             * label is a date, so letting recharts space ticks evenly printed
+             * "13 Aug" three times in a row and the axis read as broken.
+             */
+            ticks={dayTicks(data.map((point) => point.capturedAt))}
             tickFormatter={formatDay}
           />
           <YAxis
@@ -124,7 +113,7 @@ export function RankChart({ points }: { points: RankPoint[] }) {
         </LineChart>
       </ChartContainer>
 
-      <p className="text-muted-foreground text-xs">
+      <p className="text-muted-foreground shrink-0 text-xs">
         Lower is better.{" "}
         {outside > 0
           ? `Breaks in the line are readings where the app sat outside the top ${feedSize}.`

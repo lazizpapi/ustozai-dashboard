@@ -106,6 +106,7 @@ describe("audienceIsLive", () => {
     previous: null,
     capturedAt: "2026-08-13T12:00:00.000Z",
     noHistory: true,
+    spanDays: null,
   });
 
   it("is live just after a read", () => {

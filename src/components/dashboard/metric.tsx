@@ -30,6 +30,12 @@ interface MetricProps {
    * at least a day old. Rendered so nobody reads yesterday as now.
    */
   asOf?: string;
+  /**
+   * Tighter type and padding, for strips that carry eight figures instead of
+   * four. Only the scale changes; the anatomy stays identical so a metric
+   * reads the same wherever it appears.
+   */
+  compact?: boolean;
 }
 
 function DeltaGlyph({ change }: { change: Delta }) {
@@ -54,15 +60,38 @@ function DeltaGlyph({ change }: { change: Delta }) {
   );
 }
 
-export function Metric({ icon, label, value, detail, change, asOf }: MetricProps) {
+export function Metric({
+  icon,
+  label,
+  value,
+  detail,
+  change,
+  asOf,
+  compact = false,
+}: MetricProps) {
   return (
-    <div className="flex flex-col gap-1.5 px-5 py-4 first:pl-0">
-      <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+    <div
+      className={cn(
+        "flex flex-col first:pl-0",
+        compact ? "gap-1 px-3 py-3" : "gap-1.5 px-5 py-4",
+      )}
+    >
+      <span
+        className={cn(
+          "text-muted-foreground flex items-center gap-1.5",
+          compact ? "text-[11px]" : "text-xs",
+        )}
+      >
         {icon}
         {label}
       </span>
 
-      <span className={cn("tnum text-3xl leading-none font-medium", "tracking-tight")}>
+      <span
+        className={cn(
+          "tnum leading-none font-medium tracking-tight",
+          compact ? "text-2xl" : "text-3xl",
+        )}
+      >
         {value}
       </span>
 
@@ -72,6 +101,11 @@ export function Metric({ icon, label, value, detail, change, asOf }: MetricProps
           <span className="text-foreground/70">
             <DeltaGlyph change={change} />
           </span>
+        ) : null}
+        {/* Only present when the comparison did not reach a full week, so a
+            four-day movement never gets read as a weekly one. */}
+        {change?.spanLabel ? (
+          <span className="text-muted-foreground/70">{change.spanLabel}</span>
         ) : null}
       </div>
 
@@ -85,14 +119,36 @@ export function Metric({ icon, label, value, detail, change, asOf }: MetricProps
 /**
  * The hairline row. Collapses to two columns on small screens and one on the
  * narrowest, with the dividers following the wrap so the rhythm survives.
+ *
+ * `wide` carries eight figures: four across at lg, all eight at xl. The
+ * divider rules are written per breakpoint rather than by a single rule
+ * because a border that follows the wrap has to know where the wrap is.
  */
-export function MetricStrip({ children }: { children: React.ReactNode }) {
+export function MetricStrip({
+  children,
+  wide = false,
+}: {
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
   return (
     <div
       className={cn(
-        "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
-        "divide-y sm:divide-y-0 sm:[&>*:nth-child(n+3)]:border-t lg:[&>*]:border-t-0",
-        "sm:divide-x lg:divide-x",
+        "grid grid-cols-1 sm:grid-cols-2",
+        "divide-y sm:divide-y-0 sm:divide-x",
+        wide
+          ? [
+              "lg:grid-cols-4 xl:grid-cols-8",
+              // Rows of two, then four, then one row of eight: each layout
+              // draws a top border only on the items that actually wrapped.
+              "sm:[&>*:nth-child(n+3)]:border-t",
+              "lg:[&>*]:border-t-0 lg:[&>*:nth-child(n+5)]:border-t",
+              "xl:[&>*]:border-t-0",
+            ]
+          : [
+              "lg:grid-cols-4",
+              "sm:[&>*:nth-child(n+3)]:border-t lg:[&>*]:border-t-0",
+            ],
       )}
     >
       {children}

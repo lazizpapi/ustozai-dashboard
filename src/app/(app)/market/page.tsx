@@ -1,9 +1,11 @@
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
+import { MarketRaceChart } from "@/components/dashboard/market-race-chart";
 import { PageHeader, Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import {
+  competitorRankSeries,
   educationChartTop,
   marketOverview,
   recentListingChanges,
@@ -11,7 +13,14 @@ import {
   type MarketApp,
 } from "@/lib/db/queries";
 import { COMPETITORS, IOS_APP_ID } from "@/lib/collectors/config";
-import { delta, formatDay, formatNumber, formatRating, rankDelta } from "@/lib/format";
+import {
+  delta,
+  formatDay,
+  formatNumber,
+  formatRating,
+  formatSigned,
+  rankDelta,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -107,13 +116,14 @@ function Rank({ app }: { app: MarketApp }) {
 
 export default async function MarketPage() {
   const result = await load(async () => {
-    const [apps, chartTop, listingChanges, watchedCount] = await Promise.all([
+    const [apps, chartTop, listingChanges, watchedCount, race] = await Promise.all([
       marketOverview(),
       educationChartTop(),
       recentListingChanges(),
       watchedListingCount(),
+      competitorRankSeries(),
     ]);
-    return { apps, chartTop, listingChanges, watchedCount };
+    return { apps, chartTop, listingChanges, watchedCount, race };
   });
 
   if (result.kind === "unconfigured") {
@@ -121,33 +131,83 @@ export default async function MarketPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { apps, chartTop, listingChanges, watchedCount } = result.data;
+  const { apps, chartTop, listingChanges, watchedCount, race } = result.data;
   const trackedIds = new Set([
     IOS_APP_ID,
     ...COMPETITORS.flatMap((c) => (c.iosId ? [c.iosId] : [])),
   ]);
   const collecting = apps.some((app) => !app.isOurs && app.rank === null && app.playInstalls === null);
 
+  /*
+   * The spans the movement columns actually measured, named once here rather
+   * than repeated in every cell. Until a full week of competitor readings
+   * exists these are shorter than the heading would otherwise imply, and
+   * saying "over 4 days" once beats printing it six times.
+   */
+  const spans = [
+    ...apps.map((app) => app.rankSpanDays),
+    ...apps.map((app) => app.playInstallsSpanDays),
+  ].filter((span): span is number => span !== null);
+  const longestSpan = spans.length ? Math.max(...spans) : null;
+  const velocitySpans = apps
+    .map((app) => app.playVelocitySpanDays)
+    .filter((span): span is number => span !== null);
+  const velocitySpan = velocitySpans.length ? Math.max(...velocitySpans) : null;
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <PageHeader
         title="Market"
-        note="Education apps in Uzbekistan. Movement is against a week ago."
+        note={
+          longestSpan && longestSpan < 7
+            ? `Education apps in Uzbekistan. Movement spans up to ${longestSpan} days so far.`
+            : "Education apps in Uzbekistan. Movement is against a week ago."
+        }
       />
+
+      {/*
+        The race first, because it answers the page's question directly. The
+        table below it says who is ahead today; only this says who is closing.
+      */}
+      <Section
+        title="The race"
+        note="Education chart position, every tracked app"
+      >
+        <MarketRaceChart points={race.points} apps={race.apps} />
+      </Section>
 
       <Section
         title="Where we stand"
         note="chart position follows recent downloads, not total installs"
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
             <thead>
               <tr className="text-muted-foreground border-b text-xs">
                 <th className="px-3 py-2 text-left font-medium">App</th>
                 <th className="px-3 py-2 text-right font-medium">Education</th>
-                <th className="px-3 py-2 text-right font-medium">Week</th>
+                <th className="px-3 py-2 text-right font-medium">Move</th>
+                {/*
+                  Velocity sits before the lifetime total on purpose. It is the
+                  figure that actually compares two apps of different ages, so
+                  it should be the one the eye lands on first.
+
+                  The window is named in the header rather than the footnote
+                  because the company view reports our own installs per day
+                  over a shorter window, and two different figures for the
+                  same-sounding metric have to carry their spans where they
+                  cannot be missed.
+                */}
+                <th className="px-3 py-2 text-right font-medium">
+                  Installs / day
+                  {velocitySpan ? (
+                    <span className="text-muted-foreground/70 block font-normal">
+                      {velocitySpan}-day average
+                    </span>
+                  ) : null}
+                </th>
                 <th className="px-3 py-2 text-right font-medium">Play installs</th>
-                <th className="px-3 py-2 text-right font-medium">Week</th>
+                <th className="px-3 py-2 text-right font-medium">Move</th>
                 <th className="px-3 py-2 text-right font-medium">Play</th>
                 <th className="px-3 py-2 text-right font-medium">App Store</th>
               </tr>
@@ -158,25 +218,32 @@ export default async function MarketPage() {
                   key={app.slug}
                   className={cn("border-b last:border-b-0", app.isOurs && "bg-muted/40")}
                 >
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2">
                     <span className={cn(app.isOurs && "font-medium")}>{app.name}</span>
                     {app.isOurs ? (
                       <span className="text-muted-foreground ml-2 text-xs">ours</span>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2.5 text-right">
+                  <td className="px-3 py-2 text-right">
                     <Rank app={app} />
                   </td>
-                  <td className="px-3 py-2.5 text-right text-xs">
+                  <td className="px-3 py-2 text-right text-xs">
                     <Move change={rankDelta(app.rank, app.rankPrevious)} />
                   </td>
-                  <td className="tnum px-3 py-2.5 text-right">
+                  <td className="tnum px-3 py-2 text-right">
+                    {app.playInstallsPerDay === null ? (
+                      <span className="text-muted-foreground/60">—</span>
+                    ) : (
+                      formatSigned(app.playInstallsPerDay)
+                    )}
+                  </td>
+                  <td className="tnum px-3 py-2 text-right">
                     {formatNumber(app.playInstalls)}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-xs">
+                  <td className="px-3 py-2 text-right text-xs">
                     <Move change={delta(app.playInstalls, app.playInstallsPrevious)} />
                   </td>
-                  <td className="tnum px-3 py-2.5 text-right">
+                  <td className="tnum px-3 py-2 text-right">
                     {formatRating(app.playRating)}
                     {app.playRatingCount ? (
                       <span className="text-muted-foreground ml-1.5 text-xs">
@@ -184,7 +251,7 @@ export default async function MarketPage() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="tnum px-3 py-2.5 text-right">
+                  <td className="tnum px-3 py-2 text-right">
                     {formatRating(app.iosRating)}
                     {app.iosRatingCount ? (
                       <span className="text-muted-foreground ml-1.5 text-xs">
@@ -299,12 +366,17 @@ export default async function MarketPage() {
 
       <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
         {collecting
-          ? "Competitor figures fill in on the next hourly poll, and weekly movement appears once seven days of readings exist. "
-          : "Weekly movement compares the newest reading against the newest from a week ago. "}
+          ? "Competitor figures fill in on the next hourly poll. "
+          : longestSpan && longestSpan < 7
+            ? `Movement compares the newest reading against the oldest held, up to ${longestSpan} days back, and reaches a full week once that much history exists. `
+            : "Movement compares the newest reading against the newest from a week ago. "}
+        {velocitySpan
+          ? `Installs per day is Google's published total spread across the ${velocitySpan} days between readings, which is the figure that compares apps of different ages: a lifetime total mostly measures how long an app has existed. `
+          : "Installs per day needs two readings a day apart before it can be derived. "}
         Apple ranks the Education chart on recent download velocity rather than
         on how many people have the app, which is why an app can sit above
-        another that has more installs. Play install counts are Google&apos;s own
-        published totals and it updates them roughly once a day.
+        another that has more installs. Play updates its published total
+        roughly once a day.
       </p>
     </div>
   );

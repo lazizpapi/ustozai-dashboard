@@ -18,6 +18,31 @@ export interface Delta {
   magnitude: number | null;
   /** Ready-to-render label, already correct for the metric's polarity. */
   label: string;
+  /**
+   * How far back the comparison actually reached, when that is not the week
+   * the pages already claim in their headings. Null means "a week, as stated"
+   * or "nothing to compare", so a caller can render it unconditionally.
+   */
+  spanLabel: string | null;
+}
+
+/** The full week every page already announces, so it needs no restating. */
+const STATED_SPAN_DAYS = 7;
+
+/**
+ * Names a comparison span, when it differs from the week the pages claim.
+ *
+ * This exists because both alternatives were worse. Comparing against
+ * whatever reading happens to be oldest and still calling it a week is a lie.
+ * Refusing to compare until the seventh day left every movement column on the
+ * market page showing dashes while real movement was happening. "over 4 days"
+ * is the only version that is both useful and true.
+ */
+function spanLabel(spanDays: number | null | undefined): string | null {
+  if (spanDays === null || spanDays === undefined) return null;
+  if (!Number.isFinite(spanDays) || spanDays < 1) return null;
+  if (spanDays === STATED_SPAN_DAYS) return null;
+  return `over ${spanDays} ${spanDays === 1 ? "day" : "days"}`;
 }
 
 const NBSP = " ";
@@ -109,16 +134,24 @@ export function formatPercent(part: number | null, whole: number | null): string
 /**
  * Delta for a metric where a bigger number is better: rating, installs, reviews.
  */
-export function delta(current: number | null, previous: number | null): Delta {
+export function delta(
+  current: number | null,
+  previous: number | null,
+  spanDays?: number | null,
+): Delta {
   if (current === null || previous === null) {
-    return { direction: "unknown", magnitude: null, label: "no history yet" };
+    return { direction: "unknown", magnitude: null, label: "no history yet", spanLabel: null };
   }
+  const span = spanLabel(spanDays);
   const change = current - previous;
-  if (change === 0) return { direction: "flat", magnitude: 0, label: "no change" };
+  if (change === 0) {
+    return { direction: "flat", magnitude: 0, label: "no change", spanLabel: span };
+  }
   return {
     direction: change > 0 ? "up" : "down",
     magnitude: Math.abs(change),
     label: `${change > 0 ? "+" : "-"}${formatNumber(Math.abs(change))}`,
+    spanLabel: span,
   };
 }
 
@@ -128,31 +161,45 @@ export function delta(current: number | null, previous: number | null): Delta {
  * The returned direction is the direction of the *app's fortunes*, not of the
  * integer, so callers can point an arrow at it without re-deriving polarity.
  */
-export function rankDelta(current: number | null, previous: number | null): Delta {
+export function rankDelta(
+  current: number | null,
+  previous: number | null,
+  spanDays?: number | null,
+): Delta {
   if (current === null || previous === null) {
-    return { direction: "unknown", magnitude: null, label: "no history yet" };
+    return { direction: "unknown", magnitude: null, label: "no history yet", spanLabel: null };
   }
+  const span = spanLabel(spanDays);
   const improvement = previous - current;
-  if (improvement === 0) return { direction: "flat", magnitude: 0, label: "no change" };
+  if (improvement === 0) {
+    return { direction: "flat", magnitude: 0, label: "no change", spanLabel: span };
+  }
   return {
     direction: improvement > 0 ? "up" : "down",
     magnitude: Math.abs(improvement),
     label: `${improvement > 0 ? "up" : "down"}${NBSP}${Math.abs(improvement)}`,
+    spanLabel: span,
   };
 }
 
-export function formatRatingDelta(current: number | null, previous: number | null): Delta {
+export function formatRatingDelta(
+  current: number | null,
+  previous: number | null,
+  spanDays?: number | null,
+): Delta {
   if (current === null || previous === null) {
-    return { direction: "unknown", magnitude: null, label: "no history yet" };
+    return { direction: "unknown", magnitude: null, label: "no history yet", spanLabel: null };
   }
+  const span = spanLabel(spanDays);
   const change = current - previous;
   if (Math.abs(change) < 0.005) {
-    return { direction: "flat", magnitude: 0, label: "no change" };
+    return { direction: "flat", magnitude: 0, label: "no change", spanLabel: span };
   }
   return {
     direction: change > 0 ? "up" : "down",
     magnitude: Math.abs(change),
     label: `${change > 0 ? "+" : "-"}${Math.abs(change).toFixed(2)}`,
+    spanLabel: span,
   };
 }
 
@@ -172,7 +219,20 @@ export function timeAgo(iso: string | null | undefined, now = Date.now()): strin
   return `${days}d ago`;
 }
 
-/** Renders a date as the day it describes, never as a moment. */
+/**
+ * Renders a date as the day it describes, never as a moment.
+ *
+ * Days are Tashkent days, matching every bucket in this system: the
+ * collectors file readings by Tashkent date, so a label that named the UTC
+ * day would disagree with the bucket it sits above. Concretely, a 20:00 UTC
+ * reading belongs to the next Tashkent morning, and labelling it as the
+ * previous day put chart ticks behind their own data and made two different
+ * days print the same date.
+ *
+ * Bare YYYY-MM-DD strings are already Tashkent dates, so they are anchored at
+ * midnight UTC and land on the same date once shifted: Tashkent is UTC+5 with
+ * no daylight saving, so the day can never roll backwards.
+ */
 export function formatDay(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
@@ -180,7 +240,7 @@ export function formatDay(iso: string | null | undefined): string {
   return date.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
-    timeZone: "UTC",
+    timeZone: "Asia/Tashkent",
   });
 }
 
