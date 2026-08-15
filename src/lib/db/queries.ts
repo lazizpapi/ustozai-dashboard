@@ -10,6 +10,7 @@ import {
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
 import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
+import type { AnalystReport } from "@/lib/analyst/schema";
 import {
   countByBucket,
   netChangeByBucket,
@@ -792,6 +793,66 @@ export async function watchedListingCount(): Promise<number> {
     .limit(PAGE_SIZE);
   if (error) throw new Error(`watchedListingCount: ${error.message}`);
   return new Set((data ?? []).map((row) => row.app_id as string)).size;
+}
+
+// ---------------------------------------------------------------------------
+// The analyst's reports
+// ---------------------------------------------------------------------------
+
+export interface AnalystRow {
+  id: string;
+  createdAt: string;
+  status: "ok" | "stale-data" | "failed";
+  health: "green" | "yellow" | "red" | null;
+  headline: string | null;
+  report: AnalystReport | null;
+  model: string | null;
+  error: string | null;
+}
+
+function toAnalystRow(row: Record<string, unknown>): AnalystRow {
+  return {
+    id: row.id as string,
+    createdAt: row.created_at as string,
+    status: row.status as AnalystRow["status"],
+    health: (row.health as AnalystRow["health"]) ?? null,
+    headline: (row.headline as string) ?? null,
+    report: (row.report as AnalystReport) ?? null,
+    model: (row.model as string) ?? null,
+    error: (row.error as string) ?? null,
+  };
+}
+
+const ANALYST_COLUMNS = "id, created_at, status, health, headline, report, model, error";
+
+/**
+ * The newest report worth showing, and the runs around it.
+ *
+ * "Latest" means the newest successful report rather than the newest row: a
+ * failed or refused run should not blank the page, because the last good
+ * analysis is still the best available answer. The recent list is unfiltered,
+ * so a run of failures is visible rather than hidden behind a stale report.
+ */
+export async function latestAnalystReport(): Promise<AnalystRow | null> {
+  const { data, error } = await serviceClient()
+    .from("analyst_reports")
+    .select(ANALYST_COLUMNS)
+    .eq("status", "ok")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`latestAnalystReport: ${error.message}`);
+  return data ? toAnalystRow(data) : null;
+}
+
+export async function recentAnalystRuns(limit = 14): Promise<AnalystRow[]> {
+  const { data, error } = await serviceClient()
+    .from("analyst_reports")
+    .select(ANALYST_COLUMNS)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`recentAnalystRuns: ${error.message}`);
+  return (data ?? []).map(toAnalystRow);
 }
 
 // ---------------------------------------------------------------------------

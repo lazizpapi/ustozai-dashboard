@@ -40,6 +40,26 @@ export function analyticsRequestId(): string | null {
 }
 
 /**
+ * The Anthropic credential the daily analyst runs on.
+ *
+ * Optional, and its absence is a skip rather than a failure: without it every
+ * collector still runs and every page still renders, and only the analyst is
+ * dormant. Same pattern as the App Store and Instagram credentials.
+ */
+export function anthropicKey(): string | null {
+  return process.env.ANTHROPIC_API_KEY?.trim() || null;
+}
+
+/**
+ * Model override for the analyst. Defaults to Opus, which is the right default
+ * for a once-a-day judgement call: the run costs cents either way, and the
+ * cheaper thing to do is get the analysis right.
+ */
+export function analystModel(): string {
+  return process.env.ANALYST_MODEL?.trim() || "claude-opus-5";
+}
+
+/**
  * The secret Telegram echoes back on every webhook call, in the
  * X-Telegram-Bot-Api-Secret-Token header. Set once at setWebhook time.
  *
