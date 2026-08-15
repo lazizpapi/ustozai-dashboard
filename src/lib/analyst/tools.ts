@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type OpenAI from "openai";
 
 import { GROWTH_SERIES, type GrowthSeriesKey } from "@/lib/db/queries";
 import { PERIODS, type Period } from "@/lib/growth";
@@ -17,6 +17,13 @@ import { PERIODS, type Period } from "@/lib/growth";
  * Every argument is clamped to a range the database can actually serve. A
  * model asking for a hundred thousand days is a plausible mistake, and it
  * should cost a bounded query rather than a timed-out page.
+ *
+ * `strict: false` throughout, deliberately. Strict mode requires every
+ * property to be required, which would force the model to pass a day count on
+ * every call and would turn get_reviews' genuinely optional rating filter into
+ * a mandatory one ("all reviews" and "complaints only" are different
+ * questions). clampArgs is the guarantee instead, and it is the thing the
+ * tests pin.
  */
 
 const DAYS = { min: 1, max: 365, fallback: 30 };
@@ -40,7 +47,7 @@ const daysSchema = (hint: string) => ({
 
 const noArgs = { type: "object" as const, properties: {} };
 
-export const ASK_TOOLS: Anthropic.Tool[] = [
+export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
   {
     name: "get_downloads",
     description:
@@ -50,7 +57,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "updates about once a day, so a zero often means the counter has not " +
       "moved rather than that nobody installed. Use for any question about " +
       "how many people are installing the app over time.",
-    input_schema: daysSchema("How many days of history to return."),
+    type: "function",
+    strict: false,
+    parameters: daysSchema("How many days of history to return."),
   },
   {
     name: "get_market",
@@ -59,7 +68,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "current Education chart rank, rank a week ago, Google Play install " +
       "totals and their weekly change, and both stores' ratings. Use for any " +
       "comparison question or 'how are we doing against X'.",
-    input_schema: noArgs,
+    type: "function",
+    strict: false,
+    parameters: noArgs,
   },
   {
     name: "get_chart",
@@ -68,7 +79,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "each app's movement since yesterday and since last week, including apps " +
       "we do not otherwise track. Use to answer who is above us, who is " +
       "climbing, and who newly entered.",
-    input_schema: noArgs,
+    type: "function",
+    strict: false,
+    parameters: noArgs,
   },
   {
     name: "get_conversion_funnel",
@@ -78,7 +91,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "is the top of the funnel and the only place to see how many people saw " +
       "the listing versus installed. App Store only; Google publishes no " +
       "equivalent.",
-    input_schema: daysSchema("How many days of funnel data to aggregate."),
+    type: "function",
+    strict: false,
+    parameters: daysSchema("How many days of funnel data to aggregate."),
   },
   {
     name: "get_keywords",
@@ -87,7 +102,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "previous reading, and the store search-box suggestions for each term " +
       "with newly appeared ones flagged. Use for anything about search " +
       "visibility, ASO, or what people are typing.",
-    input_schema: noArgs,
+    type: "function",
+    strict: false,
+    parameters: noArgs,
   },
   {
     name: "get_reviews",
@@ -95,7 +112,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "Recent user reviews from both stores with rating, title, body and date. " +
       "Optionally filter to a maximum rating to read complaints only. Use for " +
       "questions about what users are saying, complaints, or sentiment.",
-    input_schema: {
+    type: "function",
+    strict: false,
+    parameters: {
       type: "object",
       properties: {
         limit: { type: "number", description: "How many reviews. 1 to 100, default 25." },
@@ -114,7 +133,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "Follower counts for the Telegram channel, Instagram and YouTube, with " +
       "the previous reading. YouTube is rounded by Google to three significant " +
       "figures, so small changes there are invisible rather than absent.",
-    input_schema: noArgs,
+    type: "function",
+    strict: false,
+    parameters: noArgs,
   },
   {
     name: "get_growth",
@@ -122,7 +143,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "Net change per period for one series — how much was gained or lost each " +
       "day, week, month or year. Use for trend and 'how fast are we growing' " +
       "questions rather than for current totals.",
-    input_schema: {
+    type: "function",
+    strict: false,
+    parameters: {
       type: "object",
       properties: {
         metric: {
@@ -142,7 +165,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "which store, when, and which fields changed (title, description, " +
       "screenshots, version). A competitor's edit is an ASO experiment being " +
       "run in public. Use to answer what competitors have changed recently.",
-    input_schema: noArgs,
+    type: "function",
+    strict: false,
+    parameters: noArgs,
   },
   {
     name: "get_latest_report",
@@ -150,7 +175,9 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "The most recent daily analyst report: its headline, health, findings and " +
       "recommendations. Use when asked about the last report or to avoid " +
       "contradicting a conclusion already published to the team.",
-    input_schema: noArgs,
+    type: "function",
+    strict: false,
+    parameters: noArgs,
   },
   {
     name: "get_collector_health",
@@ -158,12 +185,17 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       "Status of every data collector and when each last ran. Use to check " +
       "whether a surprising number is real or the symptom of a broken feed, " +
       "and answer questions about missing or stale data.",
-    input_schema: noArgs,
+    type: "function",
+    strict: false,
+    parameters: noArgs,
   },
 ];
 
+/** Responses.Tool is a union across tool kinds; ours are all functions. */
+export type AskFunctionTool = Extract<OpenAI.Responses.Tool, { type: "function" }>;
+
 export function toolNames(): string[] {
-  return ASK_TOOLS.map((tool) => tool.name);
+  return (ASK_TOOLS as AskFunctionTool[]).map((tool) => tool.name);
 }
 
 /**

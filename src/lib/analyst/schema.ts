@@ -76,14 +76,43 @@ export const analystReportSchema = z.object({
 export type AnalystReport = z.infer<typeof analystReportSchema>;
 
 /**
+ * Recursively drop keywords OpenAI's strict mode does not accept.
+ *
+ * `maxItems` comes from the `.max()` on recommendations. Strict mode supports
+ * only a subset of JSON Schema and rejects the whole request if it meets one
+ * of the others, so the cap is enforced on the way back by zod instead of on
+ * the way out by the schema. The field description still states the limit,
+ * which is what the model actually reads.
+ */
+const UNSUPPORTED = new Set([
+  "$schema",
+  "maxItems",
+  "minItems",
+  "maxLength",
+  "minLength",
+  "minimum",
+  "maximum",
+  "pattern",
+  "format",
+]);
+
+function stripUnsupported(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripUnsupported);
+  if (node === null || typeof node !== "object") return node;
+
+  return Object.fromEntries(
+    Object.entries(node as Record<string, unknown>)
+      .filter(([key]) => !UNSUPPORTED.has(key))
+      .map(([key, value]) => [key, stripUnsupported(value)]),
+  );
+}
+
+/**
  * JSON Schema for the API's structured-output format.
  *
  * Derived rather than hand-written, so the contract the model is held to and
- * the contract we validate against cannot drift apart. Structured outputs
- * reject `$schema`, so it is stripped.
+ * the contract we validate against cannot drift apart.
  */
 export function analystJsonSchema(): Record<string, unknown> {
-  const schema = z.toJSONSchema(analystReportSchema) as Record<string, unknown>;
-  delete schema.$schema;
-  return schema;
+  return stripUnsupported(z.toJSONSchema(analystReportSchema)) as Record<string, unknown>;
 }

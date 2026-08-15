@@ -1,6 +1,6 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
 import { analystJsonSchema, analystReportSchema, type AnalystReport } from "./schema";
 import { buildPack, pipelineBroken, type AnalystPack } from "./pack";
@@ -8,7 +8,7 @@ import { gatherPack } from "./gather";
 import { formatAnalystMessage } from "./format";
 import { serviceClient } from "@/lib/db/client";
 import { recordRuns } from "@/lib/db/persist";
-import { analystModel, anthropicKey, telegramEnv } from "@/lib/env";
+import { analystModel, openaiKey, telegramEnv } from "@/lib/env";
 import { localDate } from "@/lib/growth";
 
 /**
@@ -62,23 +62,28 @@ function periodOf(pack: AnalystPack): { from: string; to: string } {
  * job on, and a single retry costs cents.
  */
 async function requestReport(
-  client: Anthropic,
+  client: OpenAI,
   model: string,
   pack: AnalystPack,
-): Promise<{ report: AnalystReport; usage: Anthropic.Usage }> {
+): Promise<{ report: AnalystReport; usage: { input: number; output: number } }> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const response = await client.messages.create({
+    const response = await client.responses.create({
       model,
-      // Generous: on this model thinking and the response share the budget,
-      // and a report truncated mid-recommendation would be worse than none.
-      max_tokens: 16_000,
-      system: SYSTEM_PROMPT,
-      output_config: {
-        format: { type: "json_schema", schema: analystJsonSchema() },
+      // Generous: reasoning and the response share this budget, and a report
+      // truncated mid-recommendation would be worse than none at all.
+      max_output_tokens: 16_000,
+      instructions: SYSTEM_PROMPT,
+      text: {
+        format: {
+          type: "json_schema",
+          name: "analyst_report",
+          strict: true,
+          schema: analystJsonSchema(),
+        },
       },
-      messages: [
+      input: [
         {
           role: "user",
           content:
@@ -88,24 +93,31 @@ async function requestReport(
       ],
     });
 
+    const usage = {
+      input: response.usage?.input_tokens ?? 0,
+      output: response.usage?.output_tokens ?? 0,
+    };
+
     /*
-     * Checked before reading content, not after. A refusal returns a normal
-     * 200 with an empty content array, so indexing into it first would throw
-     * a TypeError and bury the real reason under a stack trace.
+     * Both checked before reading the text. A refusal and a truncation each
+     * come back as an ordinary success, so parsing first would report "not
+     * valid JSON" for what is really a declined or cut-off answer.
      */
-    if (response.stop_reason === "refusal") {
+    const message = response.output.find((item) => item.type === "message");
+    const refusal = message?.content.find((part) => part.type === "refusal");
+    if (refusal) throw new Error(`model declined the request: ${refusal.refusal}`);
+
+    if (response.status === "incomplete") {
       throw new Error(
-        `model declined the request (${response.stop_details?.category ?? "no category"})`,
+        `report was cut off (${response.incomplete_details?.reason ?? "unknown reason"})`,
       );
     }
 
-    const text = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-
     try {
-      return { report: analystReportSchema.parse(JSON.parse(text)), usage: response.usage };
+      return {
+        report: analystReportSchema.parse(JSON.parse(response.output_text)),
+        usage,
+      };
     } catch (error) {
       lastError = error;
       if (attempt === 2) break;
@@ -153,12 +165,12 @@ async function sendToTelegram(
 }
 
 export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResult> {
-  const key = anthropicKey();
+  const key = openaiKey();
   if (!key) {
     await recordRuns([
-      { source: "analyst", status: "skipped", error: "ANTHROPIC_API_KEY is not set" },
+      { source: "analyst", status: "skipped", error: "OPENAI_API_KEY is not set" },
     ]);
-    return { status: "skipped", reason: "ANTHROPIC_API_KEY is not set" };
+    return { status: "skipped", reason: "OPENAI_API_KEY is not set" };
   }
 
   const model = analystModel();
@@ -187,7 +199,7 @@ export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResul
 
   const started = Date.now();
   try {
-    const client = new Anthropic({ apiKey: key });
+    const client = new OpenAI({ apiKey: key });
     const { report, usage } = await requestReport(client, model, pack);
 
     await save({
@@ -199,8 +211,8 @@ export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResul
       report,
       pack,
       model,
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
+      input_tokens: usage.input,
+      output_tokens: usage.output,
     });
 
     // Sent after the report is safely stored: losing the message is an

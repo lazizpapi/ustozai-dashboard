@@ -1,5 +1,5 @@
 import { ask, type AskTurn } from "@/lib/analyst/ask";
-import { anthropicKey } from "@/lib/env";
+import { openaiKey } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,9 +20,9 @@ const MAX_QUESTION = 2_000;
 const MAX_HISTORY = 20;
 
 export async function POST(request: Request) {
-  if (!anthropicKey()) {
+  if (!openaiKey()) {
     return Response.json(
-      { error: "The analyst needs ANTHROPIC_API_KEY set in the environment." },
+      { error: "The analyst needs OPENAI_API_KEY set in the environment." },
       { status: 503 },
     );
   }

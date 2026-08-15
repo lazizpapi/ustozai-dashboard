@@ -78,7 +78,7 @@ export default async function AnalystPage() {
       {!report ? (
         <Empty>
           No report yet. The analyst runs each morning after the daily
-          collection; it needs an Anthropic API key to be configured.
+          collection; it needs an OpenAI API key to be configured.
         </Empty>
       ) : (
         <>

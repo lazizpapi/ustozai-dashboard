@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ASK_TOOLS, clampArgs, toolNames } from "./tools";
+import { ASK_TOOLS, clampArgs, toolNames, type AskFunctionTool } from "./tools";
 
 /**
  * The tool surface the chat agent is allowed to reach.
@@ -19,10 +19,10 @@ describe("the tool catalogue", () => {
   it("gives every tool a description, since that is how the model chooses", () => {
     // A tool the model cannot tell apart from its neighbours is a tool it
     // calls at random, so the description is load-bearing, not documentation.
-    for (const tool of ASK_TOOLS) {
+    for (const tool of ASK_TOOLS as AskFunctionTool[]) {
       expect(tool.name).toMatch(/^[a-z_]+$/);
       expect((tool.description ?? "").length).toBeGreaterThan(40);
-      expect(tool.input_schema.type).toBe("object");
+      expect((tool.parameters as { type?: string }).type).toBe("object");
     }
   });
 

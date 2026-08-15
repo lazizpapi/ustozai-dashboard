@@ -40,23 +40,22 @@ export function analyticsRequestId(): string | null {
 }
 
 /**
- * The Anthropic credential the daily analyst runs on.
+ * The OpenAI credential the analyst runs on.
  *
  * Optional, and its absence is a skip rather than a failure: without it every
  * collector still runs and every page still renders, and only the analyst is
  * dormant. Same pattern as the App Store and Instagram credentials.
  */
-export function anthropicKey(): string | null {
-  return process.env.ANTHROPIC_API_KEY?.trim() || null;
+export function openaiKey(): string | null {
+  return process.env.OPENAI_API_KEY?.trim() || null;
 }
 
 /**
- * Model override for the analyst. Defaults to Opus, which is the right default
- * for a once-a-day judgement call: the run costs cents either way, and the
- * cheaper thing to do is get the analysis right.
+ * Model override for the analyst. One env var covers both the daily report and
+ * the chat, since they want the same judgement.
  */
 export function analystModel(): string {
-  return process.env.ANALYST_MODEL?.trim() || "claude-opus-5";
+  return process.env.ANALYST_MODEL?.trim() || "gpt-5.6";
 }
 
 /**

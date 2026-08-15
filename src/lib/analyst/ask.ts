@@ -1,10 +1,10 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
 import { ASK_TOOLS, clampArgs } from "./tools";
 import { pageName } from "./page-context";
-import { analystModel, anthropicKey } from "@/lib/env";
+import { analystModel, openaiKey } from "@/lib/env";
 import {
   androidDailyInstalls,
   collectorHealth,
@@ -30,10 +30,11 @@ import type { Period } from "@/lib/growth";
  * reads it, and can go back for more before answering. That is what lets it
  * answer questions the daily report never anticipated.
  *
- * The loop is written by hand rather than using the SDK's tool runner because
- * every tool result has to be captured for the trace the UI shows — an answer
- * about the company's numbers should come with the receipts for which numbers
- * it read, and a runner that executes tools internally would hide exactly that.
+ * The loop is written by hand rather than delegating to a helper that runs
+ * tools for you, because every tool result has to be captured for the trace
+ * the UI shows. An answer about the company's numbers should come with the
+ * receipts for which numbers it read, and a helper that executes tools
+ * internally would hide exactly that.
  */
 
 const MAX_STEPS = 8;
@@ -137,87 +138,106 @@ export async function ask(
   history: AskTurn[] = [],
   page?: string,
 ): Promise<AskResult> {
-  const key = anthropicKey();
-  if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
+  const key = openaiKey();
+  if (!key) throw new Error("OPENAI_API_KEY is not set");
 
   // Where the question was asked from, when we recognise the page. Enough for
   // the model to read "how are we doing?" as being about what is on screen.
   const from = page ? pageName(page) : null;
-  const system = from
+  const instructions = from
     ? `${SYSTEM_PROMPT}\n\nThe user is currently looking at the ${from} page of the dashboard. Read an unqualified question as being about what that page shows, unless they say otherwise.`
     : SYSTEM_PROMPT;
 
-  const client = new Anthropic({ apiKey: key });
-  const messages: Anthropic.MessageParam[] = [
+  const client = new OpenAI({ apiKey: key });
+  const input: OpenAI.Responses.ResponseInput = [
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
     { role: "user" as const, content: question },
   ];
 
   const steps: AskStep[] = [];
-  let input = 0;
-  let output = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
-    const response = await client.messages.create({
+    const response = await client.responses.create({
       model: analystModel(),
-      max_tokens: 8_000,
-      system,
+      max_output_tokens: 8_000,
+      instructions,
       tools: ASK_TOOLS,
-      messages,
+      input,
     });
 
-    input += response.usage.input_tokens;
-    output += response.usage.output_tokens;
+    inputTokens += response.usage?.input_tokens ?? 0;
+    outputTokens += response.usage?.output_tokens ?? 0;
 
-    // Checked before touching content: a refusal returns a normal 200 with an
-    // empty content array, so reading blocks first would throw over the top of
-    // the actual reason.
-    if (response.stop_reason === "refusal") {
-      throw new Error("the model declined to answer that");
+    /*
+     * Checked before reading any text. A refusal and a truncation both come
+     * back as an ordinary success, so pulling the answer out first would
+     * return an empty string and hide why.
+     */
+    const message = response.output.find((item) => item.type === "message");
+    const refusal = message?.content.find((part) => part.type === "refusal");
+    if (refusal) throw new Error(`the model declined: ${refusal.refusal}`);
+
+    if (response.status === "incomplete") {
+      throw new Error(
+        `the answer was cut off (${response.incomplete_details?.reason ?? "unknown reason"})`,
+      );
     }
 
-    const toolUses = response.content.filter(
-      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
-    );
+    const calls = response.output.filter((item) => item.type === "function_call");
 
-    if (toolUses.length === 0) {
-      const answer = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === "text")
-        .map((block) => block.text)
-        .join("")
-        .trim();
-      return { answer, steps, usage: { input, output } };
+    if (calls.length === 0) {
+      return {
+        answer: response.output_text.trim(),
+        steps,
+        usage: { input: inputTokens, output: outputTokens },
+      };
     }
 
-    messages.push({ role: "assistant", content: response.content });
+    /*
+     * Every output item goes back verbatim, then one result item per call.
+     * All of them, not just the calls: reasoning models carry state in their
+     * reasoning items, and dropping those between turns loses the thread.
+     *
+     * The cast narrows away a computer-use variant that the output union
+     * allows but this agent cannot produce, since the only tools it is given
+     * are the read-only functions in tools.ts.
+     */
+    input.push(...(response.output as OpenAI.Responses.ResponseInputItem[]));
 
-    // Every tool result goes back in one user message. Splitting them trains
-    // the model out of asking for several at once, which is what keeps a
-    // multi-part question to one round trip instead of four.
-    const results: Anthropic.ToolResultBlockParam[] = [];
-    for (const use of toolUses) {
-      const args = clampArgs(use.name, use.input);
-      steps.push({ tool: use.name, args });
+    for (const call of calls) {
+      // Arguments arrive as a JSON string, and a malformed one is the model's
+      // mistake to recover from rather than ours to crash on.
+      let parsed: unknown = {};
       try {
-        const data = await runTool(use.name, args);
-        results.push({
-          type: "tool_result",
-          tool_use_id: use.id,
-          content: JSON.stringify(data),
+        parsed = JSON.parse(call.arguments || "{}");
+      } catch {
+        parsed = {};
+      }
+
+      const args = clampArgs(call.name, parsed);
+      steps.push({ tool: call.name, args });
+
+      try {
+        const data = await runTool(call.name, args);
+        input.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: JSON.stringify(data),
         });
       } catch (error) {
-        // Returned to the model rather than thrown, so one dead query becomes
-        // something it can work around instead of losing the whole answer.
-        results.push({
-          type: "tool_result",
-          tool_use_id: use.id,
-          content: error instanceof Error ? error.message : String(error),
-          is_error: true,
+        // Handed back to the model rather than thrown, so one dead query
+        // becomes something it can work around instead of losing the answer.
+        input.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: JSON.stringify({
+            error: error instanceof Error ? error.message : String(error),
+          }),
         });
       }
     }
-
-    messages.push({ role: "user", content: results });
   }
 
   return {
@@ -225,6 +245,6 @@ export async function ask(
       "I went round in circles on that one and stopped before running up a bill. " +
       "Try asking it in a narrower way.",
     steps,
-    usage: { input, output },
+    usage: { input: inputTokens, output: outputTokens },
   };
 }
