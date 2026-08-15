@@ -183,3 +183,22 @@ export function formatDay(iso: string | null | undefined): string {
     timeZone: "UTC",
   });
 }
+
+/**
+ * Names the apostrophe in a keyword, when it is not the plain ASCII one.
+ *
+ * The tracked keyword list holds ta'lim twice on purpose: Uzbek Latin uses
+ * U+02BC for the glottal stop, almost nobody types it on a phone, and Apple
+ * returns different results for the two strings. Rendered plainly the two rows
+ * are visually identical, so the page looks like it is repeating itself. This
+ * is what tells them apart.
+ *
+ * Returns null for ASCII or apostrophe-free keywords, so the common case adds
+ * nothing to the page.
+ */
+export function apostropheNote(keyword: string): string | null {
+  if (keyword.includes("ʼ")) return "modifier ʼ";
+  if (keyword.includes("ʻ")) return "turned comma ʻ";
+  if (keyword.includes("’")) return "curly ’";
+  return null;
+}

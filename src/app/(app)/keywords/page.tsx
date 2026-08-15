@@ -9,7 +9,7 @@ import {
   latestKeywordRanks,
   type KeywordRow,
 } from "@/lib/db/queries";
-import { formatDay, rankDelta } from "@/lib/format";
+import { apostropheNote, formatDay, rankDelta } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SeedSuggestions } from "@/lib/aso/suggestions";
 
@@ -48,6 +48,23 @@ function Movement({ row }: { row: KeywordRow }) {
 }
 
 /**
+ * A tracked term, with its apostrophe named when that is the only thing
+ * distinguishing it from another row. Without this the list shows ta'lim
+ * twice and reads as a duplication bug rather than as two real spellings.
+ */
+function Keyword({ term }: { term: string }) {
+  const note = apostropheNote(term);
+  return (
+    <span className="text-sm">
+      {term}
+      {note ? (
+        <span className="text-muted-foreground/60 ml-1.5 text-xs">{note}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
  * One seed's suggestion lists, App Store and Google Play side by side.
  * "New" marks a term absent from the previous crawl — the signal the whole
  * section exists for — and it is a label, never a colour.
@@ -59,8 +76,8 @@ function SuggestionSeed({ seed, sets }: { seed: string; sets: SeedSuggestions[] 
   ];
 
   return (
-    <div className="grid grid-cols-[7rem_1fr] items-baseline gap-x-4 gap-y-1 py-2.5">
-      <span className="text-sm">{seed}</span>
+    <div className="grid grid-cols-[9rem_1fr] items-baseline gap-x-4 gap-y-1 py-2.5">
+      <Keyword term={seed} />
       <div className="space-y-1">
         {stores.map((store) => {
           const set = sets.find((s) => s.platform === store.key);
@@ -137,7 +154,7 @@ export default async function KeywordsPage() {
               key={row.keyword}
               className="grid grid-cols-[1fr_auto_auto] items-baseline gap-4 py-3"
             >
-              <span className="text-sm">{row.keyword}</span>
+              <Keyword term={row.keyword} />
 
               <span className="tnum text-right text-sm">
                 {row.position === null ? (

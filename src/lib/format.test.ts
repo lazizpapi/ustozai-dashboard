@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  apostropheNote,
   delta,
   formatDay,
   formatPercent,
@@ -118,5 +119,23 @@ describe("formatDay", () => {
     // A download figure is a whole day, not a moment. Local-time parsing of a
     // bare date can move it to the previous day west of UTC.
     expect(formatDay("2026-08-10")).toBe("10 Aug");
+  });
+});
+
+describe("apostropheNote", () => {
+  it("names the modifier apostrophe so two tracked forms are tellable apart", () => {
+    // The keywords page lists ta'lim twice on purpose: Apple returns different
+    // results for the two spellings and people type both. Rendered plainly the
+    // rows look identical, so the page reads as having a duplication bug.
+    expect(apostropheNote("taʼlim")).toBe("modifier ʼ");
+    expect(apostropheNote("ta'lim")).toBeNull();
+  });
+
+  it("names the turned comma used in oʻzbek spellings", () => {
+    expect(apostropheNote("oʻzbek")).toBe("turned comma ʻ");
+  });
+
+  it("says nothing about a keyword with no apostrophe at all", () => {
+    expect(apostropheNote("matematika")).toBeNull();
   });
 });
