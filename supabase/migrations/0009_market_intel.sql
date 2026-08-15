@@ -34,7 +34,7 @@ create table chart_apps (
 comment on table chart_apps is
   'Top of each tracked App Store chart, one row per position per Tashkent day. '
   'Read from the same RSS payload the rank poll fetches; depth is capped in '
-  'code (20) rather than here so widening it is a deploy, not a migration.';
+  'code rather than here so widening it is a deploy, not a migration.';
 
 create index chart_apps_lookup_idx on chart_apps (country, chart_type, genre, date desc);
 

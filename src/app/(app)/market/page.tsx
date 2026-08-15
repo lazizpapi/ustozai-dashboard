@@ -29,7 +29,14 @@ export const dynamic = "force-dynamic";
 
 function Move({ change }: { change: ReturnType<typeof delta> }) {
   if (change.direction === "unknown") {
-    return <span className="text-muted-foreground/60">new</span>;
+    /*
+     * No reading from a week ago, which is not the same claim as "new".
+     * This said "new" against Praktika's 19.6 million installs on the day
+     * competitor tracking started, which is simply false: the app is years
+     * old, we had just started watching it. A dash says nothing, correctly,
+     * and the footnote below explains when the column fills in.
+     */
+    return <span className="text-muted-foreground/60">—</span>;
   }
   if (change.direction === "flat") {
     return (
@@ -194,9 +201,8 @@ export default async function MarketPage() {
 
       {/*
         The chart's visible top, only once the poll has stored a day of it.
-        Twenty rows is enough to hold everyone the team would recognise; the
-        cap lives in the collector, so widening it is a deploy, not a schema
-        change.
+        Depth is set in the collector (30, deep enough to include us), so
+        widening it is a deploy rather than a schema change.
       */}
       {chartTop.movers.length > 0 ? (
         <Section

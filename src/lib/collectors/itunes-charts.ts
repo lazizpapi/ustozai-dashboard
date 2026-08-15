@@ -86,8 +86,12 @@ export function parseChartMany(
  * The visible top of the chart, ranked from one.
  *
  * Same payload as parseChart, read for a different question: not "where are
- * we" but "who is around us and who is moving". Twenty is enough to hold every
- * app the team would recognise without turning the page into a phone book.
+ * we" but "who is around us and who is moving".
+ *
+ * Thirty rather than twenty because Ustoz AI sat at #24 the day this shipped,
+ * and a "top of the chart" section that cannot show our own app is a section
+ * about other people. Thirty keeps us visible with room to slip. Rows are
+ * parsed, never fetched, so the depth costs nothing but storage.
  *
  * A malformed entry is dropped but its rank is not reassigned: rank describes
  * the chart, and renumbering the apps below a parse gap would report positions
@@ -96,7 +100,7 @@ export function parseChartMany(
 export function parseChartTop(
   payload: unknown,
   query: ChartQuery,
-  n = 20,
+  n = 30,
 ): ChartApp[] {
   const body = payload as ChartResponse;
   if (!body?.feed) throw new ParseError(SOURCE, "payload has no feed");

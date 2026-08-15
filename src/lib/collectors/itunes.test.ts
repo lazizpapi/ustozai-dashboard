@@ -145,7 +145,7 @@ describe("parseChartTop", () => {
     // what turns "where are we" into "who is around us and who is moving".
     const top = parseChartTop(fixture("itunes-chart-uz-education.json"), CHART_QUERY);
 
-    expect(top).toHaveLength(20);
+    expect(top).toHaveLength(30);
     expect(top[0]).toMatchObject({
       rank: 1,
       storeId: "6557054918",
@@ -154,6 +154,15 @@ describe("parseChartTop", () => {
       chartType: "topfree",
     });
     expect(top[19]).toMatchObject({ rank: 20, name: "Iqra: Quran Tutor" });
+  });
+
+  it("reaches deep enough to include our own app", () => {
+    // The point of the depth. Ustoz AI was #21 in this fixture and #24 the day
+    // the section shipped; a top-of-chart panel that stops above us would be a
+    // panel about other people.
+    const top = parseChartTop(fixture("itunes-chart-uz-education.json"), CHART_QUERY);
+
+    expect(top.find((row) => row.storeId === IOS_APP_ID)).toMatchObject({ rank: 21 });
   });
 
   it("clamps to the feed when asked for more than exists", () => {
