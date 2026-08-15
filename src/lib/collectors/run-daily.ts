@@ -2,6 +2,7 @@ import "server-only";
 
 import { fetchSearch } from "./itunes-search";
 import { fetchReviews } from "./itunes-reviews";
+import { fetchAppleHints, fetchAppleTrending, fetchPlaySuggest } from "./suggest";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
 import { KEYWORDS } from "./config";
 import {
@@ -9,6 +10,8 @@ import {
   recordRuns,
   saveKeywordRanks,
   saveReviews,
+  saveSuggestions,
+  type SuggestionBatch,
 } from "@/lib/db/persist";
 import { analyticsRequestId, ascEnv, ascConfigProblem } from "@/lib/env";
 import {
@@ -48,6 +51,37 @@ export async function runDaily(): Promise<DailySummary> {
   }
 
   const reviewStep = await step("itunes-reviews:uz", () => fetchReviews("uz"));
+
+  /*
+   * Search suggestions per tracked keyword, both stores, plus Apple's
+   * trending list. Sequential like the searches above and for the same
+   * reason. One step per store per seed so a single dead endpoint is one red
+   * badge, not a lost crawl.
+   */
+  const suggestionSteps: StepResult<SuggestionBatch>[] = [];
+  for (const keyword of KEYWORDS) {
+    suggestionSteps.push(
+      await step(`suggest:ios:${keyword}`, async () => ({
+        platform: "ios" as const,
+        seed: keyword,
+        terms: await fetchAppleHints(keyword),
+      })),
+    );
+    suggestionSteps.push(
+      await step(`suggest:play:${keyword}`, async () => ({
+        platform: "android" as const,
+        seed: keyword,
+        terms: await fetchPlaySuggest(keyword),
+      })),
+    );
+  }
+  suggestionSteps.push(
+    await step("suggest:ios:__trending__", async () => ({
+      platform: "ios" as const,
+      seed: "__trending__",
+      terms: await fetchAppleTrending(),
+    })),
+  );
 
   const asc = ascEnv();
   const iosDownloadStep: StepResult<unknown> = asc
@@ -133,6 +167,7 @@ export async function runDaily(): Promise<DailySummary> {
   const writes = await Promise.allSettled([
     saveKeywordRanks(keywordRanks, capturedAt),
     saveReviews(reviews),
+    saveSuggestions(values(suggestionSteps), capturedAt),
   ]);
 
   const newReviews =
@@ -140,7 +175,7 @@ export async function runDaily(): Promise<DailySummary> {
 
   // Success is recorded too, so a single bad run does not leave the health
   // panel showing a permanent failure. See the note in run-poll.ts.
-  const writeLabels = ["persist:keyword_ranks", "persist:reviews"];
+  const writeLabels = ["persist:keyword_ranks", "persist:reviews", "persist:suggestions"];
   const writeOutcomes = writes.map((result, index) =>
     result.status === "rejected"
       ? {
@@ -159,6 +194,7 @@ export async function runDaily(): Promise<DailySummary> {
     ...outcomes([
       ...keywordSteps,
       reviewStep,
+      ...suggestionSteps,
       iosDownloadStep,
       analyticsStep,
       discoveryStep,

@@ -1,10 +1,17 @@
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
-import { Empty, PageHeader } from "@/components/dashboard/page-header";
+import { Empty, PageHeader, Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
+import { TextAnalyzer } from "@/components/dashboard/text-analyzer";
 import { load } from "@/app/load";
-import { latestKeywordRanks, type KeywordRow } from "@/lib/db/queries";
-import { rankDelta } from "@/lib/format";
+import {
+  keywordSuggestionSets,
+  latestKeywordRanks,
+  type KeywordRow,
+} from "@/lib/db/queries";
+import { formatDay, rankDelta } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { SeedSuggestions } from "@/lib/aso/suggestions";
 
 export const dynamic = "force-dynamic";
 
@@ -40,15 +47,71 @@ function Movement({ row }: { row: KeywordRow }) {
   );
 }
 
+/**
+ * One seed's suggestion lists, App Store and Google Play side by side.
+ * "New" marks a term absent from the previous crawl — the signal the whole
+ * section exists for — and it is a label, never a colour.
+ */
+function SuggestionSeed({ seed, sets }: { seed: string; sets: SeedSuggestions[] }) {
+  const stores = [
+    { key: "ios", label: "App Store" },
+    { key: "android", label: "Google Play" },
+  ];
+
+  return (
+    <div className="grid grid-cols-[7rem_1fr] items-baseline gap-x-4 gap-y-1 py-2.5">
+      <span className="text-sm">{seed}</span>
+      <div className="space-y-1">
+        {stores.map((store) => {
+          const set = sets.find((s) => s.platform === store.key);
+          if (!set) return null;
+          return (
+            <div key={store.key} className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+              <span className="text-muted-foreground w-20 shrink-0 text-xs">
+                {store.label}
+              </span>
+              {set.terms.map((term) => (
+                <span
+                  key={term.term}
+                  className={cn(
+                    "rounded border px-1.5 py-0.5 text-xs",
+                    term.isNew ? "font-medium" : "text-muted-foreground",
+                  )}
+                >
+                  {term.term}
+                  {term.isNew ? (
+                    <span className="text-muted-foreground ml-1 font-normal">new</span>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default async function KeywordsPage() {
-  const result = await load(() => latestKeywordRanks("uz"));
+  const result = await load(async () => {
+    const [ranks, suggestions] = await Promise.all([
+      latestKeywordRanks("uz"),
+      keywordSuggestionSets(),
+    ]);
+    return { ranks, suggestions };
+  });
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const rows = [...result.data].sort((a, b) => {
+  const { suggestions } = result.data;
+  const trending = suggestions.find((set) => set.seed === "__trending__");
+  const seedSets = suggestions.filter((set) => set.seed !== "__trending__");
+  const seeds = [...new Set(seedSets.map((set) => set.seed))];
+
+  const rows = [...result.data.ranks].sort((a, b) => {
     // Ranked terms first, best first; unranked watch terms after.
     if (a.position === null && b.position === null) return a.keyword.localeCompare(b.keyword);
     if (a.position === null) return 1;
@@ -93,6 +156,53 @@ export default async function KeywordsPage() {
           ))}
         </ul>
       )}
+
+      {/*
+        Suggestions appear once the daily run has crawled them. What the
+        search box offers is demand the store has itself observed, so a new
+        term under a seed we rank for is the earliest cheap signal of demand
+        shifting.
+      */}
+      {seedSets.length > 0 ? (
+        <Section
+          title="Search suggestions"
+          note={`what each store's search box offers for our tracked terms — ${formatDay(seedSets[0].date)}`}
+        >
+          <div className="divide-y">
+            {seeds.map((seed) => (
+              <SuggestionSeed
+                key={seed}
+                seed={seed}
+                sets={seedSets.filter((set) => set.seed === seed)}
+              />
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {/*
+        Trending renders only when Apple has something to say. Verified live
+        2026-08-15: the endpoint answers for UZ with an empty list, so this
+        section is absent today and appears the day Apple populates it.
+      */}
+      {trending && trending.terms.length > 0 ? (
+        <Section title="Trending searches" note="App Store, Uzbekistan">
+          <div className="flex flex-wrap gap-1.5">
+            {trending.terms.map((term) => (
+              <span key={term.term} className="rounded border px-1.5 py-0.5 text-xs">
+                {term.term}
+              </span>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      <Section
+        title="Text analyzer"
+        note="keyword use in any pasted listing text; nothing is stored or sent"
+      >
+        <TextAnalyzer />
+      </Section>
 
       <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
         Positions come from the iTunes Search API, which is a close proxy for the

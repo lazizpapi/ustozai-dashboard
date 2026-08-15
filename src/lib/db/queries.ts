@@ -9,6 +9,7 @@ import {
 } from "@/lib/collectors/config";
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
 import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
+import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import {
   countByBucket,
   netChangeByBucket,
@@ -385,6 +386,40 @@ export async function latestKeywordRanks(country = "uz"): Promise<KeywordRow[]> 
     }
   }
   return [...latest.values()];
+}
+
+/**
+ * Latest suggestion crawl per seed with new-since-last-crawl flags.
+ *
+ * Eight days of rows so the comparison crawl is present even after a missed
+ * day or two; the reduction is pure and pinned in suggestions.test.ts. Can
+ * exceed a thousand rows (seeds × terms × days), hence the paging.
+ */
+export async function keywordSuggestionSets(): Promise<SeedSuggestions[]> {
+  const since = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const rows = await fetchAllPages<{
+    platform: string;
+    seed: string;
+    date: string;
+    position: number;
+    term: string;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("keyword_suggestions")
+        .select("platform, seed, date, position, term")
+        .gte("date", since)
+        .order("date", { ascending: false })
+        .order("seed")
+        .order("position")
+        .range(from, to),
+    "keywordSuggestionSets",
+  );
+
+  return latestSuggestionSets(rows);
 }
 
 export interface ReviewRow {

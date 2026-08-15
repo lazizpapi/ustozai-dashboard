@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0">
+  <dict>
+    <key>title</key>
+    <string>Suggestions</string>
+    <key>hints</key>
+    <array>
+      <dict>
+        <key>term</key>
+        <string>ingliz tili lugat</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=ingliz%20tili%20lugat</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>ingliz tilini o’rganish</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=ingliz%20tilini%20o%E2%80%99rganish</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>ingliz tili tarjima</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=ingliz%20tili%20tarjima</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>ingliz tili lugʻat</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=ingliz%20tili%20lug%CA%BBat</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>ingliz tili</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=ingliz%20tili</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>ingliz tili organish</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=ingliz%20tili%20organish</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>iwords: ingliz tili so&#39;zlari</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=iwords%3A%20ingliz%20tili%20so%27zlari</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>izi - ingliz tili</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=izi%20-%20ingliz%20tili</string>
+      </dict>
+      <dict>
+        <key>term</key>
+        <string>lingobee: quvnoq ingliz tili</string>
+        <key>url</key>
+        <string>https://search.itunes.apple.com/WebObjects/MZStore.woa/wa/search?clientApplication=Software&amp;src=hint&amp;submit=edit&amp;term=lingobee%3A%20quvnoq%20ingliz%20tili</string>
+      </dict>
+    </array>
+  </dict>
+</plist>

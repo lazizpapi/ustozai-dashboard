@@ -256,6 +256,44 @@ export async function saveKeywordRanks(
   return rows.length;
 }
 
+export interface SuggestionBatch {
+  platform: Platform;
+  seed: string;
+  terms: string[];
+}
+
+/**
+ * Search suggestions, one row per term per crawl day.
+ *
+ * Upserted on the primary key so a re-run corrects the day. A batch with no
+ * terms writes nothing, which matters for trending: Apple answers with an
+ * empty list for UZ today, and an empty crawl must not erase the record of a
+ * day when the list had content.
+ */
+export async function saveSuggestions(
+  batches: SuggestionBatch[],
+  capturedAt: string,
+): Promise<number> {
+  const date = localDate(capturedAt);
+  const rows = batches.flatMap((batch) =>
+    batch.terms.map((term, index) => ({
+      platform: batch.platform,
+      seed: batch.seed,
+      date,
+      position: index + 1,
+      term,
+      captured_at: capturedAt,
+    })),
+  );
+  if (rows.length === 0) return 0;
+
+  const { error } = await serviceClient()
+    .from("keyword_suggestions")
+    .upsert(rows, { onConflict: "platform,seed,date,position" });
+  if (error) throw new Error(`saveSuggestions: ${error.message}`);
+  return rows.length;
+}
+
 /**
  * Reviews are insert-only and deduplicated on the store's own review id, which
  * is why an intermittently empty feed costs nothing: the next successful poll
