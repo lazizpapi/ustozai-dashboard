@@ -1,0 +1,218 @@
+import "server-only";
+
+import Anthropic from "@anthropic-ai/sdk";
+
+import { ASK_TOOLS, clampArgs } from "./tools";
+import { analystModel, anthropicKey } from "@/lib/env";
+import {
+  androidDailyInstalls,
+  collectorHealth,
+  educationChartTop,
+  growthSeries,
+  iosDailyDownloads,
+  iosDiscoveryFunnel,
+  keywordSuggestionSets,
+  latestAnalystReport,
+  latestKeywordRanks,
+  marketOverview,
+  recentListingChanges,
+  recentReviews,
+  socialTrends,
+  type GrowthSeriesKey,
+} from "@/lib/db/queries";
+import type { Period } from "@/lib/growth";
+
+/**
+ * Ask the analyst a question.
+ *
+ * A tool-use loop rather than one call: the model chooses which data it needs,
+ * reads it, and can go back for more before answering. That is what lets it
+ * answer questions the daily report never anticipated.
+ *
+ * The loop is written by hand rather than using the SDK's tool runner because
+ * every tool result has to be captured for the trace the UI shows — an answer
+ * about the company's numbers should come with the receipts for which numbers
+ * it read, and a runner that executes tools internally would hide exactly that.
+ */
+
+const MAX_STEPS = 8;
+
+const SYSTEM_PROMPT = `You are the analyst for Ustoz AI, an education app in Uzbekistan on the App Store and Google Play. You are answering questions from the founding team about their own app, in a chat on their internal dashboard.
+
+You have tools that read the dashboard's database. Use them. Do not answer a factual question about the app's performance from memory or from earlier in the conversation when a tool can give you the current number — call the tool and cite what it returns.
+
+Call several tools when a question needs several kinds of data, and go back for more if a first look raises an obvious follow-up. Prefer reading too much to guessing.
+
+Read the caveats in each tool's description; they describe real measurement limits. In particular, Google's install counter updates roughly once a day, so a zero daily install figure usually means the counter has not moved yet, not that nobody installed. Never report that as a collapse.
+
+If the data cannot answer the question, say so plainly and say what would be needed. Do not fill the gap with an estimate or an industry rule of thumb. "We don't collect that" is a complete and useful answer.
+
+Answer in prose, briefly, leading with the answer. Give the numbers you used. Skip preamble and do not restate the question. Use short markdown only where it genuinely helps: a bullet list for several parallel figures, bold for a single key number. No headers.`;
+
+export interface AskStep {
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+export interface AskResult {
+  answer: string;
+  steps: AskStep[];
+  usage: { input: number; output: number };
+}
+
+export type AskTurn = { role: "user" | "assistant"; content: string };
+
+/**
+ * Run one tool. The only place a tool name becomes a query.
+ *
+ * Unknown names return an error string rather than throwing: the model
+ * occasionally hallucinates a plausible-sounding tool, and telling it so lets
+ * it correct course on the next step instead of failing the whole question.
+ */
+async function runTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+  switch (name) {
+    case "get_downloads": {
+      const days = args.days as number;
+      const [ios, android] = await Promise.all([
+        iosDailyDownloads(days),
+        androidDailyInstalls(days),
+      ]);
+      return {
+        appStore: ios,
+        googlePlay: android,
+        note:
+          "Play figures are differenced from a cumulative counter Google updates " +
+          "about once a day; a zero may mean the counter has not moved.",
+      };
+    }
+
+    case "get_market":
+      return marketOverview();
+
+    case "get_chart":
+      return educationChartTop();
+
+    case "get_conversion_funnel": {
+      const funnel = await iosDiscoveryFunnel(args.days as number);
+      return funnel ?? { available: false, reason: "no discovery report data yet" };
+    }
+
+    case "get_keywords": {
+      const [ranks, suggestions] = await Promise.all([
+        latestKeywordRanks("uz"),
+        keywordSuggestionSets(),
+      ]);
+      return { positions: ranks, suggestions };
+    }
+
+    case "get_reviews": {
+      const reviews = await recentReviews(args.limit as number);
+      const max = args.maxRating as number | undefined;
+      return max === undefined ? reviews : reviews.filter((review) => review.rating <= max);
+    }
+
+    case "get_audience":
+      return socialTrends();
+
+    case "get_growth":
+      return growthSeries(args.metric as GrowthSeriesKey, args.period as Period);
+
+    case "get_listing_changes":
+      return recentListingChanges(20);
+
+    case "get_latest_report":
+      return (await latestAnalystReport()) ?? { available: false };
+
+    case "get_collector_health":
+      return collectorHealth();
+
+    default:
+      return { error: `no such tool: ${name}` };
+  }
+}
+
+export async function ask(question: string, history: AskTurn[] = []): Promise<AskResult> {
+  const key = anthropicKey();
+  if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
+
+  const client = new Anthropic({ apiKey: key });
+  const messages: Anthropic.MessageParam[] = [
+    ...history.map((turn) => ({ role: turn.role, content: turn.content })),
+    { role: "user" as const, content: question },
+  ];
+
+  const steps: AskStep[] = [];
+  let input = 0;
+  let output = 0;
+
+  for (let step = 0; step < MAX_STEPS; step += 1) {
+    const response = await client.messages.create({
+      model: analystModel(),
+      max_tokens: 8_000,
+      system: SYSTEM_PROMPT,
+      tools: ASK_TOOLS,
+      messages,
+    });
+
+    input += response.usage.input_tokens;
+    output += response.usage.output_tokens;
+
+    // Checked before touching content: a refusal returns a normal 200 with an
+    // empty content array, so reading blocks first would throw over the top of
+    // the actual reason.
+    if (response.stop_reason === "refusal") {
+      throw new Error("the model declined to answer that");
+    }
+
+    const toolUses = response.content.filter(
+      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
+    );
+
+    if (toolUses.length === 0) {
+      const answer = response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("")
+        .trim();
+      return { answer, steps, usage: { input, output } };
+    }
+
+    messages.push({ role: "assistant", content: response.content });
+
+    // Every tool result goes back in one user message. Splitting them trains
+    // the model out of asking for several at once, which is what keeps a
+    // multi-part question to one round trip instead of four.
+    const results: Anthropic.ToolResultBlockParam[] = [];
+    for (const use of toolUses) {
+      const args = clampArgs(use.name, use.input);
+      steps.push({ tool: use.name, args });
+      try {
+        const data = await runTool(use.name, args);
+        results.push({
+          type: "tool_result",
+          tool_use_id: use.id,
+          content: JSON.stringify(data),
+        });
+      } catch (error) {
+        // Returned to the model rather than thrown, so one dead query becomes
+        // something it can work around instead of losing the whole answer.
+        results.push({
+          type: "tool_result",
+          tool_use_id: use.id,
+          content: error instanceof Error ? error.message : String(error),
+          is_error: true,
+        });
+      }
+    }
+
+    messages.push({ role: "user", content: results });
+  }
+
+  return {
+    answer:
+      "I went round in circles on that one and stopped before running up a bill. " +
+      "Try asking it in a narrower way.",
+    steps,
+    usage: { input, output },
+  };
+}

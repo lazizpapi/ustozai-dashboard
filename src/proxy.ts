@@ -37,6 +37,20 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  /*
+   * An expired session on an API route answers 401 rather than redirecting.
+   * fetch follows a redirect transparently, so the browser would receive the
+   * login page's HTML with a 200 and the caller's response.json() would throw
+   * a parse error — surfacing "something went wrong" for what is really just
+   * "sign in again", which is the one error message the user can act on.
+   */
+  if (path.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: "Your session has expired. Reload the page and sign in again." },
+      { status: 401 },
+    );
+  }
+
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.searchParams.set("next", path);
