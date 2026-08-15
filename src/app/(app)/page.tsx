@@ -4,6 +4,7 @@ import { RankChart } from "@/components/dashboard/rank-chart";
 import { FreshnessRow } from "@/components/dashboard/freshness";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
+import { latestInstallRate } from "@/lib/installs";
 import { load } from "@/app/load";
 import {
   androidDailyInstalls,
@@ -69,7 +70,7 @@ export default async function OverviewPage() {
   const [rank, ios, android, installs, downloads, history, reviews, health, social, playToday] =
     result.data;
 
-  const lastInstall = installs.at(-1) ?? null;
+  const installRate = latestInstallRate(installs);
   const lastDownload = downloads.at(-1) ?? null;
 
   return (
@@ -90,27 +91,33 @@ export default async function OverviewPage() {
           <Metric
             label="Play installs, daily"
             /*
-             * Play publishes a running total, so a daily figure is the gap
-             * between two days and does not exist until a second day does.
-             * Rather than an empty tile on day one, show the movement since
-             * the first reading of today, labelled as partial. The counter has
-             * genuinely moved; refusing to say so reads as a fault.
+             * Google publishes a running total and moves it in batches, landing
+             * every day or two rather than daily. So the last derived day is
+             * usually a zero meaning "the batch has not arrived", and the batch
+             * day itself holds two days of installs.
+             *
+             * Neither number belongs on a card beside a real App Store daily.
+             * latestInstallRate spreads the movement over the days it covers,
+             * and the span is stated underneath so nobody reads an average as
+             * a measurement.
              */
             value={
-              lastInstall
-                ? formatNumber(lastInstall.installs)
+              installRate
+                ? formatNumber(installRate.perDay)
                 : playToday
                   ? `+${formatNumber(playToday.installs)}`
                   : "—"
             }
             detail={
-              lastInstall
-                ? undefined
+              installRate
+                ? installRate.spanDays > 1
+                  ? `average over ${installRate.spanDays} days`
+                  : undefined
                 : playToday
                   ? "today so far"
                   : "first full day lands tomorrow"
             }
-            asOf={lastInstall ? `on ${formatDay(lastInstall.date)}` : undefined}
+            asOf={installRate ? `to ${formatDay(installRate.date)}` : undefined}
           />
 
           <Metric
