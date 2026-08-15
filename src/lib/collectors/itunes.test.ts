@@ -10,7 +10,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { parseLookup } from "./itunes-lookup";
-import { parseChart, parseChartMany, type ChartQuery } from "./itunes-charts";
+import {
+  parseChart,
+  parseChartMany,
+  parseChartTop,
+  type ChartQuery,
+} from "./itunes-charts";
 import { parseSearch } from "./itunes-search";
 import { IOS_APP_ID } from "./config";
 import { parseReviews } from "./itunes-reviews";
@@ -131,6 +136,45 @@ describe("parseChart", () => {
 
   it("throws when the payload has no feed at all", () => {
     expect(() => parseChart({}, CHART_QUERY)).toThrow(ParseError);
+  });
+});
+
+describe("parseChartTop", () => {
+  it("reads the whole top of the chart, ranked from one", () => {
+    // The same payload the rank poll already fetches. Storing the top of it is
+    // what turns "where are we" into "who is around us and who is moving".
+    const top = parseChartTop(fixture("itunes-chart-uz-education.json"), CHART_QUERY);
+
+    expect(top).toHaveLength(20);
+    expect(top[0]).toMatchObject({
+      rank: 1,
+      storeId: "6557054918",
+      name: "Qizlar Akademiyasi",
+      country: "uz",
+      chartType: "topfree",
+    });
+    expect(top[19]).toMatchObject({ rank: 20, name: "Iqra: Quran Tutor" });
+  });
+
+  it("clamps to the feed when asked for more than exists", () => {
+    const payload = fixture("itunes-chart-uz-education.json");
+    expect(parseChartTop(payload, CHART_QUERY, 500)).toHaveLength(100);
+  });
+
+  it("returns nothing for an empty chart rather than throwing", () => {
+    expect(parseChartTop({ feed: {} }, CHART_QUERY)).toEqual([]);
+  });
+
+  it("keeps the rank of later entries when one is malformed", () => {
+    // A dropped entry must leave a visible gap, never renumber the apps below
+    // it: rank is a statement about the chart, not about our parse.
+    const payload = fixture("itunes-chart-uz-education.json");
+    const broken = {
+      feed: { entry: [{ title: { label: "no id" } }, ...payload.feed.entry.slice(1)] },
+    };
+
+    const top = parseChartTop(broken, CHART_QUERY, 3);
+    expect(top.map((row) => row.rank)).toEqual([2, 3]);
   });
 });
 

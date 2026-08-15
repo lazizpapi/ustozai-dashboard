@@ -120,15 +120,27 @@ export function parseRatingHistogram(html: string): Record<number, number> {
   return histogram;
 }
 
-export async function fetchPlayDetails(
+/**
+ * The raw listing page, exposed so one fetch can feed several parsers.
+ * The poll reads it twice: parsePlayDetails for the install snapshot and
+ * parsePlayListing for listing-change tracking.
+ */
+export async function fetchPlayPage(
   country: string,
   packageName: string = ANDROID_PACKAGE,
-): Promise<MetricSnapshot> {
+): Promise<string> {
   const params = new URLSearchParams({ id: packageName, hl: "en", gl: country.toUpperCase() });
   const html = await fetchText(
     `https://play.google.com/store/apps/details?${params}`,
     { browserUa: true },
   );
   if (html === null) throw new ParseError(SOURCE, "empty response from Play");
-  return parsePlayDetails(html, country, packageName);
+  return html;
+}
+
+export async function fetchPlayDetails(
+  country: string,
+  packageName: string = ANDROID_PACKAGE,
+): Promise<MetricSnapshot> {
+  return parsePlayDetails(await fetchPlayPage(country, packageName), country, packageName);
 }

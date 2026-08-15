@@ -17,12 +17,13 @@
 
 import { fetchJson } from "./http";
 import { CHART_FEED_LIMIT, IOS_APP_ID, OVERALL_GENRE } from "./config";
-import { ParseError, type ChartRank } from "./types";
+import { ParseError, type ChartApp, type ChartRank } from "./types";
 
 const SOURCE = "itunes-charts";
 
 interface FeedEntry {
   id?: { attributes?: { "im:id"?: string } };
+  "im:name"?: { label?: string };
 }
 
 interface ChartResponse {
@@ -81,7 +82,46 @@ export function parseChartMany(
   return appIds.map((appId) => parseChart(payload, { ...query, appId }));
 }
 
-async function fetchChartPayload(query: ChartQuery): Promise<unknown> {
+/**
+ * The visible top of the chart, ranked from one.
+ *
+ * Same payload as parseChart, read for a different question: not "where are
+ * we" but "who is around us and who is moving". Twenty is enough to hold every
+ * app the team would recognise without turning the page into a phone book.
+ *
+ * A malformed entry is dropped but its rank is not reassigned: rank describes
+ * the chart, and renumbering the apps below a parse gap would report positions
+ * nobody actually holds.
+ */
+export function parseChartTop(
+  payload: unknown,
+  query: ChartQuery,
+  n = 20,
+): ChartApp[] {
+  const body = payload as ChartResponse;
+  if (!body?.feed) throw new ParseError(SOURCE, "payload has no feed");
+
+  const entries = Array.isArray(body.feed.entry) ? body.feed.entry : [];
+
+  return entries.slice(0, n).flatMap((entry, index) => {
+    const storeId = entry?.id?.attributes?.["im:id"];
+    const name = entry?.["im:name"]?.label;
+    if (!storeId || !name) return [];
+
+    return [
+      {
+        country: query.country,
+        chartType: query.chartType,
+        genre: query.genre,
+        rank: index + 1,
+        storeId,
+        name,
+      },
+    ];
+  });
+}
+
+export async function fetchChartPayload(query: ChartQuery): Promise<unknown> {
   const genrePath =
     query.genre === OVERALL_GENRE ? "" : `genre=${encodeURIComponent(query.genre)}/`;
   const url =

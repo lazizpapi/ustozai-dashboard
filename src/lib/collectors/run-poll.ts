@@ -1,10 +1,11 @@
 import "server-only";
 
-import { fetchLookup } from "./itunes-lookup";
-import { fetchChartMany } from "./itunes-charts";
+import { fetchLookupPayload, parseLookup } from "./itunes-lookup";
+import { fetchChartPayload, parseChartMany, parseChartTop } from "./itunes-charts";
 import { fetchReviews } from "./itunes-reviews";
-import { fetchPlayDetails } from "./play-details";
+import { fetchPlayPage, parsePlayDetails } from "./play-details";
 import { fetchPlayReviews } from "./play-reviews";
+import { parseIosListing, parsePlayListing, type ListingRecord } from "./listing";
 import {
   fetchInstagramFollowers,
   fetchInstagramViaApi,
@@ -24,14 +25,16 @@ import {
 import {
   hourBucket,
   recordRuns,
+  saveChartApps,
   saveChartRanks,
+  saveListings,
   saveReviews,
   saveSnapshots,
   saveSocialSnapshots,
 } from "@/lib/db/persist";
 import { socialEnv } from "@/lib/env";
 import { instagramToken } from "@/lib/db/tokens";
-import type { ChartRank, MetricSnapshot, Review } from "./types";
+import type { ChartApp, ChartRank, MetricSnapshot, Review } from "./types";
 
 /**
  * The frequent poll: chart position, rating, and Play installs.
@@ -49,19 +52,49 @@ export interface PollSummary {
   failures: string[];
 }
 
+/**
+ * One store page read for two purposes: the metric snapshot, and the listing
+ * fields whose changes the market page tracks. Bundled so each source is
+ * fetched exactly once per poll.
+ */
+interface StoreReading {
+  snapshot: MetricSnapshot | null;
+  listing: ListingRecord | null;
+}
+
+async function readIosStore(country: string, appId?: string): Promise<StoreReading> {
+  const payload = await fetchLookupPayload(country, appId);
+  return {
+    snapshot: parseLookup(payload, country, appId),
+    // Listings are watched in the storefront that matters. The other
+    // storefronts sell the same metadata, so tracking them would only
+    // triple-report every change.
+    listing: country === "uz" ? parseIosListing(payload, appId) : null,
+  };
+}
+
+async function readPlayStore(country: string, packageName?: string): Promise<StoreReading> {
+  const html = await fetchPlayPage(country, packageName);
+  return {
+    snapshot: parsePlayDetails(html, country, packageName),
+    listing: parsePlayListing(html, packageName),
+  };
+}
+
 export async function runPoll(): Promise<PollSummary> {
   const capturedAt = hourBucket();
 
   const lookupSteps = await Promise.all(
     COUNTRIES.map((country) =>
-      step(`itunes-lookup:${country}`, () => fetchLookup(country)),
+      step(`itunes-lookup:${country}`, () => readIosStore(country)),
     ),
   );
 
   /*
    * Every tracked app's rank comes out of the same four feeds we already pull.
    * A chart payload is the same hundred entries whoever is asking, so adding
-   * competitors here costs parsing and not a single extra request.
+   * competitors here costs parsing and not a single extra request. The same
+   * payload also yields the visible top of the chart for the market page.
    */
   const trackedIosIds = [
     IOS_APP_ID,
@@ -71,22 +104,24 @@ export async function runPoll(): Promise<PollSummary> {
   const chartSteps = await Promise.all(
     CHART_COUNTRIES.flatMap((country) =>
       CHART_TYPES.map((chart) =>
-        step(`itunes-charts:${country}:${chart.key}:${chart.genre}`, () =>
-          fetchChartMany(
-            {
-              country,
-              feed: chart.feed,
-              genre: chart.genre,
-              chartType: chart.key,
-            },
-            trackedIosIds,
-          ),
-        ),
+        step(`itunes-charts:${country}:${chart.key}:${chart.genre}`, async () => {
+          const query = {
+            country,
+            feed: chart.feed,
+            genre: chart.genre,
+            chartType: chart.key,
+          };
+          const payload = await fetchChartPayload(query);
+          return {
+            ranks: parseChartMany(payload, query, trackedIosIds),
+            top: parseChartTop(payload, query),
+          };
+        }),
       ),
     ),
   );
 
-  const playStep = await step("play-details:uz", () => fetchPlayDetails("uz"));
+  const playStep = await step("play-details:uz", () => readPlayStore("uz"));
 
   /*
    * Reviews are collected here as well as in the daily run.
@@ -128,19 +163,19 @@ export async function runPoll(): Promise<PollSummary> {
    * that gets rate limited. Ours are fetched first, above, so a competitor
    * being slow can never delay our own numbers.
    */
-  const competitorSteps: StepResult<MetricSnapshot | null>[] = [];
+  const competitorSteps: StepResult<StoreReading>[] = [];
   for (const competitor of COMPETITORS) {
     if (competitor.iosId) {
       competitorSteps.push(
         await step(`competitor:lookup:${competitor.slug}`, () =>
-          fetchLookup("uz", competitor.iosId!),
+          readIosStore("uz", competitor.iosId!),
         ),
       );
     }
     if (competitor.androidPackage) {
       competitorSteps.push(
         await step(`competitor:play:${competitor.slug}`, () =>
-          fetchPlayDetails("uz", competitor.androidPackage!),
+          readPlayStore("uz", competitor.androidPackage!),
         ),
       );
     }
@@ -189,14 +224,22 @@ export async function runPoll(): Promise<PollSummary> {
     ...socialSteps,
   ];
 
-  // fetchLookup returns null for storefronts that do not carry the app, which
-  // is an ordinary answer rather than something to store.
-  const snapshots: MetricSnapshot[] = [
-    ...values(lookupSteps).filter((s): s is MetricSnapshot => s !== null),
+  // parseLookup returns a null snapshot for storefronts that do not carry the
+  // app, which is an ordinary answer rather than something to store.
+  const readings: StoreReading[] = [
+    ...values(lookupSteps),
     ...values([playStep]),
-    ...values(competitorSteps).filter((s): s is MetricSnapshot => s !== null),
+    ...values(competitorSteps),
   ];
-  const ranks: ChartRank[] = values(chartSteps).flat();
+  const snapshots: MetricSnapshot[] = readings.flatMap((reading) =>
+    reading.snapshot ? [reading.snapshot] : [],
+  );
+  const listings: ListingRecord[] = readings.flatMap((reading) =>
+    reading.listing ? [reading.listing] : [],
+  );
+
+  const ranks: ChartRank[] = values(chartSteps).flatMap((chart) => chart.ranks);
+  const chartTops: ChartApp[] = values(chartSteps).flatMap((chart) => chart.top);
 
   const socialSnapshots = values(socialSteps);
 
@@ -210,6 +253,8 @@ export async function runPoll(): Promise<PollSummary> {
   const writes = await Promise.allSettled([
     saveSnapshots(snapshots, capturedAt),
     saveChartRanks(ranks, capturedAt),
+    saveChartApps(chartTops, capturedAt),
+    saveListings(listings),
     saveReviews(allReviews),
     saveSocialSnapshots(socialSnapshots, capturedAt),
   ]);
@@ -217,6 +262,8 @@ export async function runPoll(): Promise<PollSummary> {
   const writeLabels = [
     "persist:snapshots",
     "persist:chart_ranks",
+    "persist:chart_apps",
+    "persist:listings",
     "persist:reviews",
     "persist:social",
   ];

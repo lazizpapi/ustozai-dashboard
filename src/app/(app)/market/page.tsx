@@ -3,8 +3,15 @@ import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { PageHeader, Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
-import { marketOverview, type MarketApp } from "@/lib/db/queries";
-import { delta, formatNumber, formatRating, rankDelta } from "@/lib/format";
+import {
+  educationChartTop,
+  marketOverview,
+  recentListingChanges,
+  watchedListingCount,
+  type MarketApp,
+} from "@/lib/db/queries";
+import { COMPETITORS, IOS_APP_ID } from "@/lib/collectors/config";
+import { delta, formatDay, formatNumber, formatRating, rankDelta } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +48,43 @@ function Move({ change }: { change: ReturnType<typeof delta> }) {
   );
 }
 
+/**
+ * Chart movement is already a signed number of places, so it renders directly
+ * rather than through delta(). "New" means entered the stored top 20, which
+ * is a different claim from new to the store, and the label stays that modest.
+ */
+function ChartMove({ value, isNew }: { value: number | null; isNew: boolean }) {
+  if (isNew) return <span className="text-muted-foreground/60 text-xs">entered</span>;
+  if (value === null) return <span className="text-muted-foreground/60">—</span>;
+  if (value === 0) {
+    return (
+      <span className="text-muted-foreground inline-flex items-center gap-1">
+        <Minus className="size-3" aria-hidden />
+      </span>
+    );
+  }
+
+  const Arrow = value > 0 ? ArrowUp : ArrowDown;
+  return (
+    <span className="text-muted-foreground inline-flex items-center gap-1">
+      <Arrow className="size-3" aria-hidden />
+      <span className="tnum">{Math.abs(value)}</span>
+    </span>
+  );
+}
+
+/** The human names for listing fields, in the timeline's phrasing. */
+const FIELD_LABELS: Record<string, string> = {
+  title: "name",
+  description: "description",
+  version: "version",
+  releaseNotes: "release notes",
+  screenshots: "screenshots",
+  icon: "icon",
+};
+
+const fieldLabel = (field: string) => FIELD_LABELS[field] ?? field;
+
 /** Outside the chart is a real answer and reads differently from no reading. */
 function Rank({ app }: { app: MarketApp }) {
   if (app.rank !== null) return <span className="tnum">#{app.rank}</span>;
@@ -55,14 +99,26 @@ function Rank({ app }: { app: MarketApp }) {
 }
 
 export default async function MarketPage() {
-  const result = await load(() => marketOverview());
+  const result = await load(async () => {
+    const [apps, chartTop, listingChanges, watchedCount] = await Promise.all([
+      marketOverview(),
+      educationChartTop(),
+      recentListingChanges(),
+      watchedListingCount(),
+    ]);
+    return { apps, chartTop, listingChanges, watchedCount };
+  });
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const apps = result.data;
+  const { apps, chartTop, listingChanges, watchedCount } = result.data;
+  const trackedIds = new Set([
+    IOS_APP_ID,
+    ...COMPETITORS.flatMap((c) => (c.iosId ? [c.iosId] : [])),
+  ]);
   const collecting = apps.some((app) => !app.isOurs && app.rank === null && app.playInstalls === null);
 
   return (
@@ -135,6 +191,105 @@ export default async function MarketPage() {
           </table>
         </div>
       </Section>
+
+      {/*
+        The chart's visible top, only once the poll has stored a day of it.
+        Twenty rows is enough to hold everyone the team would recognise; the
+        cap lives in the collector, so widening it is a deploy, not a schema
+        change.
+      */}
+      {chartTop.movers.length > 0 ? (
+        <Section
+          title="Top of the chart"
+          note={`Education, top free, iPhone, Uzbekistan — ${chartTop.date ? formatDay(chartTop.date) : ""}`}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] border-collapse text-sm">
+              <thead>
+                <tr className="text-muted-foreground border-b text-xs">
+                  <th className="px-3 py-2 text-right font-medium">#</th>
+                  <th className="px-3 py-2 text-left font-medium">App</th>
+                  <th className="px-3 py-2 text-right font-medium">Day</th>
+                  <th className="px-3 py-2 text-right font-medium">Week</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chartTop.movers.map((mover) => {
+                  const isOurs = mover.storeId === IOS_APP_ID;
+                  return (
+                    <tr
+                      key={mover.storeId}
+                      className={cn("border-b last:border-b-0", isOurs && "bg-muted/40")}
+                    >
+                      <td className="tnum text-muted-foreground px-3 py-2 text-right">
+                        {mover.rank}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={cn(isOurs && "font-medium")}>{mover.name}</span>
+                        {isOurs ? (
+                          <span className="text-muted-foreground ml-2 text-xs">ours</span>
+                        ) : trackedIds.has(mover.storeId) ? (
+                          <span className="text-muted-foreground/60 ml-2 text-xs">
+                            tracked
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs">
+                        <ChartMove value={mover.vsYesterday} isNew={mover.isNew} />
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs">
+                        <ChartMove value={mover.vsWeek} isNew={false} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      ) : null}
+
+      {/*
+        Listing changes: a competitor editing their title, description or
+        screenshots is an ASO experiment run in public. The section appears as
+        soon as baselines exist, because "we are watching and nothing moved"
+        is itself information; before any baseline there is nothing honest to
+        say, so it stays hidden.
+      */}
+      {watchedCount > 0 ? (
+        <Section
+          title="Listing changes"
+          note="store page edits across every tracked app, ours included"
+        >
+          {listingChanges.length > 0 ? (
+            <ul className="space-y-2 text-sm">
+              {listingChanges.map((change) => (
+                <li
+                  key={`${change.appId}-${change.detectedAt}`}
+                  className="flex flex-wrap items-baseline gap-x-2"
+                >
+                  <span className="text-muted-foreground tnum text-xs">
+                    {formatDay(change.detectedAt)}
+                  </span>
+                  <span className="font-medium">{change.appName}</span>
+                  <span className="text-muted-foreground text-xs">
+                    {change.platform === "ios" ? "App Store" : "Google Play"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    changed {change.changedFields.map(fieldLabel).join(", ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No listing changes yet. Watching {watchedCount}{" "}
+              {watchedCount === 1 ? "listing" : "listings"}; a change to a
+              title, description, screenshots or version will appear here.
+            </p>
+          )}
+        </Section>
+      ) : null}
 
       <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
         {collecting

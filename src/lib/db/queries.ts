@@ -8,6 +8,7 @@ import {
   IOS_APP_ID,
 } from "@/lib/collectors/config";
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
+import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
 import {
   countByBucket,
   netChangeByBucket,
@@ -671,6 +672,91 @@ export async function marketOverview(): Promise<MarketApp[]> {
       playRatingCount: play.latest?.rating_count ?? null,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Market intelligence: the chart's visible top, and listing changes
+// ---------------------------------------------------------------------------
+
+/**
+ * The Education top-free chart's top 20 with day and week movement.
+ *
+ * Eight days of rows cover both comparison points chartMovers needs; the
+ * reduction itself is pure and pinned in market.test.ts.
+ */
+export async function educationChartTop(): Promise<ReturnType<typeof chartMovers>> {
+  const since = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await serviceClient()
+    .from("chart_apps")
+    .select("date, rank, store_id, name")
+    .eq("country", "uz")
+    .eq("chart_type", "topfree")
+    .eq("genre", EDUCATION_GENRE)
+    .gte("date", since)
+    .order("date", { ascending: false })
+    .limit(PAGE_SIZE);
+  if (error) throw new Error(`educationChartTop: ${error.message}`);
+
+  return chartMovers(
+    (data ?? []).map((row) => ({
+      date: row.date as string,
+      rank: row.rank as number,
+      storeId: row.store_id as string,
+      name: row.name as string,
+    })),
+  );
+}
+
+/**
+ * Recent listing changes across every tracked app, ours included.
+ *
+ * Fetches enough versions that each change row still has its predecessor to
+ * diff against; the diffing is pure and pinned in market.test.ts.
+ */
+export async function recentListingChanges(limit = 20): Promise<ListingChange[]> {
+  const { data, error } = await serviceClient()
+    .from("listing_versions")
+    .select("app_id, fields, detected_at, apps!inner(platform, store_id)")
+    .order("detected_at", { ascending: false })
+    .limit(200);
+  if (error) throw new Error(`recentListingChanges: ${error.message}`);
+
+  const names = new Map<string, string>([
+    [`ios:${IOS_APP_ID}`, "Ustoz AI"],
+    [`android:${ANDROID_PACKAGE}`, "Ustoz AI"],
+    ...COMPETITORS.flatMap((c): [string, string][] => [
+      ...(c.iosId ? [[`ios:${c.iosId}`, c.name] as [string, string]] : []),
+      ...(c.androidPackage
+        ? [[`android:${c.androidPackage}`, c.name] as [string, string]]
+        : []),
+    ]),
+  ]);
+
+  const rows = (data ?? []).map((row) => {
+    const app = row.apps as unknown as { platform: string; store_id: string };
+    return {
+      appId: row.app_id as string,
+      appName: names.get(`${app.platform}:${app.store_id}`) ?? app.store_id,
+      platform: app.platform,
+      fields: row.fields as Record<string, string | string[] | null>,
+      detectedAt: row.detected_at as string,
+    };
+  });
+
+  return listingDiffs(rows).slice(0, limit);
+}
+
+/** How many apps have a recorded listing baseline, for the empty-state copy. */
+export async function watchedListingCount(): Promise<number> {
+  const { data, error } = await serviceClient()
+    .from("listing_versions")
+    .select("app_id")
+    .limit(PAGE_SIZE);
+  if (error) throw new Error(`watchedListingCount: ${error.message}`);
+  return new Set((data ?? []).map((row) => row.app_id as string)).size;
 }
 
 // ---------------------------------------------------------------------------

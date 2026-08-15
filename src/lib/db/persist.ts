@@ -1,13 +1,16 @@
 import "server-only";
 
 import { serviceClient } from "./client";
+import { localDate } from "@/lib/growth";
 import type {
+  ChartApp,
   ChartRank,
   KeywordRank,
   MetricSnapshot,
   Platform,
   Review,
 } from "@/lib/collectors/types";
+import type { ListingRecord } from "@/lib/collectors/listing";
 import type { SocialSnapshot } from "@/lib/collectors/social";
 
 /**
@@ -148,6 +151,85 @@ export async function saveChartRanks(
     .from("chart_ranks")
     .upsert(rows, { onConflict: "app_id,country,chart_type,genre,captured_at" });
   if (error) throw new Error(`saveChartRanks: ${error.message}`);
+  return rows.length;
+}
+
+/**
+ * The visible top of each chart, one row per position per Tashkent day.
+ *
+ * Upserted hourly onto the same (chart, date, rank) key, so the day's rows are
+ * always the newest reading and settle into the day's final state at midnight.
+ * No app_id resolution: most of the chart is apps we do not track.
+ */
+export async function saveChartApps(
+  apps: ChartApp[],
+  capturedAt: string,
+): Promise<number> {
+  if (apps.length === 0) return 0;
+
+  const date = localDate(capturedAt);
+  const rows = apps.map((app) => ({
+    country: app.country,
+    chart_type: app.chartType,
+    genre: app.genre,
+    date,
+    rank: app.rank,
+    store_id: app.storeId,
+    name: app.name,
+    // Explicit rather than a column default: defaults do not apply on
+    // conflict, and a same-day upsert must refresh the timestamp.
+    captured_at: capturedAt,
+  }));
+
+  const { error } = await serviceClient()
+    .from("chart_apps")
+    .upsert(rows, { onConflict: "country,chart_type,genre,date,rank" });
+  if (error) throw new Error(`saveChartApps: ${error.message}`);
+  return rows.length;
+}
+
+/**
+ * Listing versions, written only when the content hash moved.
+ *
+ * The comparison is against the newest stored hash per app, so re-running an
+ * hour is a no-op and a flapping source would still write at most one row per
+ * actual change of state.
+ */
+export async function saveListings(listings: ListingRecord[]): Promise<number> {
+  if (listings.length === 0) return 0;
+  const ids = await resolveAppIdsIncluding(listings);
+
+  const appIds = listings.map((listing) =>
+    appIdFor(ids, listing.platform, listing.storeId),
+  );
+
+  const { data, error } = await serviceClient()
+    .from("listing_versions")
+    .select("app_id, content_hash, detected_at")
+    .in("app_id", appIds)
+    .order("detected_at", { ascending: false });
+  if (error) throw new Error(`saveListings read: ${error.message}`);
+
+  // Newest hash per app; the query is ordered, so first sighting wins.
+  const latest = new Map<string, string>();
+  for (const row of data ?? []) {
+    if (!latest.has(row.app_id as string)) {
+      latest.set(row.app_id as string, row.content_hash as string);
+    }
+  }
+
+  const rows = listings.flatMap((listing, index) => {
+    const appId = appIds[index];
+    if (latest.get(appId) === listing.contentHash) return [];
+    return [{ app_id: appId, fields: listing.fields, content_hash: listing.contentHash }];
+  });
+
+  if (rows.length === 0) return 0;
+
+  const { error: insertError } = await serviceClient()
+    .from("listing_versions")
+    .insert(rows);
+  if (insertError) throw new Error(`saveListings write: ${insertError.message}`);
   return rows.length;
 }
 

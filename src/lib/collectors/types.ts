@@ -36,6 +36,20 @@ export interface ChartRank {
   feedSize: number;
 }
 
+/**
+ * One entry from the visible top of a chart. Unlike ChartRank this is not
+ * about a tracked app: it records whoever holds the position, which is what
+ * makes new entrants and movers visible at all.
+ */
+export interface ChartApp {
+  country: string;
+  chartType: string;
+  genre: string;
+  rank: number;
+  storeId: string;
+  name: string;
+}
+
 export interface KeywordRank {
   platform: Platform;
   storeId: string;

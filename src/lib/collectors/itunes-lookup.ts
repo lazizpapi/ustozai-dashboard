@@ -61,11 +61,22 @@ export function parseLookup(
   };
 }
 
+/**
+ * The raw lookup response, exposed so one fetch can feed several parsers.
+ * The poll reads it twice: parseLookup for the rating snapshot and
+ * parseIosListing for listing-change tracking.
+ */
+export async function fetchLookupPayload(
+  country: string,
+  appId: string = IOS_APP_ID,
+): Promise<unknown> {
+  const url = `https://itunes.apple.com/lookup?id=${encodeURIComponent(appId)}&country=${encodeURIComponent(country)}`;
+  return fetchJson(url);
+}
+
 export async function fetchLookup(
   country: string,
   appId: string = IOS_APP_ID,
 ): Promise<MetricSnapshot | null> {
-  const url = `https://itunes.apple.com/lookup?id=${encodeURIComponent(appId)}&country=${encodeURIComponent(country)}`;
-  const payload = await fetchJson(url);
-  return parseLookup(payload, country, appId);
+  return parseLookup(await fetchLookupPayload(country, appId), country, appId);
 }
