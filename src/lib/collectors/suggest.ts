@@ -24,14 +24,38 @@ const HINTS_URL =
 const TRENDS_URL =
   "https://search.itunes.apple.com/WebObjects/MZSearchHints.woa/wa/trends?clientApplication=Software";
 
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+};
+
+/**
+ * XML entities, named and numeric, in a single pass.
+ *
+ * Numeric forms are not optional: Apple sends them for ordinary punctuation.
+ * A real suggestion on 2026-08-15 arrived as `&#34;ustoz edu&#34; nodavlat
+ * ta'lim muassasasi`, and a named-entities-only decoder stored the markup
+ * verbatim for the dashboard to display.
+ *
+ * One pass, deliberately. Decoding repeatedly would turn `&amp;amp;` — the
+ * escaped form of the literal text "&amp;" — into a bare ampersand, silently
+ * rewriting a term into something nobody searched for.
+ */
 const decodeEntities = (value: string): string =>
-  value
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'")
-    .replaceAll("&#39;", "'");
+  value.replace(
+    /&(?:#(\d+)|#[xX]([0-9a-fA-F]+)|([a-zA-Z]+));/g,
+    (match, decimal, hex, name) => {
+      if (name) return NAMED_ENTITIES[name.toLowerCase()] ?? match;
+
+      const code = Number.parseInt(decimal ?? hex, decimal ? 10 : 16);
+      // Unicode tops out at 0x10FFFF; anything past it would throw.
+      if (!Number.isFinite(code) || code < 1 || code > 0x10ffff) return match;
+      return String.fromCodePoint(code);
+    },
+  );
 
 /**
  * Terms out of the hints plist, in Apple's order.

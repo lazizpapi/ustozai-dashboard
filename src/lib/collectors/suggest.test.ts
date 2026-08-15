@@ -34,6 +34,39 @@ describe("parseAppleHints", () => {
     expect(parseAppleHints(plist)).toEqual(["a & b"]);
   });
 
+  it("decodes numeric entities, which Apple uses for quotes", () => {
+    // Caught in production on 2026-08-15: the real suggestion for "ustoz"
+    // arrived as &#34;ustoz edu&#34; nodavlat ta'lim muassasasi and was
+    // stored with the entities intact, so the dashboard would have shown
+    // raw markup where a quoted school name belongs.
+    const plist =
+      "<plist><dict><key>hints</key><array><dict>" +
+      "<key>term</key><string>&#34;ustoz edu&#34; ta&#39;lim</string>" +
+      "</dict></array></dict></plist>";
+
+    expect(parseAppleHints(plist)).toEqual(['"ustoz edu" ta\'lim']);
+  });
+
+  it("decodes hex entities too", () => {
+    const plist =
+      "<plist><dict><key>hints</key><array><dict>" +
+      "<key>term</key><string>o&#x2019;rganish</string>" +
+      "</dict></array></dict></plist>";
+
+    expect(parseAppleHints(plist)).toEqual(["o’rganish"]);
+  });
+
+  it("leaves a bare ampersand alone rather than mangling it", () => {
+    const plist =
+      "<plist><dict><key>hints</key><array><dict>" +
+      "<key>term</key><string>rock &amp;amp; roll</string>" +
+      "</dict></array></dict></plist>";
+
+    // One decode pass only: &amp;amp; is the escaped form of the literal
+    // text "&amp;", and decoding twice would silently rewrite user content.
+    expect(parseAppleHints(plist)).toEqual(["rock &amp; roll"]);
+  });
+
   it("returns nothing for a hint-less response rather than throwing", () => {
     expect(parseAppleHints("<plist><dict></dict></plist>")).toEqual([]);
   });
