@@ -34,9 +34,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Body is not JSON." }, { status: 400 });
   }
 
-  const { question, history } = (body ?? {}) as {
+  const { question, history, page } = (body ?? {}) as {
     question?: unknown;
     history?: unknown;
+    page?: unknown;
   };
 
   if (typeof question !== "string" || question.trim().length === 0) {
@@ -62,8 +63,16 @@ export async function POST(request: Request) {
         .slice(-MAX_HISTORY)
     : [];
 
+  // Which page the question was asked from. Dropped rather than rejected if
+  // it looks wrong: it only sharpens the answer, so a malformed value should
+  // cost the context, not the question.
+  const from =
+    typeof page === "string" && page.startsWith("/") && page.length <= 100
+      ? page
+      : undefined;
+
   try {
-    const result = await ask(question.trim(), turns);
+    const result = await ask(question.trim(), turns, from);
     return Response.json(result);
   } catch (error) {
     return Response.json(

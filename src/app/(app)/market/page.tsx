@@ -207,7 +207,7 @@ export default async function MarketPage() {
       {chartTop.movers.length > 0 ? (
         <Section
           title="Top of the chart"
-          note={`Education, top free, iPhone, Uzbekistan — ${chartTop.date ? formatDay(chartTop.date) : ""}`}
+          note={`Education, top free, iPhone, Uzbekistan, ${chartTop.date ? formatDay(chartTop.date) : ""}`}
         >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] border-collapse text-sm">

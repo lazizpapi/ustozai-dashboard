@@ -23,7 +23,7 @@ export function TextAnalyzer() {
         value={text}
         onChange={(event) => setText(event.target.value)}
         rows={6}
-        placeholder="Paste a store description here — a competitor's, or a draft of ours."
+        placeholder="Paste a store description here. A competitor's, or a draft of ours."
         className={cn(
           "w-full rounded-md border bg-transparent px-3 py-2 text-sm",
           "placeholder:text-muted-foreground/60 focus-visible:outline-none",

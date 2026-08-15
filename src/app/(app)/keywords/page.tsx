@@ -183,7 +183,7 @@ export default async function KeywordsPage() {
       {seedSets.length > 0 ? (
         <Section
           title="Search suggestions"
-          note={`what each store's search box offers for our tracked terms — ${formatDay(seedSets[0].date)}`}
+          note={`what each store's search box offers for our tracked terms, ${formatDay(seedSets[0].date)}`}
         >
           <div className="divide-y">
             {seeds.map((seed) => (

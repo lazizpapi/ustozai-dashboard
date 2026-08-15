@@ -3,6 +3,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 
 import { ASK_TOOLS, clampArgs } from "./tools";
+import { pageName } from "./page-context";
 import { analystModel, anthropicKey } from "@/lib/env";
 import {
   androidDailyInstalls,
@@ -131,9 +132,20 @@ async function runTool(name: string, args: Record<string, unknown>): Promise<unk
   }
 }
 
-export async function ask(question: string, history: AskTurn[] = []): Promise<AskResult> {
+export async function ask(
+  question: string,
+  history: AskTurn[] = [],
+  page?: string,
+): Promise<AskResult> {
   const key = anthropicKey();
   if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
+
+  // Where the question was asked from, when we recognise the page. Enough for
+  // the model to read "how are we doing?" as being about what is on screen.
+  const from = page ? pageName(page) : null;
+  const system = from
+    ? `${SYSTEM_PROMPT}\n\nThe user is currently looking at the ${from} page of the dashboard. Read an unqualified question as being about what that page shows, unless they say otherwise.`
+    : SYSTEM_PROMPT;
 
   const client = new Anthropic({ apiKey: key });
   const messages: Anthropic.MessageParam[] = [
@@ -149,7 +161,7 @@ export async function ask(question: string, history: AskTurn[] = []): Promise<As
     const response = await client.messages.create({
       model: analystModel(),
       max_tokens: 8_000,
-      system: SYSTEM_PROMPT,
+      system,
       tools: ASK_TOOLS,
       messages,
     });

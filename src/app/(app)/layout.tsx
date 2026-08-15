@@ -1,13 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { ChatDock } from "@/components/dashboard/chat-dock";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import { isSignedIn } from "@/app/load";
 import { signOut } from "@/app/login/actions";
 
 const NAV = [
   { href: "/", label: "Overview" },
-  { href: "/ask", label: "Ask" },
   { href: "/analyst", label: "Analyst" },
   { href: "/growth", label: "Growth" },
   { href: "/rankings", label: "Rankings" },
@@ -84,6 +84,10 @@ export default async function AppLayout({ children }: LayoutProps<"/"> ) {
       </header>
 
       <main className="flex-1 py-8">{children}</main>
+
+      {/* Mounted in the layout, not on a page, so the conversation survives
+          navigation. Signed-out visitors get nothing to talk to. */}
+      {signedIn ? <ChatDock /> : null}
     </div>
   );
 }
