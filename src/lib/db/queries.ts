@@ -1212,6 +1212,52 @@ export async function iosDiscoveryFunnel(days = 30): Promise<DiscoveryFunnel | n
   };
 }
 
+export interface FollowerPoint {
+  /** When the platform was actually reached, not the hour it is filed under. */
+  at: string;
+  followers: number;
+}
+
+/**
+ * Every follower reading for one platform, oldest first.
+ *
+ * Keyed on checked_at rather than captured_at for the same reason socialTrends
+ * is: captured_at is the hour a reading is filed under, and at a one-minute
+ * pulse those differ enough to put a reading on the wrong side of a day
+ * boundary.
+ *
+ * Returned raw rather than bucketed. The drill-down draws the actual line of
+ * what we observed, and a daily reduction would hide the flat stretches where
+ * a platform stopped answering, which is exactly what the page needs to show.
+ */
+export async function followerHistory(
+  platform: string,
+  days = 90,
+): Promise<FollowerPoint[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const rows = await fetchAllPages<{
+    checked_at: string | null;
+    captured_at: string;
+    followers: number;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("social_snapshots")
+        .select("checked_at, captured_at, followers")
+        .eq("platform", platform)
+        .gte("captured_at", since)
+        .order("captured_at", { ascending: true })
+        .range(from, to),
+    `followerHistory(${platform})`,
+  );
+
+  return rows.map((row) => ({
+    at: row.checked_at ?? row.captured_at,
+    followers: row.followers,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Active users, pushed from the app backend
 // ---------------------------------------------------------------------------

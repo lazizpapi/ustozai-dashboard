@@ -1,4 +1,5 @@
-import { ArrowDown, ArrowUp, Minus } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Minus } from "lucide-react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import type { Delta } from "@/lib/format";
@@ -36,6 +37,15 @@ interface MetricProps {
    * reads the same wherever it appears.
    */
   compact?: boolean;
+  /**
+   * Makes the whole metric a link to its own detail page.
+   *
+   * The affordance is deliberately quiet: an arrow that appears on hover
+   * rather than permanent link styling. A strip where four of eight figures
+   * are underlined and coloured stops reading as a set of numbers, and these
+   * are numbers first.
+   */
+  href?: string;
 }
 
 function DeltaGlyph({ change }: { change: Delta }) {
@@ -68,14 +78,10 @@ export function Metric({
   change,
   asOf,
   compact = false,
+  href,
 }: MetricProps) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col first:pl-0",
-        compact ? "gap-1 px-3 py-3" : "gap-1.5 px-5 py-4",
-      )}
-    >
+  const body = (
+    <>
       <span
         className={cn(
           "text-muted-foreground flex items-center gap-1.5",
@@ -84,6 +90,12 @@ export function Metric({
       >
         {icon}
         {label}
+        {href ? (
+          <ArrowRight
+            className="size-3 opacity-0 transition-opacity group-hover:opacity-60"
+            aria-hidden
+          />
+        ) : null}
       </span>
 
       <span
@@ -112,7 +124,25 @@ export function Metric({
       {asOf ? (
         <span className="text-muted-foreground/70 text-[11px]">{asOf}</span>
       ) : null}
-    </div>
+    </>
+  );
+
+  const shell = cn(
+    "flex flex-col first:pl-0",
+    compact ? "gap-1 px-3 py-3" : "gap-1.5 px-5 py-4",
+  );
+
+  if (!href) return <div className={shell}>{body}</div>;
+
+  return (
+    <Link
+      href={href}
+      // group so the arrow can reveal on hover; the background shift is the
+      // only other cue, which keeps the figure itself unstyled.
+      className={cn(shell, "group hover:bg-muted/40 transition-colors")}
+    >
+      {body}
+    </Link>
   );
 }
 

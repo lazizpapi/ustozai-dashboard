@@ -90,6 +90,7 @@ export async function MarketingView() {
           <Metric
             compact
             key={trend.platform}
+            href={`/audience/${trend.platform}`}
             icon={<BrandLogo platform={trend.platform as BrandKey} className="size-3.5" />}
             label={SOCIAL_LABELS[trend.platform]}
             value={

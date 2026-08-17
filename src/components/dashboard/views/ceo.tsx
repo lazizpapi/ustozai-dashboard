@@ -180,6 +180,9 @@ export async function CeoView() {
           <Metric
             compact
             key={trend.platform}
+            // Each platform has its own page with the curve and the per-period
+            // change; the strip can only afford the one number.
+            href={`/audience/${trend.platform}`}
             icon={<BrandLogo platform={trend.platform as BrandKey} className="size-3.5" />}
             label={SOCIAL_LABELS[trend.platform]}
             value={
