@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { ActiveUsersStrip } from "@/components/dashboard/active-users-strip";
 import { BrandLogo, type BrandKey } from "@/components/tv/brand-logo";
 import { MarketPulse } from "@/components/dashboard/market-pulse";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
@@ -9,6 +10,7 @@ import { load } from "@/app/load";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
 import { latestInstallRate } from "@/lib/installs";
 import {
+  activeUsersTrend,
   androidDailyInstalls,
   androidInstallsSoFarToday,
   educationChartTop,
@@ -67,6 +69,7 @@ export async function CeoView() {
       androidInstallsSoFarToday(),
       educationChartTop(),
       latestAnalystReport(),
+      activeUsersTrend(),
     ]),
   );
 
@@ -75,8 +78,19 @@ export async function CeoView() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const [rank, ios, android, installs, downloads, history, social, playToday, chart, analyst] =
-    result.data;
+  const [
+    rank,
+    ios,
+    android,
+    installs,
+    downloads,
+    history,
+    social,
+    playToday,
+    chart,
+    analyst,
+    active,
+  ] = result.data;
 
   const installRate = latestInstallRate(installs);
   const lastDownload = downloads.at(-1) ?? null;
@@ -84,6 +98,12 @@ export async function CeoView() {
 
   return (
     <div className="flex min-h-0 flex-col gap-5 lg:h-full">
+      {/*
+        Active users first. They are the only figures here that describe
+        people using the app rather than the store pages around it, so they
+        answer "are we growing" more directly than a download count does.
+      */}
+      <ActiveUsersStrip active={active} />
       <MetricStrip wide>
         <Metric
           compact

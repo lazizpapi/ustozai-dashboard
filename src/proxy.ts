@@ -18,15 +18,22 @@ export function proxy(request: NextRequest) {
 
   /*
    * Machine callers authenticate with their own secret and have no cookie, so
-   * they must never be redirected to a login page. Cron sends a bearer token;
-   * the Telegram webhook sends a secret header.
+   * they must never be redirected to a login page. Cron sends a bearer token,
+   * the Telegram webhook sends a secret header, and the ingest routes take a
+   * bearer token from the app backend.
    *
    * Missing the webhook here is a silent failure rather than a loud one:
    * Telegram would receive a 307 to /login, read any non-2xx as delivery
    * failure, and retry the same update for hours while the member count never
-   * moved and nothing anywhere recorded an error.
+   * moved and nothing anywhere recorded an error. A push endpoint fails the
+   * same quiet way: the sender would get a 307, follow it to a 200 HTML login
+   * page, and log a success while nothing was stored.
    */
-  if (path.startsWith("/api/cron") || path.startsWith("/api/webhook")) {
+  if (
+    path.startsWith("/api/cron") ||
+    path.startsWith("/api/webhook") ||
+    path.startsWith("/api/ingest")
+  ) {
     return NextResponse.next();
   }
   if (PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix))) {

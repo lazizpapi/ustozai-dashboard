@@ -10,6 +10,7 @@ import {
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
 import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
 import { counterVelocity, dailyRankSeries, priorWithinWindow } from "@/lib/compare";
+import { stickiness } from "@/lib/active-users";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import type { AnalystReport } from "@/lib/analyst/schema";
 import {
@@ -1208,6 +1209,102 @@ export async function iosDiscoveryFunnel(days = 30): Promise<DiscoveryFunnel | n
     firstTimeDownloads: downloads.reduce((total, row) => total + row.units, 0),
     from,
     to,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Active users, pushed from the app backend
+// ---------------------------------------------------------------------------
+
+export interface ActiveUsers {
+  date: string;
+  dau: number;
+  wau: number;
+  mau: number;
+  /** DAU as a share of MAU, or null without a denominator. */
+  stickiness: number | null;
+  /** Windowed comparisons, each naming the span it really measured. */
+  dauPrevious: number | null;
+  dauSpanDays: number | null;
+  mauPrevious: number | null;
+  mauSpanDays: number | null;
+  /** When the push arrived, so a stalled sender is visible. */
+  receivedAt: string;
+  /** Days between the newest row's date and today in Tashkent. */
+  daysBehind: number;
+}
+
+/**
+ * The newest active-user reading, with movement.
+ *
+ * Reads the combined 'all' rows only. Per-platform rows are optional extras
+ * the backend may or may not send, and mixing them into the headline would
+ * double-count the moment they arrive.
+ *
+ * daysBehind exists because this is the one series we do not collect: if their
+ * job stops, the numbers simply stop moving, and a dashboard that shows a
+ * three-day-old DAU as though it were today's is the failure mode to avoid.
+ */
+export async function activeUsersTrend(days = 60): Promise<ActiveUsers | null> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await serviceClient()
+    .from("active_users_daily")
+    .select("date, dau, wau, mau, received_at")
+    .eq("platform", "all")
+    .gte("date", since)
+    .order("date", { ascending: false });
+
+  if (error) throw new Error(`activeUsersTrend: ${error.message}`);
+
+  const rows = (data ?? []) as {
+    date: string;
+    dau: number;
+    wau: number;
+    mau: number;
+    received_at: string;
+  }[];
+  if (rows.length === 0) return null;
+
+  const latest = rows[0];
+
+  // priorWithinWindow works on timestamps; these rows are whole days, so the
+  // date is anchored at midnight to compare on the same footing as everything
+  // else on the dashboard.
+  const asReadings = (pick: (row: typeof latest) => number) =>
+    rows.map((row) => ({ capturedAt: `${row.date}T00:00:00Z`, value: pick(row) }));
+
+  const dauPrior = priorWithinWindow(asReadings((row) => row.dau), weekAgoIso());
+  const mauPrior = priorWithinWindow(asReadings((row) => row.mau), weekAgoIso());
+
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const daysBehind = Math.max(
+    0,
+    Math.round(
+      (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${latest.date}T00:00:00Z`)) /
+        (24 * 60 * 60 * 1000),
+    ),
+  );
+
+  return {
+    date: latest.date,
+    dau: latest.dau,
+    wau: latest.wau,
+    mau: latest.mau,
+    stickiness: stickiness(latest.dau, latest.mau),
+    dauPrevious: dauPrior?.value ?? null,
+    dauSpanDays: dauPrior?.spanDays ?? null,
+    mauPrevious: mauPrior?.value ?? null,
+    mauSpanDays: mauPrior?.spanDays ?? null,
+    receivedAt: latest.received_at,
+    daysBehind,
   };
 }
 
