@@ -194,3 +194,63 @@ export function dailyRankSeries(readings: RankReading[]): RankSeriesPoint[] {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, ranks]) => ({ date, ...Object.fromEntries(ranks) }));
 }
+
+export interface VelocityPoint {
+  /** Tashkent day the window ends on. */
+  date: string;
+  perDay: number;
+}
+
+/**
+ * Installs per day over a trailing window, one point per day.
+ *
+ * The chart form of counterVelocity, and it exists for the same reason: a
+ * cumulative counter differenced day to day measures the publisher's release
+ * schedule rather than the app's growth. Google moves its total in batches
+ * every day or two, so a naive daily series is a flat line punctuated by
+ * spikes, and every spike is a day nothing special happened.
+ *
+ * A trailing average over `windowDays` removes that artefact without
+ * inventing anything: each point is a real quantity divided by the real
+ * number of days it covers.
+ *
+ * Before the window is full it falls back to the oldest reading held, because
+ * refusing to draw anything for the first week is worse than drawing a
+ * shorter average, and the shape is what the page is for.
+ */
+export function velocitySeries(
+  readings: Reading[],
+  windowDays = 7,
+): VelocityPoint[] {
+  // Last reading of each day wins, matching how every other daily reduction
+  // here treats a day: the state it ended in.
+  const byDay = new Map<string, number>();
+  for (const reading of [...readings].sort(byTimeAscending)) {
+    byDay.set(tashkentDay(reading.capturedAt), reading.value);
+  }
+
+  const days = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b));
+  if (days.length < 2) return [];
+
+  const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / DAY_MS;
+
+  const points: VelocityPoint[] = [];
+  for (let i = 1; i < days.length; i += 1) {
+    const [date, value] = days[i];
+    const target = dayNumber(date) - windowDays;
+
+    // The oldest day at or before the window's start, else the oldest held.
+    let start = 0;
+    for (let j = i - 1; j >= 0; j -= 1) {
+      start = j;
+      if (dayNumber(days[j][0]) <= target) break;
+    }
+
+    const span = dayNumber(date) - dayNumber(days[start][0]);
+    if (span < 1) continue;
+
+    points.push({ date, perDay: Math.round((value - days[start][1]) / span) });
+  }
+
+  return points;
+}

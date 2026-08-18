@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 import { MarketRaceChart } from "@/components/dashboard/market-race-chart";
@@ -219,7 +220,17 @@ export default async function MarketPage() {
                   className={cn("border-b last:border-b-0", app.isOurs && "bg-muted/40")}
                 >
                   <td className="px-3 py-2">
-                    <span className={cn(app.isOurs && "font-medium")}>{app.name}</span>
+                    {/* Each name opens that app's profile: velocity over time,
+                        chart history and what they have been changing. */}
+                    <Link
+                      href={`/market/${app.slug}`}
+                      className={cn(
+                        "hover:underline underline-offset-4",
+                        app.isOurs && "font-medium",
+                      )}
+                    >
+                      {app.name}
+                    </Link>
                     {app.isOurs ? (
                       <span className="text-muted-foreground ml-2 text-xs">ours</span>
                     ) : null}

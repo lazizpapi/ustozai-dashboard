@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { counterVelocity, dailyRankSeries, dayTicks, priorWithinWindow } from "./compare";
+import {
+  counterVelocity,
+  dailyRankSeries,
+  dayTicks,
+  priorWithinWindow,
+  velocitySeries,
+} from "./compare";
 
 /**
  * Comparing apps to each other, and today to a while ago.
@@ -261,5 +267,119 @@ describe("dayTicks", () => {
 
   it("handles an empty series", () => {
     expect(dayTicks([])).toEqual([]);
+  });
+});
+
+describe("velocitySeries", () => {
+  const at = (date: string, value: number) => ({
+    capturedAt: `${date}T06:00:00Z`,
+    value,
+  });
+
+  it("reports a steady counter as a flat rate", () => {
+    // 100 a day for a week should read as 100 a day, not as a shape.
+    const series = velocitySeries(
+      [
+        at("2026-08-01", 1000),
+        at("2026-08-02", 1100),
+        at("2026-08-03", 1200),
+        at("2026-08-04", 1300),
+      ],
+      2,
+    );
+
+    expect(series.every((point) => point.perDay === 100)).toBe(true);
+  });
+
+  it("smooths Google's batch counter instead of drawing its spikes", () => {
+    // The counter sits still then jumps: 0, 0, 900. Differencing day to day
+    // draws a flat line with one spike, which describes Google's publishing
+    // schedule rather than the app's growth.
+    const spiky = velocitySeries(
+      [
+        at("2026-08-01", 1000),
+        at("2026-08-02", 1000),
+        at("2026-08-03", 1000),
+        at("2026-08-04", 1900),
+      ],
+      3,
+    );
+
+    const last = spiky.at(-1)!;
+    expect(last.perDay).toBe(300);
+  });
+
+  it("attributes a rate to the day the window ends", () => {
+    const series = velocitySeries(
+      [at("2026-08-01", 0), at("2026-08-03", 200)],
+      2,
+    );
+
+    expect(series.at(-1)!.date).toBe("2026-08-03");
+  });
+
+  it("keeps one point per day, using that day's last reading", () => {
+    // 18:00 UTC is 23:00 in Tashkent, so both of the 2 Aug readings are the
+    // same local day. An hour later would already be 3 Aug there, which is
+    // the whole reason this reduction buckets on Tashkent rather than UTC.
+    const series = velocitySeries(
+      [
+        { capturedAt: "2026-08-01T03:00:00Z", value: 1000 },
+        { capturedAt: "2026-08-02T03:00:00Z", value: 1050 },
+        { capturedAt: "2026-08-02T18:00:00Z", value: 1100 },
+      ],
+      1,
+    );
+
+    // 2 Aug ends at 1100, so the day's rate is 100 rather than 50.
+    expect(series).toHaveLength(1);
+    expect(series[0]).toEqual({ date: "2026-08-02", perDay: 100 });
+  });
+
+  it("files a late-evening UTC reading under the next Tashkent day", () => {
+    // Tashkent is UTC+5, so 20:00 UTC belongs to tomorrow locally. Bucketing
+    // on UTC would merge it into the previous day and understate that day.
+    const series = velocitySeries(
+      [
+        { capturedAt: "2026-08-01T06:00:00Z", value: 1000 },
+        { capturedAt: "2026-08-01T20:00:00Z", value: 1100 },
+      ],
+      1,
+    );
+
+    expect(series).toEqual([{ date: "2026-08-02", perDay: 100 }]);
+  });
+
+  it("falls back to the oldest reading before the window is full", () => {
+    // Three days of history with a seven day window still yields a rate,
+    // because refusing to plot anything for the first week is worse than
+    // plotting a shorter average.
+    const series = velocitySeries(
+      [at("2026-08-01", 0), at("2026-08-02", 100), at("2026-08-03", 200)],
+      7,
+    );
+
+    expect(series).toHaveLength(2);
+    expect(series.at(-1)!.perDay).toBe(100);
+  });
+
+  it("reports a restated counter as a negative rate rather than hiding it", () => {
+    const series = velocitySeries([at("2026-08-01", 2000), at("2026-08-02", 1900)], 1);
+    expect(series[0].perDay).toBe(-100);
+  });
+
+  it("returns nothing without at least two days", () => {
+    expect(velocitySeries([at("2026-08-01", 1000)], 7)).toEqual([]);
+    expect(velocitySeries([], 7)).toEqual([]);
+    // Several readings on one day are still one day.
+    expect(
+      velocitySeries(
+        [
+          { capturedAt: "2026-08-01T03:00:00Z", value: 1000 },
+          { capturedAt: "2026-08-01T09:00:00Z", value: 1010 },
+        ],
+        7,
+      ),
+    ).toEqual([]);
   });
 });

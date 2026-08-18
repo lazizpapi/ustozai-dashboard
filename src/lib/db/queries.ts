@@ -9,7 +9,12 @@ import {
 } from "@/lib/collectors/config";
 import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
 import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
-import { counterVelocity, dailyRankSeries, priorWithinWindow } from "@/lib/compare";
+import {
+  counterVelocity,
+  dailyRankSeries,
+  priorWithinWindow,
+  velocitySeries,
+} from "@/lib/compare";
 import { stickiness } from "@/lib/active-users";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import type { AnalystReport } from "@/lib/analyst/schema";
@@ -905,6 +910,200 @@ export async function recentListingChanges(limit = 20): Promise<ListingChange[]>
   });
 
   return listingDiffs(rows).slice(0, limit);
+}
+
+/**
+ * Everything we hold about one tracked app, ours included.
+ *
+ * The drill-down behind a row of the market table. The table can say who is
+ * ahead today; this says how they got there.
+ *
+ * Two figures need naming carefully, because the honest version is less
+ * impressive than the one a reader expects.
+ *
+ * Nobody outside Google can see a competitor's daily installs. What is public
+ * is a cumulative total updated in batches, so the velocity series here is
+ * that total differenced over a trailing window, which is a real quantity per
+ * real day and not an estimate.
+ *
+ * Apple publishes no competitor downloads at all, at any granularity. The
+ * closest public signal is how fast their rating count grows, and this returns
+ * that under its own name rather than dressing it up as downloads. It tracks
+ * demand only as far as the share of users who rate stays steady, which is an
+ * assumption the page states rather than hides.
+ */
+export interface CompetitorProfile {
+  slug: string;
+  name: string;
+  isOurs: boolean;
+  iosId: string | null;
+  androidPackage: string | null;
+  /** Cumulative Play installs as published, oldest first. */
+  playInstalls: { at: string; value: number }[];
+  /** Installs per day over a trailing week, one point per day. */
+  playVelocity: ReturnType<typeof velocitySeries>;
+  /** Growth in App Store ratings per day. A demand proxy, not downloads. */
+  iosRatingVelocity: ReturnType<typeof velocitySeries>;
+  rankHistory: RankPoint[];
+  iosRating: number | null;
+  iosRatingCount: number | null;
+  playRating: number | null;
+  playRatingCount: number | null;
+  listingChanges: ListingChange[];
+  /** Newest stored listing per platform, for the current title and text. */
+  listings: {
+    platform: string;
+    fields: Record<string, string | string[] | null>;
+    detectedAt: string;
+  }[];
+}
+
+export async function competitorProfile(slug: string): Promise<CompetitorProfile | null> {
+  const entry =
+    slug === "ustoz-ai"
+      ? {
+          slug: "ustoz-ai",
+          name: "Ustoz AI",
+          iosId: IOS_APP_ID,
+          androidPackage: ANDROID_PACKAGE,
+          isOurs: true,
+        }
+      : COMPETITORS.map((c) => ({ ...c, isOurs: false })).find((c) => c.slug === slug);
+
+  if (!entry) return null;
+
+  const { data: appRows, error } = await serviceClient()
+    .from("apps")
+    .select("id, platform, store_id");
+  if (error) throw new Error(`competitorProfile apps: ${error.message}`);
+
+  const idFor = (platform: string, storeId: string | null | undefined) =>
+    storeId
+      ? ((appRows ?? []).find(
+          (row) => row.platform === platform && row.store_id === storeId,
+        )?.id as string | undefined)
+      : undefined;
+
+  const iosAppId = idFor("ios", entry.iosId);
+  const androidAppId = idFor("android", entry.androidPackage);
+  const ids = [iosAppId, androidAppId].filter((id): id is string => Boolean(id));
+
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [snaps, ranks, versions] = await Promise.all([
+    ids.length === 0
+      ? Promise.resolve([])
+      : fetchAllPages<{
+          app_id: string;
+          rating: number | null;
+          rating_count: number | null;
+          install_count: number | null;
+          captured_at: string;
+        }>(
+          (from, to) =>
+            serviceClient()
+              .from("metric_snapshots")
+              .select("app_id, rating, rating_count, install_count, captured_at")
+              .in("app_id", ids)
+              .eq("country", "uz")
+              .gte("captured_at", since)
+              .order("captured_at", { ascending: true })
+              .range(from, to),
+          `competitorProfile snapshots(${slug})`,
+        ),
+    iosAppId
+      ? fetchAllPages<{ captured_at: string; rank: number | null; feed_size: number }>(
+          (from, to) =>
+            serviceClient()
+              .from("chart_ranks")
+              .select("captured_at, rank, feed_size")
+              .eq("app_id", iosAppId)
+              .eq("country", "uz")
+              .eq("chart_type", "topfree")
+              .eq("genre", EDUCATION_GENRE)
+              .gte("captured_at", since)
+              .order("captured_at", { ascending: true })
+              .range(from, to),
+          `competitorProfile ranks(${slug})`,
+        )
+      : Promise.resolve([]),
+    ids.length === 0
+      ? Promise.resolve([])
+      : fetchAllPages<{
+          app_id: string;
+          fields: Record<string, string | string[] | null>;
+          detected_at: string;
+        }>(
+          (from, to) =>
+            serviceClient()
+              .from("listing_versions")
+              .select("app_id, fields, detected_at")
+              .in("app_id", ids)
+              .order("detected_at", { ascending: false })
+              .range(from, to),
+          `competitorProfile listings(${slug})`,
+        ),
+  ]);
+
+  const androidSnaps = snaps.filter((row) => row.app_id === androidAppId);
+  const iosSnaps = snaps.filter((row) => row.app_id === iosAppId);
+
+  const readings = (
+    rows: typeof snaps,
+    pick: (row: (typeof snaps)[number]) => number | null,
+  ) =>
+    rows
+      .filter((row) => pick(row) !== null)
+      .map((row) => ({ capturedAt: row.captured_at, value: pick(row) as number }));
+
+  const platformOf = (appId: string) => (appId === iosAppId ? "ios" : "android");
+
+  const diffRows = versions.map((row) => ({
+    appId: row.app_id,
+    appName: entry.name,
+    platform: platformOf(row.app_id),
+    fields: row.fields,
+    detectedAt: row.detected_at,
+  }));
+
+  // Newest stored version per platform: the listing as it stands today.
+  const newestByPlatform = new Map<string, (typeof diffRows)[number]>();
+  for (const row of diffRows) {
+    if (!newestByPlatform.has(row.platform)) newestByPlatform.set(row.platform, row);
+  }
+
+  const latest = <T,>(rows: T[]): T | undefined => rows[rows.length - 1];
+
+  return {
+    slug: entry.slug,
+    name: entry.name,
+    isOurs: entry.isOurs,
+    iosId: entry.iosId ?? null,
+    androidPackage: entry.androidPackage ?? null,
+    playInstalls: readings(androidSnaps, (row) => row.install_count).map((row) => ({
+      at: row.capturedAt,
+      value: row.value,
+    })),
+    playVelocity: velocitySeries(readings(androidSnaps, (row) => row.install_count)),
+    iosRatingVelocity: velocitySeries(readings(iosSnaps, (row) => row.rating_count)),
+    rankHistory: ranks.map((row) => ({
+      capturedAt: row.captured_at,
+      rank: row.rank,
+      feedSize: row.feed_size,
+    })),
+    iosRating: latest(iosSnaps.filter((row) => row.rating !== null))?.rating ?? null,
+    iosRatingCount:
+      latest(iosSnaps.filter((row) => row.rating_count !== null))?.rating_count ?? null,
+    playRating: latest(androidSnaps.filter((row) => row.rating !== null))?.rating ?? null,
+    playRatingCount:
+      latest(androidSnaps.filter((row) => row.rating_count !== null))?.rating_count ?? null,
+    listingChanges: listingDiffs(diffRows),
+    listings: [...newestByPlatform.values()].map((row) => ({
+      platform: row.platform,
+      fields: row.fields,
+      detectedAt: row.detectedAt,
+    })),
+  };
 }
 
 /** How many apps have a recorded listing baseline, for the empty-state copy. */
