@@ -125,7 +125,7 @@ export default async function MarketPage() {
       competitorRankSeries(),
     ]);
     return { apps, chartTop, listingChanges, watchedCount, race };
-  });
+  }, "/market");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;

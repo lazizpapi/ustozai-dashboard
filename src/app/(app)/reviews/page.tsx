@@ -8,7 +8,7 @@ import { formatDay, formatNumber, formatRating, reviewSource } from "@/lib/forma
 export const dynamic = "force-dynamic";
 
 export default async function ReviewsPage() {
-  const result = await load(() => recentReviews(100));
+  const result = await load(() => recentReviews(100), "/reviews");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;

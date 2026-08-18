@@ -71,7 +71,7 @@ export default async function GrowthPage({
     const keys = GROUPS.flatMap((group) => group.keys);
     const series = await Promise.all(keys.map((key) => growthSeries(key, period)));
     return new Map(series.map((entry) => [entry.key, entry]));
-  });
+  }, "/growth");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;

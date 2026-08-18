@@ -36,10 +36,14 @@ import { cn } from "@/lib/utils";
 /**
  * Are we growing?
  *
- * Every figure the founders asked for, on one screen, with the competitive
- * position and the analyst's current read beside them. Nothing here needs
- * scrolling on a laptop, which is the point: a command screen that hides half
- * its numbers below the fold is a report, not a dashboard.
+ * Every figure the founders asked for, with the competitive position and the
+ * analyst's current read beside them.
+ *
+ * This was pinned to one viewport at first. It read as cramped, because
+ * fitting eight metrics, a chart and a panel into a fixed height means
+ * shrinking all of them: the numbers ended up smaller than the labels around
+ * them. The figures now take the room they need and the page scrolls, which
+ * is the ordinary trade a dashboard makes.
  */
 
 const SOCIAL_LABELS = {
@@ -97,7 +101,7 @@ export async function CeoView() {
   const report = analyst?.report ?? null;
 
   return (
-    <div className="flex min-h-0 flex-col gap-5 lg:h-full">
+    <div className="space-y-8">
       {/*
         Active users first. They are the only figures here that describe
         people using the app rather than the store pages around it, so they
@@ -106,7 +110,6 @@ export async function CeoView() {
       <ActiveUsersStrip active={active} />
       <MetricStrip wide>
         <Metric
-          compact
           label="Education, UZ"
           value={
             rank.current === null && rank.feedSize
@@ -117,7 +120,6 @@ export async function CeoView() {
         />
 
         <Metric
-          compact
           label="Play installs, daily"
           /*
            * Google publishes a running total and moves it in batches, landing
@@ -147,7 +149,6 @@ export async function CeoView() {
         />
 
         <Metric
-          compact
           label="App Store, daily"
           value={lastDownload ? formatNumber(lastDownload.downloads) : "—"}
           detail={lastDownload ? undefined : "not connected"}
@@ -155,7 +156,6 @@ export async function CeoView() {
         />
 
         <Metric
-          compact
           label="iOS rating"
           value={formatRating(ios.current)}
           detail={
@@ -165,7 +165,6 @@ export async function CeoView() {
         />
 
         <Metric
-          compact
           label="Android rating"
           value={formatRating(android.current)}
           detail={
@@ -178,7 +177,6 @@ export async function CeoView() {
 
         {social.map((trend) => (
           <Metric
-            compact
             key={trend.platform}
             // Each platform has its own page with the curve and the per-period
             // change; the strip can only afford the one number.
@@ -199,18 +197,18 @@ export async function CeoView() {
 
       <MarketPulse chart={chart} />
 
-      <div className="grid min-h-0 gap-6 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_19rem]">
-        <section className="flex min-h-0 flex-col gap-3">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">Position over time</h2>
             <span className="text-muted-foreground text-xs">
               Education chart, Uzbekistan, iPhone
             </span>
           </div>
-          <RankChart points={history} className="lg:h-full lg:min-h-[200px]" />
+          <RankChart points={history} className="h-[300px]" />
         </section>
 
-        <section className="flex min-h-0 flex-col gap-3">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">Analyst</h2>
             {analyst ? (
@@ -221,7 +219,7 @@ export async function CeoView() {
           </div>
 
           {report ? (
-            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+            <div className="flex flex-col gap-3">
               <div className="flex items-baseline gap-2">
                 {analyst?.health ? (
                   <span

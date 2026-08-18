@@ -64,10 +64,9 @@ export async function ItView() {
   const failedRuns = runs.filter((run) => run.status === "failed").length;
 
   return (
-    <div className="flex min-h-0 flex-col gap-5 lg:h-full">
+    <div className="space-y-8">
       <MetricStrip>
         <Metric
-          compact
           label="Sources healthy"
           value={health.length === 0 ? "—" : `${health.length - failing.length}/${health.length}`}
           detail={
@@ -80,14 +79,12 @@ export async function ItView() {
         />
 
         <Metric
-          compact
           label="Last collection"
           value={newest ? timeAgo(newest) : "—"}
           detail={newest ? "across all sources" : undefined}
         />
 
         <Metric
-          compact
           label="Last analyst run"
           value={
             lastRun
@@ -102,15 +99,14 @@ export async function ItView() {
         />
 
         <Metric
-          compact
           label="Failed runs"
           value={runs.length === 0 ? "—" : String(failedRuns)}
           detail={runs.length === 0 ? undefined : `of the last ${runs.length}`}
         />
       </MetricStrip>
 
-      <div className="grid min-h-0 gap-6 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_21rem]">
-        <section className="flex min-h-0 flex-col gap-3">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">Collectors</h2>
             <span className="text-muted-foreground text-xs">
@@ -121,7 +117,7 @@ export async function ItView() {
           {health.length === 0 ? (
             <p className="text-muted-foreground text-sm">No collector has run yet.</p>
           ) : (
-            <ul className="min-h-0 divide-y overflow-y-auto">
+            <ul className="divide-y">
               {sortForAttention(health).map((source) => (
                 <li key={source.source} className="flex items-baseline gap-2.5 py-2">
                   <StatusIcon status={source.status} />
@@ -143,7 +139,7 @@ export async function ItView() {
           )}
         </section>
 
-        <section className="flex min-h-0 flex-col gap-3">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">Analyst runs</h2>
             <span className="text-muted-foreground text-xs">newest first</span>
@@ -155,7 +151,7 @@ export async function ItView() {
               the daily collection.
             </p>
           ) : (
-            <ul className="min-h-0 divide-y overflow-y-auto">
+            <ul className="divide-y">
               {runs.map((run) => (
                 <li key={run.id} className="flex items-baseline gap-2 py-2">
                   <span className="text-muted-foreground w-16 shrink-0 text-[11px]">

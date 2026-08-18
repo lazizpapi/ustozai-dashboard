@@ -6,7 +6,7 @@ import { AutoRefresh } from "@/components/tv/auto-refresh";
 import { LiveDot, audienceIsLive } from "@/components/tv/live-dot";
 import { DownloadsChart } from "@/components/dashboard/downloads-chart";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
-import { requireSession } from "@/app/load";
+import { requireAccess } from "@/app/load";
 import {
   androidDailyInstalls,
   collectorHealth,
@@ -45,7 +45,10 @@ export const dynamic = "force-dynamic";
  * asking.
  */
 export default async function TvPage() {
-  await requireSession();
+  // The wall display carries company-wide figures, so it follows the same
+  // rule as the company dashboard rather than being open to any signed-in
+  // department.
+  await requireAccess("/tv");
 
   const theme = currentTvTheme();
 

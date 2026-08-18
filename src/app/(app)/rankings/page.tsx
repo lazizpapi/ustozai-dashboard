@@ -44,10 +44,9 @@ const CHARTS = [
 ] as const;
 
 export default async function RankingsPage() {
-  const result = await load(() =>
-    Promise.all(
-      CHARTS.map((chart) => rankHistory(chart.key, "uz", chart.genre, 90)),
-    ),
+  const result = await load(
+    () => Promise.all(CHARTS.map((chart) => rankHistory(chart.key, "uz", chart.genre, 90))),
+    "/rankings",
   );
 
   if (result.kind === "unconfigured") {

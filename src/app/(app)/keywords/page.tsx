@@ -116,7 +116,7 @@ export default async function KeywordsPage() {
       keywordSuggestionSets(),
     ]);
     return { ranks, suggestions };
-  });
+  }, "/keywords");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;

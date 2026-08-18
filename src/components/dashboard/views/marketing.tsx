@@ -84,11 +84,10 @@ export async function MarketingView() {
     : [];
 
   return (
-    <div className="flex min-h-0 flex-col gap-5 lg:h-full">
+    <div className="space-y-8">
       <MetricStrip>
         {social.map((trend) => (
           <Metric
-            compact
             key={trend.platform}
             href={`/audience/${trend.platform}`}
             icon={<BrandLogo platform={trend.platform as BrandKey} className="size-3.5" />}
@@ -105,7 +104,6 @@ export async function MarketingView() {
         ))}
 
         <Metric
-          compact
           label="Keywords ranked"
           value={keywords.length === 0 ? "—" : `${ranked.length}/${keywords.length}`}
           detail={
@@ -116,8 +114,8 @@ export async function MarketingView() {
         />
       </MetricStrip>
 
-      <div className="grid min-h-0 gap-6 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <section className="flex min-h-0 flex-col gap-3">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">App Store discovery</h2>
             <span className="text-muted-foreground text-xs">
@@ -127,9 +125,7 @@ export async function MarketingView() {
 
           {funnel ? (
             <>
-              {/* Spread across the height the view allots rather than
-                  bunching at the top over dead space. */}
-              <dl className="divide-y lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:justify-around">
+              <dl className="divide-y">
                 {steps.map((step) => (
                   <div
                     key={step.label}
@@ -166,7 +162,7 @@ export async function MarketingView() {
           )}
         </section>
 
-        <section className="flex min-h-0 flex-col gap-3">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">Search positions</h2>
             <Link
@@ -180,7 +176,7 @@ export async function MarketingView() {
           {keywords.length === 0 ? (
             <p className="text-muted-foreground text-xs">No keyword readings yet.</p>
           ) : (
-            <ul className="min-h-0 divide-y overflow-y-auto">
+            <ul className="divide-y">
               {byPosition.slice(0, 9).map((row) => {
                 const note = apostropheNote(row.keyword);
                 const move = rankDelta(row.position, row.previous);

@@ -26,7 +26,7 @@ export default async function DownloadsPage() {
       iosDiscoveryFunnel(30),
     ]);
     return { ios, android, androidSnapshots, funnel };
-  });
+  }, "/downloads");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;

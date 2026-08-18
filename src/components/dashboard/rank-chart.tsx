@@ -1,6 +1,6 @@
 "use client";
 
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import {
   ChartContainer,
@@ -65,7 +65,16 @@ export function RankChart({ points, className }: RankChartProps) {
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <ChartContainer config={config} className={cn("h-[280px] w-full", className)}>
-        <LineChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
+        <AreaChart data={data} margin={{ left: 4, right: 12, top: 8, bottom: 4 }}>
+          <defs>
+            {/* A stroke alone reads as a stray hairline on a dark panel. The
+                fill gives the series enough presence to be the subject of the
+                section rather than a detail inside it. */}
+            <linearGradient id="rankFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--color-rank)" stopOpacity={0.26} />
+              <stop offset="100%" stopColor="var(--color-rank)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
           <CartesianGrid vertical={false} strokeOpacity={0.35} />
           <XAxis
             dataKey="capturedAt"
@@ -99,18 +108,19 @@ export function RankChart({ points, className }: RankChartProps) {
               />
             }
           />
-          <Line
+          <Area
             dataKey="rank"
             type="monotone"
             stroke="var(--color-rank)"
-            strokeWidth={2}
+            strokeWidth={2.5}
+            fill="url(#rankFill)"
             dot={false}
             activeDot={{ r: 4 }}
             // A break in the line is information, not a rendering gap.
             connectNulls={false}
             isAnimationActive={!reducedMotion}
           />
-        </LineChart>
+        </AreaChart>
       </ChartContainer>
 
       <p className="text-muted-foreground shrink-0 text-xs">

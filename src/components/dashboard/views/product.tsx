@@ -73,10 +73,9 @@ export async function ProductView() {
   const unhappy = reviews.filter((review) => review.rating <= 3).length;
 
   return (
-    <div className="flex min-h-0 flex-col gap-5 lg:h-full">
+    <div className="space-y-8">
       <MetricStrip>
         <Metric
-          compact
           label="iOS rating"
           value={formatRating(ios.current)}
           detail={
@@ -86,7 +85,6 @@ export async function ProductView() {
         />
 
         <Metric
-          compact
           label="Android rating"
           value={formatRating(android.current)}
           detail={
@@ -98,14 +96,12 @@ export async function ProductView() {
         />
 
         <Metric
-          compact
           label="App Store, daily"
           value={lastDownload ? formatNumber(lastDownload.downloads) : "—"}
           asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
         />
 
         <Metric
-          compact
           label="Play installs, daily"
           value={installRate ? formatNumber(installRate.perDay) : "—"}
           detail={
@@ -117,8 +113,8 @@ export async function ProductView() {
         />
       </MetricStrip>
 
-      <div className="grid min-h-0 gap-6 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <section className="flex min-h-0 flex-col gap-3">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">Latest reviews</h2>
             <span className="text-muted-foreground text-xs">
@@ -131,7 +127,7 @@ export async function ProductView() {
           {reviews.length === 0 ? (
             <p className="text-muted-foreground text-sm">No reviews collected yet.</p>
           ) : (
-            <ul className="min-h-0 divide-y overflow-y-auto">
+            <ul className="divide-y">
               {reviews.map((review) => (
                 <li key={review.id} className="flex gap-3 py-2">
                   <span
@@ -163,7 +159,7 @@ export async function ProductView() {
           )}
         </section>
 
-        <section className="flex min-h-0 flex-col gap-3">
+        <section className="flex flex-col gap-3">
           <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
             <h2 className="text-sm font-medium">What we shipped</h2>
             <Link
@@ -180,7 +176,7 @@ export async function ProductView() {
               either store appears here.
             </p>
           ) : (
-            <ul className="min-h-0 space-y-2 overflow-y-auto">
+            <ul className="space-y-2">
               {ourReleases.slice(0, 8).map((release) => (
                 <li
                   key={`${release.appId}-${release.detectedAt}`}

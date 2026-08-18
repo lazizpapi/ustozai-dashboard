@@ -93,7 +93,7 @@ export default async function AudiencePlatformPage({
       history,
       growth,
     };
-  });
+  }, "/audience");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;

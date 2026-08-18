@@ -3,12 +3,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { ROLES } from "@/lib/roles";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
-  configuredPassword,
   issueSessionToken,
-  passwordMatches,
+  passwordFor,
+  roleForPassword,
 } from "@/lib/gate";
 
 /**
@@ -32,16 +33,21 @@ export async function signIn(_state: { error?: string }, formData: FormData) {
   const next = safeNext(formData.get("next"));
   const password = formData.get("password");
 
-  if (!configuredPassword()) {
+  // Any configured department is enough to sign somebody in. All of them
+  // unset means the dashboard is closed rather than open.
+  if (!ROLES.some((role) => passwordFor(role))) {
     return { error: "No password is configured for this dashboard." };
   }
 
-  if (typeof password !== "string" || !passwordMatches(password)) {
+  const role = typeof password === "string" ? roleForPassword(password) : null;
+  if (!role) {
     await new Promise((resolve) => setTimeout(resolve, WRONG_PASSWORD_DELAY_MS));
+    // Deliberately does not say which department the password looked like,
+    // or that departments exist at all. A wrong password is a wrong password.
     return { error: "That password is not right." };
   }
 
-  const token = issueSessionToken();
+  const token = issueSessionToken(role);
   if (!token) return { error: "Could not start a session." };
 
   const store = await cookies();

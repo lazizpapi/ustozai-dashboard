@@ -32,12 +32,6 @@ interface MetricProps {
    */
   asOf?: string;
   /**
-   * Tighter type and padding, for strips that carry eight figures instead of
-   * four. Only the scale changes; the anatomy stays identical so a metric
-   * reads the same wherever it appears.
-   */
-  compact?: boolean;
-  /**
    * Makes the whole metric a link to its own detail page.
    *
    * The affordance is deliberately quiet: an arrow that appears on hover
@@ -77,16 +71,12 @@ export function Metric({
   detail,
   change,
   asOf,
-  compact = false,
   href,
 }: MetricProps) {
   const body = (
     <>
       <span
-        className={cn(
-          "text-muted-foreground flex items-center gap-1.5",
-          compact ? "text-[11px]" : "text-xs",
-        )}
+        className="text-muted-foreground flex items-center gap-1.5 text-xs"
       >
         {icon}
         {label}
@@ -99,10 +89,7 @@ export function Metric({
       </span>
 
       <span
-        className={cn(
-          "tnum leading-none font-medium tracking-tight",
-          compact ? "text-2xl" : "text-3xl",
-        )}
+        className="tnum text-3xl leading-none font-medium tracking-tight"
       >
         {value}
       </span>
@@ -127,10 +114,7 @@ export function Metric({
     </>
   );
 
-  const shell = cn(
-    "flex flex-col first:pl-0",
-    compact ? "gap-1 px-3 py-3" : "gap-1.5 px-5 py-4",
-  );
+  const shell = "flex flex-col gap-1.5 px-5 py-4 first:pl-0";
 
   if (!href) return <div className={shell}>{body}</div>;
 
@@ -147,12 +131,16 @@ export function Metric({
 }
 
 /**
- * The hairline row. Collapses to two columns on small screens and one on the
- * narrowest, with the dividers following the wrap so the rhythm survives.
+ * The hairline row.
  *
- * `wide` carries eight figures: four across at lg, all eight at xl. The
- * divider rules are written per breakpoint rather than by a single rule
- * because a border that follows the wrap has to know where the wrap is.
+ * Collapses to two columns on small screens and one on the narrowest, with the
+ * dividers following the wrap so the rhythm survives.
+ *
+ * `wide` carries eight figures as two rows of four rather than eight across.
+ * Eight columns inside 1400px leaves about 170px each, which is not enough for
+ * a six-digit follower count at full size, and shrinking the type to fit was
+ * what made the strip feel cramped in the first place. The figures matter more
+ * than the single line.
  */
 export function MetricStrip({
   children,
@@ -164,21 +152,13 @@ export function MetricStrip({
   return (
     <div
       className={cn(
-        "grid grid-cols-1 sm:grid-cols-2",
+        "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
         "divide-y sm:divide-y-0 sm:divide-x",
+        // A border on whatever wrapped onto a new row, per breakpoint.
+        "sm:[&>*:nth-child(n+3)]:border-t",
         wide
-          ? [
-              "lg:grid-cols-4 xl:grid-cols-8",
-              // Rows of two, then four, then one row of eight: each layout
-              // draws a top border only on the items that actually wrapped.
-              "sm:[&>*:nth-child(n+3)]:border-t",
-              "lg:[&>*]:border-t-0 lg:[&>*:nth-child(n+5)]:border-t",
-              "xl:[&>*]:border-t-0",
-            ]
-          : [
-              "lg:grid-cols-4",
-              "sm:[&>*:nth-child(n+3)]:border-t lg:[&>*]:border-t-0",
-            ],
+          ? "lg:[&>*]:border-t-0 lg:[&>*:nth-child(n+5)]:border-t"
+          : "lg:[&>*]:border-t-0",
       )}
     >
       {children}

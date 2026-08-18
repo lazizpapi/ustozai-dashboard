@@ -76,7 +76,7 @@ export default async function CompetitorPage({
   // hides the mistake.
   if (!SLUGS.includes(slug)) notFound();
 
-  const result = await load(() => competitorProfile(slug));
+  const result = await load(() => competitorProfile(slug), "/market");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;

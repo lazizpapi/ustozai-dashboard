@@ -48,7 +48,7 @@ export default async function AnalystPage() {
   const result = await load(async () => {
     const [latest, runs] = await Promise.all([latestAnalystReport(), recentAnalystRuns()]);
     return { latest, runs };
-  });
+  }, "/analyst");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;
