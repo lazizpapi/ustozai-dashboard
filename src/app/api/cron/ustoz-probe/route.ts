@@ -59,11 +59,37 @@ function describe(value: unknown, depth = 0): unknown {
   return typeof value;
 }
 
-/** The params each endpoint needs, taken from the API document. */
-const PROBE_PARAMS: Partial<Record<EndpointKey, Record<string, string | number | boolean>>> = {
-  revenue: { today: true, groupBy: "hour" },
-  courses: { pageSize: 500 },
-};
+/** Tashkent calendar day, the bucket every date in this project uses. */
+function tashkentDay(offsetDays = 0): string {
+  const at = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(at);
+}
+
+/**
+ * The params each endpoint needs.
+ *
+ * The date range is not optional on four of these: without startDate and
+ * endDate they answer 400 with "must be a Date instance" rather than
+ * defaulting to a window, which is how the first probe run found them.
+ */
+function probeParams(): Partial<Record<EndpointKey, Record<string, string | number | boolean>>> {
+  const range = { startDate: tashkentDay(-7), endDate: tashkentDay() };
+  return {
+    revenue: { today: true, groupBy: "hour", ...range },
+    courses: { pageSize: 500 },
+    dauDaily: range,
+    mauGeneral: range,
+    visitSummary: range,
+    transactionsByProvider: range,
+    lessonDropoff: range,
+    usersAnalytics: range,
+  };
+}
 
 export async function GET(request: Request) {
   if (!isAuthorizedCron(request)) return unauthorized();
@@ -84,6 +110,7 @@ export async function GET(request: Request) {
     (key) => !only || key === only,
   );
 
+  const params = probeParams();
   const shapes: Record<string, unknown> = {};
 
   // Sequential rather than parallel: this hits somebody else's production
@@ -91,7 +118,7 @@ export async function GET(request: Request) {
   // to get the token blocked.
   for (const key of keys) {
     try {
-      const data = await get(key, PROBE_PARAMS[key]);
+      const data = await get(key, params[key]);
       shapes[key] = { ok: true, shape: describe(data) };
     } catch (error) {
       shapes[key] = {

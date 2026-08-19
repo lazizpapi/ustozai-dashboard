@@ -20,8 +20,21 @@ import { ustozApiEnv } from "@/lib/env";
  * envelope that looks like data.
  *
  * Authentication is a bearer token with no refresh flow, so a 401 is a
- * configuration problem rather than an expiry to retry through.
+ * configuration problem rather than an expiry to retry through. The token is
+ * optional here because probing found the /statistics family answering
+ * without one; it is sent whenever configured, so nothing breaks on the day
+ * those endpoints are correctly put behind auth.
  */
+
+/** Endpoints that required a bearer token when probed on 2026-08-19. */
+export const NEEDS_TOKEN: ReadonlySet<EndpointKey> = new Set([
+  "main",
+  "usersAnalytics",
+  "revenue",
+  "mrr",
+  "lessonDropoff",
+  "courses",
+]);
 
 export const ENDPOINTS = {
   main: { path: "/admin/statistics/main", version: "v1" },
@@ -53,8 +66,8 @@ export class UstozApiError extends Error {
 
 /** Thrown when the integration is not configured, so callers can skip it. */
 export class UstozNotConfiguredError extends Error {
-  constructor() {
-    super("USTOZ_API_BASE_URL and USTOZ_API_TOKEN are not set");
+  constructor(reason = "USTOZ_API_BASE_URL is not set") {
+    super(reason);
     this.name = "UstozNotConfiguredError";
   }
 }
@@ -99,13 +112,25 @@ export async function get(endpoint: EndpointKey, params: Params = {}): Promise<u
   const config = ustozApiEnv();
   if (!config) throw new UstozNotConfiguredError();
 
+  // Fail before the request rather than reading a 401 as an outage. Without a
+  // token these endpoints can never succeed, and a clear reason in collector
+  // health is worth more than a retried failure.
+  if (NEEDS_TOKEN.has(endpoint) && !config.token) {
+    throw new UstozNotConfiguredError(
+      `${endpoint} needs USTOZ_API_TOKEN, which is not set`,
+    );
+  }
+
   const spec = ENDPOINTS[endpoint];
   const url = buildUrl(config.baseUrl, spec.version, spec.path, params);
 
   const body = await fetchJson<unknown>(
     url,
     { attempts: 2, timeoutMs: 20_000 },
-    { authorization: `Bearer ${config.token}`, accept: "application/json" },
+    {
+      accept: "application/json",
+      ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
+    },
   );
 
   if (body === null) throw new UstozApiError(endpoint, "empty response");

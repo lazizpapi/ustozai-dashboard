@@ -87,9 +87,21 @@ export function telegramWebhookSecret(): string | null {
 const ustozApiSchema = z.object({
   USTOZ_API_BASE_URL: z
     .string()
-    .url("must be a full URL, for example https://api.example.com")
+    .url("must be a full URL, for example https://api.example.com/api")
     .transform((value) => value.replace(/\/+$/, "")),
-  USTOZ_API_TOKEN: z.string().min(10),
+  /*
+   * Optional, and that is a finding rather than a preference. Probing the API
+   * on 2026-08-19 showed the whole /statistics family answering without any
+   * credential: daily active users, monthly active users, visit summaries and
+   * transaction totals by payment provider are all readable by anyone who
+   * knows the host. Only /admin/* and the course list check a bearer token.
+   *
+   * So the base URL alone is enough to collect a real subset today. The token
+   * is sent whenever it is configured, which means the collectors keep working
+   * unchanged once those endpoints are put behind auth, rather than breaking
+   * on the day the hole is closed.
+   */
+  USTOZ_API_TOKEN: z.string().min(10).optional(),
 });
 
 const telegramSchema = z.object({
@@ -157,7 +169,8 @@ export function telegramEnv(): TelegramConfig | null {
 
 export interface UstozApiConfig {
   baseUrl: string;
-  token: string;
+  /** Null when unset. Public endpoints still work; /admin/* will 401. */
+  token: string | null;
 }
 
 /**
@@ -170,7 +183,7 @@ export function ustozApiEnv(): UstozApiConfig | null {
   if (!parsed.success) return null;
   return {
     baseUrl: parsed.data.USTOZ_API_BASE_URL,
-    token: parsed.data.USTOZ_API_TOKEN,
+    token: parsed.data.USTOZ_API_TOKEN ?? null,
   };
 }
 
