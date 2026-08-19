@@ -74,6 +74,24 @@ export function telegramWebhookSecret(): string | null {
   return process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || null;
 }
 
+/**
+ * UstozAI's own admin API: the only source for anything about the app itself
+ * rather than the store pages around it. Revenue, subscriptions, active users
+ * and course drop-off all live behind it.
+ *
+ * The base URL is stored without a trailing slash so path joining stays
+ * predictable, and the token is required alongside it: a base URL with no
+ * token would produce a run of 401s that look like an outage rather than a
+ * missing setting.
+ */
+const ustozApiSchema = z.object({
+  USTOZ_API_BASE_URL: z
+    .string()
+    .url("must be a full URL, for example https://api.example.com")
+    .transform((value) => value.replace(/\/+$/, "")),
+  USTOZ_API_TOKEN: z.string().min(10),
+});
+
 const telegramSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(20),
   TELEGRAM_CHAT_ID: z.string().min(1),
@@ -135,6 +153,34 @@ export function ascEnv(): AscConfig | null {
 export function telegramEnv(): TelegramConfig | null {
   const parsed = telegramSchema.safeParse(process.env);
   return parsed.success ? parsed.data : null;
+}
+
+export interface UstozApiConfig {
+  baseUrl: string;
+  token: string;
+}
+
+/**
+ * Returns null when unconfigured, which closes the integration rather than
+ * half-enabling it. Every caller treats null as "skip", the same way the
+ * iOS download collectors treat a missing App Store Connect key.
+ */
+export function ustozApiEnv(): UstozApiConfig | null {
+  const parsed = ustozApiSchema.safeParse(process.env);
+  if (!parsed.success) return null;
+  return {
+    baseUrl: parsed.data.USTOZ_API_BASE_URL,
+    token: parsed.data.USTOZ_API_TOKEN,
+  };
+}
+
+/** Why the UstozAI panels are dormant, for the setup notice. */
+export function ustozApiProblem(): string | null {
+  const parsed = ustozApiSchema.safeParse(process.env);
+  if (parsed.success) return null;
+  return parsed.error.issues
+    .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+    .join("; ");
 }
 
 /** Human-readable reason the iOS download panels are dormant, for the UI. */
