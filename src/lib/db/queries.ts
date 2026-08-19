@@ -1553,6 +1553,160 @@ export async function activeUsersTrend(days = 60): Promise<ActiveUsers | null> {
   };
 }
 
+// ---------------------------------------------------------------------------
+// UstozAI's own product and business metrics
+// ---------------------------------------------------------------------------
+
+export interface RevenueDay {
+  date: string;
+  amount: number;
+  transactions: number;
+}
+
+export interface RevenueSummary {
+  /** The most recent day with any takings, and what they were. */
+  latest: RevenueDay | null;
+  /** Day totals oldest first, for the chart. */
+  daily: RevenueDay[];
+  /** Takings per provider over the window, largest first. */
+  byProvider: { provider: string; amount: number; transactions: number }[];
+  /** Movement of the daily total, with the span it really measured. */
+  previous: number | null;
+  spanDays: number | null;
+  /** Sum over the whole window, which is what a month-to-date figure is. */
+  windowTotal: number;
+}
+
+/**
+ * Takings per day and per payment provider.
+ *
+ * Amounts are returned exactly as the payment API reports them. The unit is
+ * undocumented in anything we hold, so nothing here scales them; a page that
+ * divided by a guessed hundred would be wrong by a hundredfold in the most
+ * quotable number in the company.
+ *
+ * The 'ALL' rows are the API's own day totals rather than a sum of the
+ * providers, so the two can be compared instead of assumed equal.
+ */
+export async function revenueSummary(days = 30): Promise<RevenueSummary> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await serviceClient()
+    .from("revenue_daily")
+    .select("date, provider, amount, transactions")
+    .gte("date", since)
+    .order("date", { ascending: true });
+  if (error) throw new Error(`revenueSummary: ${error.message}`);
+
+  const rows = (data ?? []) as {
+    date: string;
+    provider: string;
+    amount: number;
+    transactions: number;
+  }[];
+
+  const daily = rows
+    .filter((row) => row.provider === "ALL")
+    .map((row) => ({
+      date: row.date,
+      amount: Number(row.amount),
+      transactions: row.transactions,
+    }));
+
+  const providers = new Map<string, { amount: number; transactions: number }>();
+  for (const row of rows) {
+    if (row.provider === "ALL") continue;
+    const entry = providers.get(row.provider) ?? { amount: 0, transactions: 0 };
+    entry.amount += Number(row.amount);
+    entry.transactions += row.transactions;
+    providers.set(row.provider, entry);
+  }
+
+  const prior = priorWithinWindow(
+    daily.map((day) => ({ capturedAt: `${day.date}T00:00:00Z`, value: day.amount })),
+    weekAgoIso(),
+  );
+
+  return {
+    latest: daily.at(-1) ?? null,
+    daily,
+    byProvider: [...providers.entries()]
+      .map(([provider, totals]) => ({ provider, ...totals }))
+      .sort((a, b) => b.amount - a.amount),
+    previous: prior?.value ?? null,
+    spanDays: prior?.spanDays ?? null,
+    windowTotal: daily.reduce((sum, day) => sum + day.amount, 0),
+  };
+}
+
+export interface EngagementSummary {
+  date: string;
+  views: number | null;
+  totalLogins: number | null;
+  averageMinutes: number | null;
+  viewsPrevious: number | null;
+  viewsSpanDays: number | null;
+  /** Views per day over the window, oldest first. */
+  daily: { date: string; views: number }[];
+}
+
+/**
+ * Views, logins and session length.
+ *
+ * Views are deliberately not called active users. The API document labels
+ * this endpoint the DAU chart and it returns a figure roughly twenty-five
+ * times larger, so the two are kept under names that cannot be confused.
+ */
+export async function engagementSummary(days = 30): Promise<EngagementSummary | null> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await serviceClient()
+    .from("app_engagement_daily")
+    .select("date, views, total_logins, average_minutes")
+    .gte("date", since)
+    .order("date", { ascending: true });
+  if (error) throw new Error(`engagementSummary: ${error.message}`);
+
+  const rows = (data ?? []) as {
+    date: string;
+    views: number | null;
+    total_logins: number | null;
+    average_minutes: string | number | null;
+  }[];
+  if (rows.length === 0) return null;
+
+  const latest = rows[rows.length - 1];
+  const daily = rows
+    .filter((row) => row.views !== null)
+    .map((row) => ({ date: row.date, views: row.views as number }));
+
+  const prior = priorWithinWindow(
+    daily.map((row) => ({ capturedAt: `${row.date}T00:00:00Z`, value: row.views })),
+    weekAgoIso(),
+  );
+
+  // The most recent day that actually carries a session length, since the
+  // visit summary is attributed to the end of each collection window.
+  const withMinutes = [...rows].reverse().find((row) => row.average_minutes !== null);
+
+  return {
+    date: latest.date,
+    views: latest.views,
+    totalLogins: withMinutes?.total_logins ?? null,
+    averageMinutes:
+      withMinutes?.average_minutes === null || withMinutes?.average_minutes === undefined
+        ? null
+        : Number(withMinutes.average_minutes),
+    viewsPrevious: prior?.value ?? null,
+    viewsSpanDays: prior?.spanDays ?? null,
+    daily,
+  };
+}
+
 export async function latestPlatformCheck(platform: string): Promise<string | null> {
   const { data, error } = await serviceClient()
     .from("social_snapshots")

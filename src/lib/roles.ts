@@ -65,6 +65,7 @@ const SECTIONS: Record<Exclude<Role, "ceo">, NavItem[]> = {
 /** The CEO's nav, which is also the full list of pages that exist. */
 const ALL: NavItem[] = [
   { href: "/", label: "Overview" },
+  { href: "/business", label: "Business" },
   { href: "/analyst", label: "Analyst" },
   { href: "/growth", label: "Growth" },
   { href: "/rankings", label: "Rankings" },
@@ -98,6 +99,10 @@ export function canSee(role: Role, path: string): boolean {
   if (path === "/") return true;
   if (within(path, "/audience")) return AUDIENCE_ROLES.includes(role);
   if (within(path, "/tv")) return false;
+  // Revenue, MRR and payment providers. Deliberately not reachable by any
+  // department: a department password would otherwise unlock the company's
+  // finances, which is the opposite of why departments were separated.
+  if (within(path, "/business")) return false;
 
   return SECTIONS[role].some((item) => within(path, item.href));
 }

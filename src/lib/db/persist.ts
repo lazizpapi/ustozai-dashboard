@@ -406,9 +406,21 @@ export async function saveActiveUsers(
 ): Promise<number> {
   if (dau.length === 0) return 0;
 
-  const byMonth = new Map(
-    mau.filter((entry) => entry.month !== null).map((entry) => [entry.month!, entry.count]),
-  );
+  /*
+   * mauStats is parsed and deliberately not stored, because measurement shows
+   * it is not monthly active users.
+   *
+   * Its value changes with the window you ask over: August came back as 9,096
+   * for a one-day range, 61,794 for a week and 88,700 for nine months. And
+   * the nine-month figure exceeds the sum of that month's daily actives
+   * (47,164), which distinct monthly users cannot do.
+   *
+   * DAU has no such problem: 2026-08-15 returns 3,577 whichever window is
+   * requested. So the daily figure is trustworthy and the monthly one is not,
+   * and a column called mau holding a number nobody can define is worse than
+   * an empty one. Restore this once the backend team says what it counts.
+   */
+  void mau;
 
   const rows = dau.map((point) => ({
     date: point.date,
@@ -417,7 +429,7 @@ export async function saveActiveUsers(
     // No weekly bucket exists upstream. Null says so; zero would claim a week
     // in which nobody opened the app.
     wau: null,
-    mau: byMonth.get(point.date.slice(0, 7)) ?? null,
+    mau: null,
     received_at: new Date().toISOString(),
   }));
 

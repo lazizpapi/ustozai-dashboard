@@ -69,6 +69,15 @@ describe("canSee", () => {
     expect(canSee("marketing", "/reviewsomething")).toBe(false);
   });
 
+  it("keeps every department out of the business page", () => {
+    // Revenue and MRR are the one thing a department password must never
+    // unlock, so this is asserted per role rather than left to the fallback.
+    expect(canSee("ceo", "/business")).toBe(true);
+    for (const role of ROLES.filter((entry) => entry !== "ceo")) {
+      expect(canSee(role, "/business")).toBe(false);
+    }
+  });
+
   it("denies an unknown page to everyone except the CEO", () => {
     // Fails closed: a page added later is invisible until it is granted.
     expect(canSee("marketing", "/payroll")).toBe(false);

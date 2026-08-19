@@ -11,6 +11,8 @@ import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
 import { latestInstallRate } from "@/lib/installs";
 import {
   activeUsersTrend,
+  engagementSummary,
+  revenueSummary,
   androidDailyInstalls,
   androidInstallsSoFarToday,
   educationChartTop,
@@ -74,6 +76,8 @@ export async function CeoView() {
       educationChartTop(),
       latestAnalystReport(),
       activeUsersTrend(),
+      revenueSummary(30),
+      engagementSummary(30),
     ]),
   );
 
@@ -94,6 +98,8 @@ export async function CeoView() {
     chart,
     analyst,
     active,
+    revenue,
+    engagement,
   ] = result.data;
 
   const installRate = latestInstallRate(installs);
@@ -107,7 +113,7 @@ export async function CeoView() {
         people using the app rather than the store pages around it, so they
         answer "are we growing" more directly than a download count does.
       */}
-      <ActiveUsersStrip active={active} />
+      <ActiveUsersStrip active={active} revenue={revenue} engagement={engagement} />
       <MetricStrip wide>
         <Metric
           label="Education, UZ"
