@@ -14,6 +14,7 @@ import {
   type SocialSnapshot,
 } from "./social";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
+import { collectUstozMetrics } from "@/lib/ustoz/collect";
 import {
   CHART_COUNTRIES,
   CHART_TYPES,
@@ -49,6 +50,9 @@ export interface PollSummary {
   snapshots: number;
   ranks: number;
   social: number;
+  /** Rows written from UstozAI's own admin API, zero when it is unconfigured. */
+  ustozActiveUsers: number;
+  ustozRevenueRows: number;
   failures: string[];
 }
 
@@ -286,14 +290,28 @@ export async function runPoll(): Promise<PollSummary> {
         },
   );
 
-  await recordRuns([...outcomes(allSteps), ...writeOutcomes]);
+  /*
+   * UstozAI's own metrics ride the hourly poll rather than getting their own
+   * schedule. Revenue and active users move through the day, and the API
+   * accepts a date range, so each run re-reads the last week and repairs any
+   * day an earlier failure left behind.
+   *
+   * It runs after the store collectors and persists itself, so a broken admin
+   * API cannot cost us a rank reading.
+   */
+  const ustoz = await collectUstozMetrics();
+
+  const all = [...outcomes(allSteps), ...writeOutcomes, ...ustoz.outcomes];
+  await recordRuns(all);
 
   return {
     capturedAt,
     snapshots: snapshots.length,
     ranks: ranks.length,
     social: socialSnapshots.length,
-    failures: [...outcomes(allSteps), ...writeOutcomes]
+    ustozActiveUsers: ustoz.activeUsers,
+    ustozRevenueRows: ustoz.revenueRows,
+    failures: all
       .filter((outcome) => outcome.status === "failed")
       .map((outcome) => `${outcome.source}: ${outcome.error}`),
   };

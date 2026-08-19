@@ -97,7 +97,18 @@ export function parseActiveUsers(
     throw new Error("active users: dauStats and mauStats must both be arrays");
   }
 
-  const dau: DauPoint[] = [];
+  /*
+   * Days arrive more than once. Over a nine-month range four dates came back
+   * twice, each as the real figure plus a stray 1 (782 and 1 on 2026-07-13),
+   * which reads as disjoint buckets rather than a restatement, so they are
+   * summed and the error bound is one user.
+   *
+   * What this mainly prevents is worse than an off-by-one. Letting the last
+   * row win would have stored 1 active user for a day with 782, and Postgres
+   * refuses an upsert batch holding the same key twice, so the backfill
+   * failed outright until duplicates were merged here.
+   */
+  const dauByDate = new Map<string, number>();
   for (const entry of dauStats) {
     if (!isRecord(entry)) continue;
     const label = entry.label;
@@ -105,11 +116,18 @@ export function parseActiveUsers(
     // A row we cannot date is dropped on its own; the rest of the response is
     // still good data and discarding all of it would be the worse trade.
     if (typeof label !== "string" || !ISO_DATE.test(label) || count === null) continue;
-    dau.push({ date: label, count });
+    dauByDate.set(label, (dauByDate.get(label) ?? 0) + count);
   }
 
+  const dau: DauPoint[] = [...dauByDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
+
   const monthsInRange = monthsBetween(startDate, endDate);
-  const mau: MauPoint[] = [];
+  // Months are merged on the same rule as days, keyed by the label so an
+  // unrecognised one still collapses with its own duplicates.
+  const mauByLabel = new Map<string, { month: string | null; label: string; count: number }>();
+
   for (const entry of mauStats) {
     if (!isRecord(entry)) continue;
     const label = entry.label;
@@ -125,10 +143,12 @@ export function parseActiveUsers(
         : (monthsInRange.find((candidate) => Number(candidate.slice(5, 7)) === index + 1) ??
           null);
 
-    mau.push({ month, label, count });
+    const existing = mauByLabel.get(label);
+    if (existing) existing.count += count;
+    else mauByLabel.set(label, { month, label, count });
   }
 
-  return { dau, mau };
+  return { dau, mau: [...mauByLabel.values()] };
 }
 
 export interface ViewPoint {

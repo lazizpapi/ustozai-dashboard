@@ -91,6 +91,62 @@ describe("parseActiveUsers", () => {
     ).toThrow();
   });
 
+  it("merges a date the API reports twice", () => {
+    // Observed live over a long range: four days came back twice, each as the
+    // real figure plus a stray 1, for example 782 and 1 on 2026-07-13. They
+    // read as disjoint buckets rather than a restatement, so they are summed.
+    //
+    // The rule that matters more is what this is not. Letting the last row
+    // win would have stored 1 active user for a day with 782, and Postgres
+    // refuses a batch holding the same key twice, so the whole backfill
+    // failed until this was handled.
+    const result = parseActiveUsers(
+      {
+        dauStats: [
+          { label: "2026-07-13", count: 782 },
+          { label: "2026-07-13", count: 1 },
+        ],
+        mauStats: [],
+      },
+      "2026-07-01",
+      "2026-07-31",
+    );
+
+    expect(result.dau).toEqual([{ date: "2026-07-13", count: 783 }]);
+  });
+
+  it("merges a month the API reports twice", () => {
+    const result = parseActiveUsers(
+      {
+        dauStats: [],
+        mauStats: [
+          { label: "Iyul", count: 8000 },
+          { label: "Iyul", count: 5 },
+        ],
+      },
+      "2026-07-01",
+      "2026-07-31",
+    );
+
+    expect(result.mau).toEqual([{ month: "2026-07", label: "Iyul", count: 8005 }]);
+  });
+
+  it("returns days oldest first even when the API interleaves them", () => {
+    const result = parseActiveUsers(
+      {
+        dauStats: [
+          { label: "2026-07-14", count: 2 },
+          { label: "2026-07-13", count: 1 },
+        ],
+        mauStats: [],
+      },
+      "2026-07-01",
+      "2026-07-31",
+    );
+
+    expect(result.dau.map((point) => point.date)).toEqual(["2026-07-13", "2026-07-14"]);
+  });
+
   it("drops a row with an unusable date rather than the whole response", () => {
     const result = parseActiveUsers(
       { dauStats: [{ label: "not-a-date", count: 5 }, { label: "2026-08-18", count: 9 }], mauStats: [] },

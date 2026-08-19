@@ -387,3 +387,96 @@ export async function recordRuns(outcomes: RunOutcome[]): Promise<void> {
   // A failure to log a failure must not mask the original failure.
   if (error) console.error("could not record collector runs:", error.message);
 }
+
+// ---------------------------------------------------------------------------
+// UstozAI's own product and business metrics
+// ---------------------------------------------------------------------------
+
+/**
+ * Daily and monthly active users, from the admin API.
+ *
+ * MAU is a monthly figure, so every day inside a month carries that month's
+ * value. That is what makes a DAU/MAU stickiness ratio computable per day
+ * without joining across tables, and it is how the figure is read anyway:
+ * "of the people active this month, how many came back today".
+ */
+export async function saveActiveUsers(
+  dau: { date: string; count: number }[],
+  mau: { month: string | null; count: number }[],
+): Promise<number> {
+  if (dau.length === 0) return 0;
+
+  const byMonth = new Map(
+    mau.filter((entry) => entry.month !== null).map((entry) => [entry.month!, entry.count]),
+  );
+
+  const rows = dau.map((point) => ({
+    date: point.date,
+    platform: "all",
+    dau: point.count,
+    // No weekly bucket exists upstream. Null says so; zero would claim a week
+    // in which nobody opened the app.
+    wau: null,
+    mau: byMonth.get(point.date.slice(0, 7)) ?? null,
+    received_at: new Date().toISOString(),
+  }));
+
+  const { error } = await serviceClient()
+    .from("active_users_daily")
+    .upsert(rows, { onConflict: "date,platform" });
+  if (error) throw new Error(`saveActiveUsers: ${error.message}`);
+  return rows.length;
+}
+
+/**
+ * Views, logins and average session length.
+ *
+ * Each field is written only when present, so a day that already has views
+ * does not lose them because the visit-summary call failed on a later run.
+ */
+export async function saveEngagement(
+  rows: {
+    date: string;
+    views?: number | null;
+    totalLogins?: number | null;
+    averageMinutes?: number | null;
+  }[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const merged = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const existing = merged.get(row.date) ?? { date: row.date };
+    if (row.views !== undefined && row.views !== null) existing.views = row.views;
+    if (row.totalLogins !== undefined && row.totalLogins !== null) {
+      existing.total_logins = row.totalLogins;
+    }
+    if (row.averageMinutes !== undefined && row.averageMinutes !== null) {
+      existing.average_minutes = row.averageMinutes;
+    }
+    existing.collected_at = new Date().toISOString();
+    merged.set(row.date, existing);
+  }
+
+  const { error } = await serviceClient()
+    .from("app_engagement_daily")
+    .upsert([...merged.values()], { onConflict: "date" });
+  if (error) throw new Error(`saveEngagement: ${error.message}`);
+  return merged.size;
+}
+
+/** Takings per day per provider, including the reported day total. */
+export async function saveRevenue(
+  rows: { date: string; provider: string; amount: number; transactions: number }[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const { error } = await serviceClient()
+    .from("revenue_daily")
+    .upsert(
+      rows.map((row) => ({ ...row, collected_at: new Date().toISOString() })),
+      { onConflict: "date,provider" },
+    );
+  if (error) throw new Error(`saveRevenue: ${error.message}`);
+  return rows.length;
+}
