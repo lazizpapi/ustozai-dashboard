@@ -38,8 +38,8 @@ import type { GrowthPoint, Period } from "@/lib/growth";
  */
 
 const config = {
-  complete: { label: "Net change", color: "var(--series-ios)" },
-  partial: { label: "In progress", color: "var(--series-ios)" },
+  complete: { label: "Net change", color: "var(--chart-line)" },
+  partial: { label: "In progress", color: "var(--chart-line)" },
 } satisfies ChartConfig;
 
 /**

@@ -16,7 +16,7 @@ const escape = (value: string) =>
 
 const BADGE = { green: "🟢", yellow: "🟡", red: "🔴" } as const;
 
-const ARROW = { up: "▲", down: "▼", flat: "—" } as const;
+const ARROW = { up: "▲", down: "▼", flat: "=" } as const;
 
 /** Trims a single field so one runaway value cannot crowd out every section. */
 const cap = (value: string, max: number) =>

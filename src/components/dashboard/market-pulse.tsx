@@ -26,7 +26,7 @@ export function MarketPulse({ chart }: { chart: ReturnType<typeof chartMovers> }
   const ahead = ourIndex > 0 ? movers[ourIndex - 1] : null;
 
   return (
-    <div className="text-muted-foreground flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b pb-3 text-xs">
+    <div className="bg-card text-muted-foreground flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-lg border px-4 py-3 text-xs">
       <span>
         <span className="text-foreground font-medium">#{ours.rank}</span> in
         Education

@@ -5,6 +5,7 @@ import { ChatDock } from "@/components/dashboard/chat-dock";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import { currentRole } from "@/app/load";
 import { signOut } from "@/app/login/actions";
+import { NavTabs } from "@/components/dashboard/nav-tabs";
 import { navFor } from "@/lib/roles";
 
 /**
@@ -31,7 +32,7 @@ export default async function AppLayout({ children }: LayoutProps<"/"> ) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-[1400px] flex-col px-5 sm:px-8">
       {/* Single line at desktop, well under the 80px cap. */}
-      <header className="flex h-16 shrink-0 items-center gap-6 border-b">
+      <header className="flex h-14 shrink-0 items-center gap-6 border-b">
         {/* The real app icon rather than a plain wordmark. Stored locally
             rather than hot-linked from Apple's CDN, which is not a contract
             they offer and would break the header if it moved. */}
@@ -47,19 +48,7 @@ export default async function AppLayout({ children }: LayoutProps<"/"> ) {
           Ustoz AI
         </Link>
 
-        {signedIn ? (
-          <nav className="flex items-center gap-4 overflow-x-auto text-sm">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="text-muted-foreground hover:text-foreground whitespace-nowrap transition-colors"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-        ) : null}
+        {signedIn ? <NavTabs items={nav} /> : null}
 
         <div className="ml-auto flex items-center gap-2">
           {signedIn ? (

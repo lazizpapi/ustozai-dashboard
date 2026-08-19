@@ -1,5 +1,5 @@
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
-import { delta, formatDay, formatNumber, timeAgo } from "@/lib/format";
+import { delta, formatDay, formatNumber, timeAgo, NO_VALUE} from "@/lib/format";
 import type {
   ActiveUsers,
   EngagementSummary,
@@ -33,7 +33,7 @@ interface Props {
 export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
   if (!active) {
     return (
-      <div className="border-b pb-3">
+      <div className="bg-card rounded-lg border p-4">
         <h2 className="mb-1 text-sm font-medium">Product and revenue</h2>
         <p className="text-muted-foreground text-xs leading-relaxed">
           Nothing collected yet. No store API reports active users, session
@@ -45,8 +45,8 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
   }
 
   return (
-    <section>
-      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b pb-2">
+    <section className="space-y-0">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-sm font-medium">Product and revenue</h2>
         <span className="text-muted-foreground text-xs">
           {/*
@@ -68,7 +68,7 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
         />
         <Metric
           label="Views, daily"
-          value={engagement?.views == null ? "—" : formatNumber(engagement.views)}
+          value={engagement?.views == null ? NO_VALUE : formatNumber(engagement.views)}
           detail="not active users, an order of magnitude larger"
           change={delta(
             engagement?.views ?? null,
@@ -80,7 +80,7 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
           label="Average session"
           value={
             engagement?.averageMinutes == null
-              ? "—"
+              ? NO_VALUE
               : `${engagement.averageMinutes.toFixed(1)}m`
           }
           detail={
@@ -94,7 +94,7 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
         <Metric
           href="/business"
           label="Takings, latest day"
-          value={revenue?.latest ? formatNumber(revenue.latest.amount) : "—"}
+          value={revenue?.latest ? formatNumber(revenue.latest.amount) : NO_VALUE}
           detail={
             revenue?.latest
               ? `${formatNumber(revenue.latest.transactions)} transactions`
@@ -110,12 +110,12 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
         <Metric
           href="/business"
           label="Takings, 30 days"
-          value={revenue ? formatNumber(revenue.windowTotal) : "—"}
+          value={revenue ? formatNumber(revenue.windowTotal) : NO_VALUE}
           detail="as the payment API reports it"
         />
         <Metric
           label="Top provider"
-          value={revenue?.byProvider[0]?.provider ?? "—"}
+          value={revenue?.byProvider[0]?.provider ?? NO_VALUE}
           detail={
             revenue && revenue.byProvider.length > 1
               ? `${revenue.byProvider.length} providers taking payment`

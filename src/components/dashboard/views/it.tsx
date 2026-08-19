@@ -1,10 +1,11 @@
 import { AlertTriangle, Check, CircleSlash } from "lucide-react";
 
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
+import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { collectorHealth, recentAnalystRuns, type SourceHealth } from "@/lib/db/queries";
-import { timeAgo } from "@/lib/format";
+import { timeAgo, NO_VALUE} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -68,7 +69,7 @@ export async function ItView() {
       <MetricStrip>
         <Metric
           label="Sources healthy"
-          value={health.length === 0 ? "—" : `${health.length - failing.length}/${health.length}`}
+          value={health.length === 0 ? NO_VALUE : `${health.length - failing.length}/${health.length}`}
           detail={
             health.length === 0
               ? "nothing has run yet"
@@ -80,7 +81,7 @@ export async function ItView() {
 
         <Metric
           label="Last collection"
-          value={newest ? timeAgo(newest) : "—"}
+          value={newest ? timeAgo(newest) : NO_VALUE}
           detail={newest ? "across all sources" : undefined}
         />
 
@@ -93,28 +94,21 @@ export async function ItView() {
                 : lastRun.status === "stale-data"
                   ? "skipped"
                   : "failed"
-              : "—"
+              : NO_VALUE
           }
           detail={lastRun ? timeAgo(lastRun.createdAt) : "has not run yet"}
         />
 
         <Metric
           label="Failed runs"
-          value={runs.length === 0 ? "—" : String(failedRuns)}
+          value={runs.length === 0 ? NO_VALUE : String(failedRuns)}
           detail={runs.length === 0 ? undefined : `of the last ${runs.length}`}
         />
       </MetricStrip>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">Collectors</h2>
-            <span className="text-muted-foreground text-xs">
-              {failing.length === 0 ? "all reporting" : "needing attention first"}
-            </span>
-          </div>
-
-          {health.length === 0 ? (
+        <Section title="Collectors" note={failing.length === 0 ? "all reporting" : "needing attention first"}>
+{health.length === 0 ? (
             <p className="text-muted-foreground text-sm">No collector has run yet.</p>
           ) : (
             <ul className="divide-y">
@@ -137,15 +131,10 @@ export async function ItView() {
               ))}
             </ul>
           )}
-        </section>
+        </Section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">Analyst runs</h2>
-            <span className="text-muted-foreground text-xs">newest first</span>
-          </div>
-
-          {runs.length === 0 ? (
+        <Section title="Analyst runs" note="newest first">
+{runs.length === 0 ? (
             <p className="text-muted-foreground text-xs leading-relaxed">
               The analyst has not run yet. It is scheduled each morning after
               the daily collection.
@@ -173,7 +162,7 @@ export async function ItView() {
               ))}
             </ul>
           )}
-        </section>
+        </Section>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { recentReviews } from "@/lib/db/queries";
-import { formatDay, formatNumber, formatRating, reviewSource } from "@/lib/format";
+import { formatDay, formatNumber, formatRating, reviewSource, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +43,7 @@ export default async function ReviewsPage() {
         />
         <Metric
           label="Newest"
-          value={reviews[0]?.submittedAt ? formatDay(reviews[0].submittedAt) : "—"}
+          value={reviews[0]?.submittedAt ? formatDay(reviews[0].submittedAt) : NO_VALUE}
         />
       </MetricStrip>
 

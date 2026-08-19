@@ -21,9 +21,11 @@ import type { DailyDownloads, DailyInstalls } from "@/lib/db/queries";
  * than anything in the data. Both series are counts of the same thing, so they
  * share a scale honestly.
  *
- * The two hues are slots 1 and 2 of a validated categorical palette, checked
- * against this exact surface in both themes. A legend is always present, since
- * identity must never rest on colour alone.
+ * The two series are the accent and grey rather than two hues. The dashboard
+ * runs on one accent now, so App Store takes it and Play takes the neutral.
+ * That reads as a hierarchy the data does not have, which is exactly why the
+ * legend below the chart is not optional: identity rests on the label, never
+ * on the colour. It was already there, and it is now load-bearing.
  *
  * The two numbers are not quite the same measurement and the caption says so:
  * Apple reports first-time downloads for a day, while the Android figure is the
@@ -31,8 +33,8 @@ import type { DailyDownloads, DailyInstalls } from "@/lib/db/queries";
  */
 
 const config = {
-  ios: { label: "App Store", color: "var(--series-ios)" },
-  android: { label: "Google Play", color: "var(--series-android)" },
+  ios: { label: "App Store", color: "var(--chart-line)" },
+  android: { label: "Google Play", color: "var(--chart-line-secondary)" },
 } satisfies ChartConfig;
 
 interface DownloadsChartProps {

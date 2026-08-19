@@ -10,6 +10,7 @@ import {
   formatRatingDelta,
   rankDelta,
   timeAgo,
+  NO_VALUE,
 } from "./format";
 
 describe("formatPercent", () => {
@@ -27,13 +28,13 @@ describe("formatPercent", () => {
     // A stage with an empty stage above it has no rate. Printing 0.0% would
     // read as "nobody converted" when the truth is "there was nothing to
     // convert yet", which is the opposite conclusion.
-    expect(formatPercent(0, 0)).toBe("—");
-    expect(formatPercent(5, 0)).toBe("—");
+    expect(formatPercent(0, 0)).toBe(NO_VALUE);
+    expect(formatPercent(5, 0)).toBe(NO_VALUE);
   });
 
   it("returns a dash for missing figures rather than NaN", () => {
-    expect(formatPercent(null, 100)).toBe("—");
-    expect(formatPercent(10, null)).toBe("—");
+    expect(formatPercent(null, 100)).toBe(NO_VALUE);
+    expect(formatPercent(10, null)).toBe(NO_VALUE);
   });
 
   it("handles a rate of zero from a real denominator", () => {
@@ -121,8 +122,8 @@ describe("formatRatingDelta", () => {
 
 describe("value formatting", () => {
   it("renders missing values as a dash, never as zero", () => {
-    expect(formatRating(null)).toBe("—");
-    expect(formatRank(null)).toBe("—");
+    expect(formatRating(null)).toBe(NO_VALUE);
+    expect(formatRank(null)).toBe(NO_VALUE);
   });
 
   it("prefixes ranks with a hash", () => {

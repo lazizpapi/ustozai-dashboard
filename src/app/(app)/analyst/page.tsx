@@ -30,9 +30,9 @@ function HealthDot({ health }: { health: NonNullable<AnalystRow["health"]> }) {
     <span
       className={cn(
         "inline-block size-2 rounded-full",
-        health === "green" && "bg-emerald-500",
-        health === "yellow" && "bg-amber-500",
-        health === "red" && "bg-rose-500",
+        health === "green" && "bg-status-ok",
+        health === "yellow" && "bg-status-warn",
+        health === "red" && "bg-status-critical",
       )}
       aria-hidden
     />

@@ -85,7 +85,8 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  /* Vercel's 6px corner, applied to every rounded surface. */
+  --radius: 0.375rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -131,46 +132,93 @@
 }
 
 /* ---------------------------------------------------------------------------
- * UstozAI dashboard overrides
+ * UstozAI dashboard: Vercel-derived design tokens
  *
- * Three decisions are encoded here.
+ * The team asked for Vercel's look, in Vercel's fonts, in both modes. Geist
+ * Sans and Geist Mono were already loading through next/font, so what moved
+ * is the palette, the surfaces, the radius and the meaning of colour.
  *
- * 1. The dark surface is the app icon's own ground. Ustoz AI's mark is a white
- *    glyph on a near-black slate navy, so the dashboard sits on the same
- *    colour rather than a generic neutral grey.
+ * Four decisions, three of which reverse an earlier one. Each is deliberate.
  *
- * 2. Colour is reserved for data. The brand supplies no chromatic accent, and
- *    in a dashboard where blue means iOS and orange means Android, a third
- *    decorative accent would compete with meaning. Chrome is ink, hairlines
- *    and surface; the only colours on screen carry information.
+ * 1. Pure black is the dark ground. It replaces the app icon's slate navy
+ *    (#171b26). Reaching for #000 is normally an anti-pattern because it
+ *    kills depth, and depth here is carried by the card surface sitting one
+ *    step above the page (#0a0a0a on #000) rather than by the page itself.
+ *    Vercel's dark mode is pure black; asking for their branding and then
+ *    softening the one colour everyone recognises would miss the point.
  *
- * 3. The two series colours are not a taste call. They are slots 1 and 2 of a
- *    validated categorical palette, checked against these exact surfaces:
- *    worst-pair CVD separation ΔE 26.8 dark and 24.7 light against a ≥8 target,
- *    normal-vision ΔE 31.8 and 33.6 against a ≥15 floor, both above 3:1
- *    contrast. Changing either value means re-running that validation.
+ * 2. Colour no longer means platform. Blue used to mean iOS and orange
+ *    Android across every chart. Vercel charts one accent on grey, so the
+ *    accent now means "the series being asked about" and grey means
+ *    everything else. Platform identity moves entirely onto labels and the
+ *    real brand logos, which already carried it everywhere except the
+ *    downloads chart, and that one gained a legend in the same change.
+ *
+ * 3. Sections became cards. The old rule was hairlines over cards, on the
+ *    grounds that boxes waste the space that makes figures comparable. That
+ *    is true of a metric strip and false of a whole page: Vercel's dashboard
+ *    language is a bordered card per section, and at this density the border
+ *    is what stops eleven sections reading as one scroll.
+ *
+ * 4. One accent, one radius. #0070f3 in light and #52a8ff in dark, and 6px
+ *    corners everywhere. Both are Vercel's own values rather than a nearby
+ *    approximation.
  * ------------------------------------------------------------------------ */
 
 :root,
 .light {
+  /* Vercel light: the page is off-white, cards are true white above it. */
+  --background: #fafafa;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #171717;
+  --muted: #f2f2f2;
+  --muted-foreground: #666666;
+  --accent: #f2f2f2;
+  --accent-foreground: #171717;
+  --border: #eaeaea;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #171717;
+  --sidebar-border: #eaeaea;
+
   --surface-viz: #ffffff;
-  --series-ios: #2a78d6;
-  --series-android: #eb6834;
-  --status-critical: #e34948;
+
+  /*
+   * The one accent, used for the series a page is about and for nothing
+   * decorative. Measured against the card it sits on rather than estimated:
+   * 4.55:1, which clears the 3:1 minimum for a graphical object and the
+   * 4.5:1 minimum for text, so the same value can carry a link and a stroke.
+   */
+  --chart-line: #0070f3;
+  /* Everything that is not the subject. 3.23:1 on the card, above the 3:1
+   * floor for a chart stroke and never used for text. */
+  --chart-line-secondary: #8f8f8f;
+
+  /* Vercel's status triple. Used only where a state is genuinely being
+   * reported, never as decoration. */
+  --status-ok: #45a557;
+  --status-warn: #b26c00;
+  /* Vercel's darker red rather than its mid tone. The mid tone measured
+   * 3.91:1, fine behind an icon and short of the 4.5:1 that the wall
+   * display's failure line needs as text. */
+  --status-critical: #cd2b31;
 
   /*
    * Competitor lines on the rank race chart.
    *
-   * Neutral by design, and it follows from rule 2 above. Five rivals cannot
-   * each take a hue without inventing five new meanings for colour on a
-   * dashboard where colour already means iOS or Android. They separate by
-   * lightness instead, which leaves ours as the only chromatic line on the
-   * chart. That is also the hierarchy the page wants: the question is where
-   * we stand against them, so our line should be the one that reads first.
+   * Neutral by design, and now doubly so: with a single accent, grey is what
+   * every non-subject series is. Ours stays the only blue line, which is the
+   * hierarchy the page wants, since the question is where we sit among them.
    *
-   * The ramp stops at 0.62 rather than fading toward the page, because that
-   * is roughly where a hairline stroke drops under 3:1 against white and a
-   * competitor would look absent rather than trailing.
+   * The ramp stops at 0.62 because that is roughly where a hairline stroke
+   * drops under 3:1 against white and a competitor reads as absent rather
+   * than as trailing.
    */
   --rival-1: oklch(0.30 0 0);
   --rival-2: oklch(0.38 0 0);
@@ -183,62 +231,73 @@
    *
    * --input is also the dark-mode field background (dark:bg-input/30), so it
    * cannot be raised to a legible border contrast without lightening the whole
-   * control. This token is the border alone.
-   *
-   * The value is the lightest grey that still clears 3:1 against white, which
-   * is the WCAG minimum for the boundary of a user interface component. The
-   * shadcn default sits at 1.26:1, so the field edge was effectively invisible
-   * until focused. Measured, not eyeballed: #949494 gives 3.03:1.
+   * control. This token is the border alone, and it is the lightest grey that
+   * still clears 3:1 against the card it sits on.
    */
-  --input-line: oklch(0.652 0 0);
+  --input: #eaeaea;
+  --input-line: #8f8f8f;
 
-  /*
-   * Focus colour, raised well clear of the resting border.
-   *
-   * The stock value sat at oklch(0.708), only 1.17:1 away from the resting
-   * border, so the "border changes on focus" signal was invisible and the ring
-   * was carrying the entire indication on its own. That is precisely what makes
-   * a focus state read as a glow rather than as an edge.
-   *
-   * At oklch(0.40) the step from resting to focused is 3.02:1 and the border is
-   * 9.15:1 against the page, so the edge itself announces focus and the ring is
-   * only depth behind it.
-   */
-  --ring: oklch(0.40 0 0);
+  /* Focus. Carries the accent so the focused edge and the series colour are
+   * recognisably the same system. */
+  --ring: #0070f3;
 }
 
 .dark {
-  /* The app icon's ground. */
-  --background: #171b26;
-  --card: #1c2130;
-  --popover: #1c2130;
-  --sidebar: #141822;
-  --border: oklch(1 0 0 / 9%);
-  --sidebar-border: oklch(1 0 0 / 9%);
+  /* Vercel dark: pure black page, cards one step above it. See note 1. */
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --popover: #0a0a0a;
+  --popover-foreground: #ededed;
+  --primary: #ededed;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #1a1a1a;
+  --muted-foreground: #a1a1a1;
+  --accent: #1a1a1a;
+  --accent-foreground: #ededed;
+  /* Solid rather than a white alpha: an alpha border reads at two different
+   * strengths on the page and on a card, and both surfaces are in play. */
+  --border: #262626;
+  --sidebar: #000000;
+  --sidebar-foreground: #ededed;
+  --sidebar-border: #262626;
 
-  --surface-viz: #171b26;
-  /* Same two hues, stepped for the dark surface. Not an automatic flip. */
-  --series-ios: #3987e5;
-  --series-android: #d95926;
-  --status-critical: #e66767;
+  --surface-viz: #0a0a0a;
 
-  /* The same ramp stepped for the dark surface, not an automatic inversion. */
-  --rival-1: oklch(0.87 0 0);
-  --rival-2: oklch(0.79 0 0);
-  --rival-3: oklch(0.71 0 0);
-  --rival-4: oklch(0.63 0 0);
-  --rival-5: oklch(0.55 0 0);
+  /* The same accent stepped for a black ground, not an automatic flip.
+   * Measured 7.92:1 on the card, so it is legible as a stroke and as text. */
+  --chart-line: #52a8ff;
+  --chart-line-secondary: #8f8f8f;
 
-  /* 3.22:1 against #171b26. The stock 15% managed 1.59:1. */
-  --input-line: oklch(1 0 0 / 35%);
+  --status-ok: #62c073;
+  --status-warn: #f7b955;
+  --status-critical: #ff6369;
 
-  /* Step from resting border 3.06:1, and 9.86:1 against the page. */
-  --ring: oklch(0.82 0 0);
+  /* The ramp stepped for the dark surface, not an automatic inversion.
+   * Measured by painting each stroke and reading the pixel back, since the
+   * ramp is authored in oklch and the naive contrast maths gets it wrong:
+   * 17.06, 12.96, 9.55, 6.86 and 4.81 against the card, so the faintest
+   * rival still clears the 3:1 a chart stroke needs. */
+  --rival-1: oklch(0.95 0 0);
+  --rival-2: oklch(0.86 0 0);
+  --rival-3: oklch(0.77 0 0);
+  --rival-4: oklch(0.68 0 0);
+  --rival-5: oklch(0.59 0 0);
+
+  --input: #1a1a1a;
+  --input-line: #4d4d4d;
+
+  --ring: #52a8ff;
 }
 
 @theme inline {
-  --color-series-ios: var(--series-ios);
-  --color-series-android: var(--series-android);
+  --color-chart-line: var(--chart-line);
+  --color-chart-line-secondary: var(--chart-line-secondary);
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
   --color-status-critical: var(--status-critical);
   --color-input-line: var(--input-line);
   --color-rival-1: var(--rival-1);

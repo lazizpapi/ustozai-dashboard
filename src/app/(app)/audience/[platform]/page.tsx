@@ -17,7 +17,7 @@ import {
   type GrowthSeriesKey,
 } from "@/lib/db/queries";
 import { PERIODS, PERIOD_LABELS, toPeriod } from "@/lib/growth";
-import { delta, formatBucket, formatNumber, formatSigned, timeAgo } from "@/lib/format";
+import { delta, formatBucket, formatNumber, formatSigned, timeAgo, NO_VALUE} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -149,7 +149,7 @@ export default async function AudiencePlatformPage({
           label={`Current ${spec.noun}`}
           value={
             trend?.current === null || trend === null
-              ? "—"
+              ? NO_VALUE
               : `${trend.isExact ? "" : "≈"}${formatNumber(trend.current)}`
           }
           detail={trend?.isExact === false ? "rounded by the platform" : undefined}
@@ -157,7 +157,7 @@ export default async function AudiencePlatformPage({
         />
         <Metric
           label="Highest reading held"
-          value={peak === null ? "—" : formatNumber(peak)}
+          value={peak === null ? NO_VALUE : formatNumber(peak)}
           detail={
             peak !== null && trend?.current !== null && trend?.current !== undefined
               ? peak === trend.current
@@ -168,7 +168,7 @@ export default async function AudiencePlatformPage({
         />
         <Metric
           label={`Latest ${PERIOD_LABELS[period].toLowerCase()} change`}
-          value={latestBucket ? formatSigned(latestBucket.value) : "—"}
+          value={latestBucket ? formatSigned(latestBucket.value) : NO_VALUE}
           detail={
             latestBucket
               ? `in the ${formatBucket(latestBucket.bucket, period)} period`
@@ -177,7 +177,7 @@ export default async function AudiencePlatformPage({
         />
         <Metric
           label="Last reached"
-          value={trend?.checkedAt ? timeAgo(trend.checkedAt) : "—"}
+          value={trend?.checkedAt ? timeAgo(trend.checkedAt) : NO_VALUE}
           detail={trend?.isStale ? "older than expected" : "on schedule"}
         />
       </MetricStrip>

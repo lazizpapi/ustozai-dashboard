@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { BrandLogo, type BrandKey } from "@/components/tv/brand-logo";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
+import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
@@ -19,6 +20,7 @@ import {
   formatPercent,
   rankDelta,
   timeAgo,
+  NO_VALUE,
 } from "@/lib/format";
 
 /**
@@ -94,7 +96,7 @@ export async function MarketingView() {
             label={SOCIAL_LABELS[trend.platform]}
             value={
               trend.current === null
-                ? "—"
+                ? NO_VALUE
                 : `${trend.isExact ? "" : "≈"}${formatNumber(trend.current)}`
             }
             detail={trend.isExact ? undefined : "rounded by YouTube"}
@@ -105,7 +107,7 @@ export async function MarketingView() {
 
         <Metric
           label="Keywords ranked"
-          value={keywords.length === 0 ? "—" : `${ranked.length}/${keywords.length}`}
+          value={keywords.length === 0 ? NO_VALUE : `${ranked.length}/${keywords.length}`}
           detail={
             keywords.length === 0
               ? "none tracked yet"
@@ -115,15 +117,8 @@ export async function MarketingView() {
       </MetricStrip>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">App Store discovery</h2>
-            <span className="text-muted-foreground text-xs">
-              {funnel ? `${formatDay(funnel.from)} to ${formatDay(funnel.to)}` : "last 30 days"}
-            </span>
-          </div>
-
-          {funnel ? (
+        <Section title="App Store discovery" note={funnel ? `${formatDay(funnel.from)} to ${formatDay(funnel.to)}` : "last 30 days"}>
+{funnel ? (
             <>
               <dl className="divide-y">
                 {steps.map((step) => (
@@ -160,20 +155,16 @@ export async function MarketingView() {
               analytics report.
             </p>
           )}
-        </section>
+        </Section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">Search positions</h2>
-            <Link
+        <Section title="Search positions">
+  <Link
               href="/keywords"
               className="text-muted-foreground hover:text-foreground text-xs transition-colors"
             >
               All keywords
             </Link>
-          </div>
-
-          {keywords.length === 0 ? (
+{keywords.length === 0 ? (
             <p className="text-muted-foreground text-xs">No keyword readings yet.</p>
           ) : (
             <ul className="divide-y">
@@ -239,7 +230,7 @@ export async function MarketingView() {
               </ul>
             </div>
           ) : null}
-        </section>
+        </Section>
       </div>
     </div>
   );

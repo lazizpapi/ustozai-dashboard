@@ -29,10 +29,10 @@ import type { RankSeriesPoint } from "@/lib/compare";
  * that app was outside the tracked depth, which is a real state and a
  * different claim from "no reading".
  *
- * Ours is the only coloured line. Five rivals cannot each take a hue on a
- * dashboard where colour already means iOS or Android, so they separate by
- * lightness instead. That also puts the emphasis where the page's question
- * is: not who is winning, but where we sit among them.
+ * Ours is the only coloured line. The dashboard runs on a single accent, so
+ * colour means "the series being asked about" and the five rivals separate by
+ * lightness. That is also the hierarchy the page wants: the question is not
+ * who is winning, it is where we sit among them.
  */
 
 /** Competitor strokes, in the order apps arrive. Defined in globals.css. */
@@ -68,7 +68,7 @@ export function MarketRaceChart({ points, apps }: MarketRaceChartProps) {
   const config: ChartConfig = Object.fromEntries(
     ordered.map((app) => {
       const color = app.isOurs
-        ? "var(--series-ios)"
+        ? "var(--chart-line)"
         : RIVAL_COLORS[rivalIndex++ % RIVAL_COLORS.length];
       return [app.slug, { label: app.name, color }];
     }),

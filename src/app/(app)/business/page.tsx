@@ -5,7 +5,7 @@ import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { activeUsersTrend, engagementSummary, revenueSummary } from "@/lib/db/queries";
 import { ustozApiProblem } from "@/lib/env";
-import { delta, formatDay, formatNumber } from "@/lib/format";
+import { delta, formatDay, formatNumber, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -63,7 +63,7 @@ export default async function BusinessPage() {
       <MetricStrip>
         <Metric
           label="Takings, latest day"
-          value={revenue.latest ? formatNumber(revenue.latest.amount) : "—"}
+          value={revenue.latest ? formatNumber(revenue.latest.amount) : NO_VALUE}
           detail={
             revenue.latest
               ? `${formatNumber(revenue.latest.transactions)} transactions`
@@ -79,14 +79,14 @@ export default async function BusinessPage() {
         />
         <Metric
           label="Daily active"
-          value={active?.dau == null ? "—" : formatNumber(active.dau)}
+          value={active?.dau == null ? NO_VALUE : formatNumber(active.dau)}
           detail={active ? `to ${formatDay(active.date)}` : undefined}
         />
         <Metric
           label="Average session"
           value={
             engagement?.averageMinutes === null || engagement === null
-              ? "—"
+              ? NO_VALUE
               : `${engagement.averageMinutes.toFixed(1)}m`
           }
           detail={
@@ -127,7 +127,7 @@ export default async function BusinessPage() {
                         {formatNumber(row.transactions)}
                       </td>
                       <td className="tnum text-muted-foreground px-3 py-2 text-right">
-                        {total > 0 ? `${((row.amount / total) * 100).toFixed(1)}%` : "—"}
+                        {total > 0 ? `${((row.amount / total) * 100).toFixed(1)}%` : NO_VALUE}
                       </td>
                     </tr>
                   );

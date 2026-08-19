@@ -5,6 +5,7 @@ import { BrandLogo, type BrandKey } from "@/components/tv/brand-logo";
 import { MarketPulse } from "@/components/dashboard/market-pulse";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { RankChart } from "@/components/dashboard/rank-chart";
+import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
@@ -32,6 +33,7 @@ import {
   formatRatingDelta,
   rankDelta,
   timeAgo,
+  NO_VALUE,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -55,9 +57,9 @@ const SOCIAL_LABELS = {
 } as const;
 
 const HEALTH_DOT = {
-  green: "bg-emerald-500",
-  yellow: "bg-amber-500",
-  red: "bg-rose-500",
+  green: "bg-status-ok",
+  yellow: "bg-status-warn",
+  red: "bg-status-critical",
 } as const;
 
 export async function CeoView() {
@@ -140,7 +142,7 @@ export async function CeoView() {
               ? formatNumber(installRate.perDay)
               : playToday
                 ? `+${formatNumber(playToday.installs)}`
-                : "—"
+                : NO_VALUE
           }
           detail={
             installRate
@@ -156,7 +158,7 @@ export async function CeoView() {
 
         <Metric
           label="App Store, daily"
-          value={lastDownload ? formatNumber(lastDownload.downloads) : "—"}
+          value={lastDownload ? formatNumber(lastDownload.downloads) : NO_VALUE}
           detail={lastDownload ? undefined : "not connected"}
           asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
         />
@@ -191,7 +193,7 @@ export async function CeoView() {
             label={SOCIAL_LABELS[trend.platform]}
             value={
               trend.current === null
-                ? "—"
+                ? NO_VALUE
                 : `${trend.isExact ? "" : "≈"}${formatNumber(trend.current)}`
             }
             detail={trend.isExact ? undefined : "rounded by YouTube"}
@@ -204,27 +206,17 @@ export async function CeoView() {
       <MarketPulse chart={chart} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">Position over time</h2>
-            <span className="text-muted-foreground text-xs">
-              Education chart, Uzbekistan, iPhone
-            </span>
-          </div>
-          <RankChart points={history} className="h-[300px]" />
-        </section>
+        <Section title="Position over time" note="Education chart, Uzbekistan, iPhone">
+<RankChart points={history} className="h-[300px]" />
+        </Section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">Analyst</h2>
-            {analyst ? (
+        <Section title="Analyst">
+  {analyst ? (
               <span className="text-muted-foreground text-xs">
                 {timeAgo(analyst.createdAt)}
               </span>
             ) : null}
-          </div>
-
-          {report ? (
+{report ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-baseline gap-2">
                 {analyst?.health ? (
@@ -269,7 +261,7 @@ export async function CeoView() {
               collection.
             </p>
           )}
-        </section>
+        </Section>
       </div>
     </div>
   );

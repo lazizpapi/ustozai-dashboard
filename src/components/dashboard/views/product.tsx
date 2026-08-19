@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
+import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { latestInstallRate } from "@/lib/installs";
@@ -17,6 +18,7 @@ import {
   formatRating,
   formatRatingDelta,
   reviewSource,
+  NO_VALUE,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -97,13 +99,13 @@ export async function ProductView() {
 
         <Metric
           label="App Store, daily"
-          value={lastDownload ? formatNumber(lastDownload.downloads) : "—"}
+          value={lastDownload ? formatNumber(lastDownload.downloads) : NO_VALUE}
           asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
         />
 
         <Metric
           label="Play installs, daily"
-          value={installRate ? formatNumber(installRate.perDay) : "—"}
+          value={installRate ? formatNumber(installRate.perDay) : NO_VALUE}
           detail={
             installRate && installRate.spanDays > 1
               ? `over ${installRate.spanDays} days`
@@ -114,17 +116,10 @@ export async function ProductView() {
       </MetricStrip>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">Latest reviews</h2>
-            <span className="text-muted-foreground text-xs">
-              {reviews.length === 0
+        <Section title="Latest reviews" note={reviews.length === 0
                 ? "both stores"
-                : `${unhappy} of the last ${reviews.length} at three stars or below`}
-            </span>
-          </div>
-
-          {reviews.length === 0 ? (
+                : `${unhappy} of the last ${reviews.length} at three stars or below`}>
+{reviews.length === 0 ? (
             <p className="text-muted-foreground text-sm">No reviews collected yet.</p>
           ) : (
             <ul className="divide-y">
@@ -157,20 +152,16 @@ export async function ProductView() {
               ))}
             </ul>
           )}
-        </section>
+        </Section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex shrink-0 items-baseline justify-between gap-4 border-b pb-2">
-            <h2 className="text-sm font-medium">What we shipped</h2>
-            <Link
+        <Section title="What we shipped">
+  <Link
               href="/reviews"
               className="text-muted-foreground hover:text-foreground text-xs transition-colors"
             >
               All reviews
             </Link>
-          </div>
-
-          {ourReleases.length === 0 ? (
+{ourReleases.length === 0 ? (
             <p className="text-muted-foreground text-xs leading-relaxed">
               No release detected yet. A version or release-notes change on
               either store appears here.
@@ -197,7 +188,7 @@ export async function ProductView() {
               ))}
             </ul>
           )}
-        </section>
+        </Section>
       </div>
     </div>
   );

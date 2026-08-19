@@ -15,7 +15,7 @@ import {
   ratingTrend,
   socialTrends,
 } from "@/lib/db/queries";
-import { formatNumber, formatRating, rankDelta, timeAgo } from "@/lib/format";
+import { formatNumber, formatRating, rankDelta, timeAgo, NO_VALUE} from "@/lib/format";
 import { currentTvTheme } from "@/lib/tv-theme";
 
 export const dynamic = "force-dynamic";
@@ -126,7 +126,7 @@ export default async function TvPage() {
                 {rank.current === null
                   ? rank.feedSize
                     ? `>${rank.feedSize}`
-                    : "—"
+                    : NO_VALUE
                   : `#${rank.current}`}
               </span>
               <span className="text-muted-foreground text-[clamp(0.8rem,1.1vw,1.6rem)]">

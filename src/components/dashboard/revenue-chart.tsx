@@ -21,7 +21,7 @@ import { useReducedMotion } from "@/lib/use-reduced-motion";
  */
 
 const config = {
-  amount: { label: "Takings", color: "var(--series-android)" },
+  amount: { label: "Takings", color: "var(--chart-line)" },
 } satisfies ChartConfig;
 
 export function RevenueChart({ points }: { points: { date: string; amount: number }[] }) {

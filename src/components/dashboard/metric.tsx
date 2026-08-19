@@ -5,17 +5,17 @@ import { cn } from "@/lib/utils";
 import type { Delta } from "@/lib/format";
 
 /**
- * One figure in the overview strip.
+ * One figure in the metric strip.
  *
- * Deliberately not a card. At this density a row of rounded boxes is the
- * default dashboard look and it wastes the space that makes numbers
- * comparable; metrics sit in a hairline-divided row instead, which is what the
- * grid in MetricStrip provides.
+ * Not a card of its own. Metrics share a single bordered container and divide
+ * it internally, so the figures stay on one baseline and remain comparable
+ * across the row. A grid of separate boxes buys nothing here and costs the
+ * alignment that makes a strip readable at a glance.
  *
- * Direction is carried by the arrow glyph rather than by red and green. Colour
- * on this page means iOS or Android, and a third meaning for colour would
- * compete with that. The glyph is also legible to anyone who cannot separate
- * the two hues.
+ * Direction is carried by the arrow glyph rather than by red and green. The
+ * dashboard runs on one accent, so a second and third hue for up and down
+ * would be inventing meaning; the glyph also works for anyone who cannot
+ * separate the two colours.
  */
 
 interface MetricProps {
@@ -114,7 +114,7 @@ export function Metric({
     </>
   );
 
-  const shell = "flex flex-col gap-1.5 px-5 py-4 first:pl-0";
+  const shell = "flex flex-col gap-1.5 px-4 py-3.5";
 
   if (!href) return <div className={shell}>{body}</div>;
 
@@ -131,7 +131,7 @@ export function Metric({
 }
 
 /**
- * The hairline row.
+ * The metric strip: one bordered card, divided internally.
  *
  * Collapses to two columns on small screens and one on the narrowest, with the
  * dividers following the wrap so the rhythm survives.
@@ -152,7 +152,7 @@ export function MetricStrip({
   return (
     <div
       className={cn(
-        "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+        "bg-card grid grid-cols-1 overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4",
         "divide-y sm:divide-y-0 sm:divide-x",
         // A border on whatever wrapped onto a new row, per breakpoint.
         "sm:[&>*:nth-child(n+3)]:border-t",

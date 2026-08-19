@@ -29,7 +29,7 @@ import type { VelocityPoint } from "@/lib/compare";
  */
 
 const config = {
-  perDay: { label: "Per day", color: "var(--series-android)" },
+  perDay: { label: "Per day", color: "var(--chart-line)" },
 } satisfies ChartConfig;
 
 interface VelocityChartProps {

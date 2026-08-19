@@ -11,6 +11,17 @@
  * differently and are never collapsed into a 0.
  */
 
+/**
+ * What a figure shows when there is nothing to show.
+ *
+ * Two hyphens rather than an em dash. The em dash is the single most reliable
+ * tell of machine-written interface copy, and in Geist Mono a double hyphen
+ * also reads as deliberately terminal rather than as a typographic flourish.
+ * Every "no reading" in the app resolves here, so the character is decided in
+ * one place instead of being retyped into thirty components.
+ */
+export const NO_VALUE = "--";
+
 export type Direction = "up" | "down" | "flat" | "unknown";
 
 export interface Delta {
@@ -48,17 +59,17 @@ function spanLabel(spanDays: number | null | undefined): string | null {
 const NBSP = " ";
 
 export function formatNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value)) return NO_VALUE;
   return value.toLocaleString("en-US");
 }
 
 export function formatRating(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value)) return NO_VALUE;
   return value.toFixed(2);
 }
 
 export function formatRank(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return NO_VALUE;
   return `#${value}`;
 }
 
@@ -70,11 +81,11 @@ export function formatRank(value: number | null | undefined): string {
  * shortest label that still identifies the bucket.
  */
 export function formatBucket(bucket: string | null | undefined, period: string): string {
-  if (!bucket) return "—";
+  if (!bucket) return NO_VALUE;
   if (period === "year") return bucket.slice(0, 4);
 
   const date = new Date(`${bucket}T12:00:00Z`);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return NO_VALUE;
 
   if (period === "month") {
     return date.toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" });
@@ -85,7 +96,7 @@ export function formatBucket(bucket: string | null | undefined, period: string):
 
 /** Signed, so a net loss reads as one at a glance rather than as a smaller gain. */
 export function formatSigned(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value)) return NO_VALUE;
   return `${value > 0 ? "+" : ""}${value.toLocaleString("en-US")}`;
 }
 
@@ -115,7 +126,7 @@ export function reviewSource(platform: string, country: string): string {
 /**
  * A conversion rate, as a share of a total.
  *
- * Returns the em dash rather than 0% when the denominator is zero. A funnel
+ * Returns the no-value placeholder rather than 0% when the denominator is zero. A funnel
  * stage with nothing above it has no rate at all, and printing "0.0%" would
  * read as "nobody converted" when the truth is "nothing arrived yet".
  *
@@ -125,9 +136,9 @@ export function reviewSource(platform: string, country: string): string {
  */
 export function formatPercent(part: number | null, whole: number | null): string {
   if (part === null || whole === null || !Number.isFinite(part) || !Number.isFinite(whole)) {
-    return "—";
+    return NO_VALUE;
   }
-  if (whole <= 0) return "—";
+  if (whole <= 0) return NO_VALUE;
   return `${((part / whole) * 100).toFixed(1)}%`;
 }
 
@@ -234,9 +245,9 @@ export function timeAgo(iso: string | null | undefined, now = Date.now()): strin
  * no daylight saving, so the day can never roll backwards.
  */
 export function formatDay(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return NO_VALUE;
   const date = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return NO_VALUE;
   return date.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",

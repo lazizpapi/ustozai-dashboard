@@ -9,7 +9,7 @@ import {
   iosDiscoveryFunnel,
   snapshotHistory,
 } from "@/lib/db/queries";
-import { delta, formatDay, formatNumber, formatPercent } from "@/lib/format";
+import { delta, formatDay, formatNumber, formatPercent, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -52,13 +52,13 @@ export default async function DownloadsPage() {
       <MetricStrip>
         <Metric
           label="App Store, last 7 days"
-          value={ios.length ? formatNumber(iosLast7) : "—"}
+          value={ios.length ? formatNumber(iosLast7) : NO_VALUE}
           detail={ios.length ? undefined : "App Store Connect not connected"}
           change={ios.length >= 14 ? delta(iosLast7, iosPrior7) : undefined}
         />
         <Metric
           label="Google Play, last 7 days"
-          value={android.length ? formatNumber(androidLast7) : "—"}
+          value={android.length ? formatNumber(androidLast7) : NO_VALUE}
           detail={android.length ? undefined : "needs two days of snapshots"}
           change={android.length >= 14 ? delta(androidLast7, androidPrior7) : undefined}
         />
@@ -67,7 +67,7 @@ export default async function DownloadsPage() {
           value={
             cumulative?.installCount !== null && cumulative?.installCount !== undefined
               ? formatNumber(cumulative.installCount)
-              : "—"
+              : NO_VALUE
           }
           detail={cumulative?.installLabel ? `Play shows ${cumulative.installLabel}` : undefined}
         />
@@ -78,7 +78,7 @@ export default async function DownloadsPage() {
               ? formatDay(ios.at(-1)!.date)
               : android.at(-1)
                 ? formatDay(android.at(-1)!.date)
-                : "—"
+                : NO_VALUE
           }
           detail="most recent closed day"
         />

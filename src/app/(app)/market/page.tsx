@@ -21,6 +21,7 @@ import {
   formatRating,
   formatSigned,
   rankDelta,
+  NO_VALUE,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +47,7 @@ function Move({ change }: { change: ReturnType<typeof delta> }) {
      * old, we had just started watching it. A dash says nothing, correctly,
      * and the footnote below explains when the column fills in.
      */
-    return <span className="text-muted-foreground/60">—</span>;
+    return <span className="text-muted-foreground/60">{NO_VALUE}</span>;
   }
   if (change.direction === "flat") {
     return (
@@ -72,7 +73,7 @@ function Move({ change }: { change: ReturnType<typeof delta> }) {
  */
 function ChartMove({ value, isNew }: { value: number | null; isNew: boolean }) {
   if (isNew) return <span className="text-muted-foreground/60 text-xs">entered</span>;
-  if (value === null) return <span className="text-muted-foreground/60">—</span>;
+  if (value === null) return <span className="text-muted-foreground/60">{NO_VALUE}</span>;
   if (value === 0) {
     return (
       <span className="text-muted-foreground inline-flex items-center gap-1">
@@ -112,7 +113,7 @@ function Rank({ app }: { app: MarketApp }) {
       </span>
     );
   }
-  return <span className="text-muted-foreground">—</span>;
+  return <span className="text-muted-foreground">{NO_VALUE}</span>;
 }
 
 export default async function MarketPage() {
@@ -243,7 +244,7 @@ export default async function MarketPage() {
                   </td>
                   <td className="tnum px-3 py-2 text-right">
                     {app.playInstallsPerDay === null ? (
-                      <span className="text-muted-foreground/60">—</span>
+                      <span className="text-muted-foreground/60">{NO_VALUE}</span>
                     ) : (
                       formatSigned(app.playInstallsPerDay)
                     )}

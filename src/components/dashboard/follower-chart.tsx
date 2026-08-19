@@ -34,7 +34,7 @@ import type { FollowerPoint } from "@/lib/db/queries";
  */
 
 const config = {
-  followers: { label: "Followers", color: "var(--series-ios)" },
+  followers: { label: "Followers", color: "var(--chart-line)" },
 } satisfies ChartConfig;
 
 interface FollowerChartProps {

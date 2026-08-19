@@ -140,7 +140,7 @@ export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
   {
     name: "get_growth",
     description:
-      "Net change per period for one series — how much was gained or lost each " +
+      "Net change per period for one series: how much was gained or lost each " +
       "day, week, month or year. Use for trend and 'how fast are we growing' " +
       "questions rather than for current totals.",
     type: "function",

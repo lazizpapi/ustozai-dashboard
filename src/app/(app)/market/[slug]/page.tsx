@@ -9,7 +9,7 @@ import { VelocityChart } from "@/components/dashboard/velocity-chart";
 import { load } from "@/app/load";
 import { competitorProfile } from "@/lib/db/queries";
 import { COMPETITORS } from "@/lib/collectors/config";
-import { formatDay, formatNumber, formatRating, formatSigned } from "@/lib/format";
+import { formatDay, formatNumber, formatRating, formatSigned, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +138,7 @@ export default async function CompetitorPage({
       <MetricStrip>
         <Metric
           label="Play installs / day"
-          value={installRate === null ? "—" : formatSigned(installRate)}
+          value={installRate === null ? NO_VALUE : formatSigned(installRate)}
           detail={installRate === null ? "needs two days of readings" : "recent average"}
         />
         <Metric
@@ -173,7 +173,6 @@ export default async function CompetitorPage({
         <VelocityChart
           points={app.playVelocity}
           noun="installs"
-          color="var(--series-android)"
           emptyNote="Not enough Play readings yet. Two days of history draws the first point."
         />
       </Section>
@@ -185,7 +184,6 @@ export default async function CompetitorPage({
         <VelocityChart
           points={app.iosRatingVelocity}
           noun="ratings"
-          color="var(--series-ios)"
           emptyNote="Not enough App Store readings yet."
         />
         <p className="text-muted-foreground mt-2 max-w-2xl text-xs leading-relaxed">

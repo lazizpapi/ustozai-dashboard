@@ -28,7 +28,7 @@ import type { RankPoint } from "@/lib/db/queries";
  */
 
 const config = {
-  rank: { label: "Rank", color: "var(--series-ios)" },
+  rank: { label: "Rank", color: "var(--chart-line)" },
 } satisfies ChartConfig;
 
 interface RankChartProps {
