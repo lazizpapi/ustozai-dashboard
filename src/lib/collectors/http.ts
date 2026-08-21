@@ -9,8 +9,50 @@
  * are no reviews".
  */
 
-const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_ATTEMPTS = 3;
+export const DEFAULT_TIMEOUT_MS = 15_000;
+export const DEFAULT_ATTEMPTS = 3;
+export const DEFAULT_EMPTY_ATTEMPTS = 3;
+
+/** Backoff between HTTP attempts: 500ms, doubling. */
+export const httpBackoffMs = (attempt: number) => 500 * 2 ** (attempt - 1);
+
+/** Backoff between empty-feed attempts: 750ms, growing linearly. */
+export const emptyBackoffMs = (attempt: number) => 750 * attempt;
+
+/**
+ * What a retry policy costs when everything times out.
+ *
+ * These exist because the numbers below are individually reasonable and
+ * multiply into something that is not. Three empty-feed attempts each wrapping
+ * three fifteen second HTTP attempts is 141,750ms, and the five-minute pulse
+ * that called it had a thirty second ceiling. Nothing in the code multiplied
+ * that out, so the only place it was visible was the platform killing the
+ * function.
+ *
+ * Exported and pure so a caller with a deadline can assert it fits inside one,
+ * which `pulse.test.ts` does. Both are worst cases: the ordinary path returns
+ * on the first attempt and costs one round trip.
+ */
+export function worstCaseFetchMs(budget: RetryBudget = {}): number {
+  const attempts = budget.attempts ?? DEFAULT_ATTEMPTS;
+  const timeoutMs = budget.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  let total = attempts * timeoutMs;
+  for (let attempt = 1; attempt < attempts; attempt += 1) {
+    total += httpBackoffMs(attempt);
+  }
+  return total;
+}
+
+export function worstCaseEmptyRetryMs(budget: EmptyRetryBudget = {}): number {
+  const emptyAttempts = budget.emptyAttempts ?? DEFAULT_EMPTY_ATTEMPTS;
+
+  let total = emptyAttempts * worstCaseFetchMs(budget);
+  for (let attempt = 1; attempt < emptyAttempts; attempt += 1) {
+    total += emptyBackoffMs(attempt);
+  }
+  return total;
+}
 
 /** Play serves a different payload to clients it does not recognise. */
 const BROWSER_UA =
@@ -27,9 +69,18 @@ export class HttpError extends Error {
   }
 }
 
-interface FetchOptions {
+/** How long one URL may take before it gives up. */
+export interface RetryBudget {
   attempts?: number;
   timeoutMs?: number;
+}
+
+/** The same, for a feed that also retries a successful-but-empty response. */
+export interface EmptyRetryBudget extends RetryBudget {
+  emptyAttempts?: number;
+}
+
+interface FetchOptions extends RetryBudget {
   browserUa?: boolean;
   /**
    * Status codes to surface as a null result rather than an error. App Store
@@ -91,7 +142,7 @@ export async function fetchText(
       }
       lastError = error;
     }
-    if (attempt < attempts) await sleep(500 * 2 ** (attempt - 1));
+    if (attempt < attempts) await sleep(httpBackoffMs(attempt));
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
@@ -121,13 +172,13 @@ export async function fetchJson<T = unknown>(
  */
 export async function retryWhileEmpty<T>(
   attempt: () => Promise<T[]>,
-  attempts = 3,
+  attempts = DEFAULT_EMPTY_ATTEMPTS,
 ): Promise<T[]> {
   let result: T[] = [];
   for (let i = 1; i <= attempts; i += 1) {
     result = await attempt();
     if (result.length > 0) return result;
-    if (i < attempts) await sleep(750 * i);
+    if (i < attempts) await sleep(emptyBackoffMs(i));
   }
   return result;
 }

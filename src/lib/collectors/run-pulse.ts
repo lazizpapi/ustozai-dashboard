@@ -38,7 +38,26 @@ export interface PulseOptions {
    * to somebody loading a page.
    */
   includeReviews?: boolean;
+  /**
+   * Overall wall-clock budget, after which the run returns what it has.
+   *
+   * Only the cron caller sets this, because only it runs against a platform
+   * ceiling that would otherwise kill the function mid-flight and discard the
+   * response body. The render-time path in freshen.ts is already bounded by
+   * its own race and leaves this unset.
+   */
+  deadlineMs?: number;
 }
+
+/**
+ * How long the scheduled pulse may run before it reports back regardless.
+ *
+ * Comfortably under the route's maxDuration of 30, so the run is always the
+ * one that decides to stop. A platform kill returns no body at all, and the
+ * body is what pg_net stores in net._http_response — the documented first
+ * place to look when the wall goes stale.
+ */
+export const PULSE_DEADLINE_MS = 25_000;
 
 export interface PulseSummary {
   platforms: SocialPlatform[];
@@ -96,6 +115,18 @@ function message(error: unknown): string {
 }
 
 /**
+ * A timer that can be cancelled, so a run that finishes early does not leave a
+ * live handle behind holding the function open.
+ */
+function deadline(ms: number): { reached: Promise<true>; cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout>;
+  const reached = new Promise<true>((resolve) => {
+    timer = setTimeout(() => resolve(true), ms);
+  });
+  return { reached, cancel: () => clearTimeout(timer) };
+}
+
+/**
  * Deliberately does not write to collector_runs.
  *
  * The health panel shows the most recent run per source, so a source that
@@ -138,13 +169,36 @@ export async function runPulse(options: PulseOptions = {}): Promise<PulseSummary
   });
 
   /*
+   * The audience write is chained onto the audience reads alone, never onto
+   * the reviews below.
+   *
+   * Waiting for everything before writing anything is what made a slow Apple
+   * feed cost audience data: the Telegram count was already in hand when the
+   * platform killed the function at thirty seconds, and it died in memory
+   * having never been written. Persisting as soon as the reads settle means a
+   * later timeout can cost the reviews, which the hourly walk re-collects, and
+   * not the counts, which nothing can recover for a moment that has passed.
+   *
+   * One platform failing must still not discard another's good reading.
+   */
+  let written = 0;
+  const audiencePhase = Promise.all(reads).then(async () => {
+    if (snapshots.length === 0) return;
+    try {
+      written = await saveSocialSnapshots(snapshots, hourBucket());
+    } catch (error) {
+      failures.push(`persist: ${message(error)}`);
+    }
+  });
+
+  /*
    * Reviews run alongside the audience reads rather than after them. They are
    * independent sources, and the review fetch retries on an empty feed, so
    * sequencing it would put that retry backoff in front of a Telegram count
    * that was already in hand.
    */
   let reviews = 0;
-  const reviewRead = includeReviews
+  const reviewPhase = includeReviews
     ? (async () => {
         try {
           reviews = await saveReviews(await fetchLatestReviews("uz"));
@@ -154,15 +208,35 @@ export async function runPulse(options: PulseOptions = {}): Promise<PulseSummary
       })()
     : Promise.resolve();
 
-  await Promise.all([...reads, reviewRead]);
+  /*
+   * Neither phase above rejects; they record their own failures. The catch is
+   * for the case that is not supposed to happen, and it must be here rather
+   * than left to the caller: once the deadline below wins the race, nothing is
+   * awaiting this promise any more, and a late rejection with no handler takes
+   * the whole function down instead of the one source that broke.
+   *
+   * Recording it also fits the route's convention better than throwing did. A
+   * run that got partway through has happened, and a non-2xx there is supposed
+   * to mean the run could not happen at all.
+   */
+  const work = Promise.all([audiencePhase, reviewPhase]).catch((error) => {
+    failures.push(`pulse: ${message(error)}`);
+  });
 
-  // One platform failing must not discard another's good reading.
-  let written = 0;
-  if (snapshots.length > 0) {
+  /*
+   * Returning a partial summary beats being killed holding a complete one.
+   * Every count above is a closure variable, so whatever landed before the
+   * deadline is already reflected in what is returned.
+   */
+  if (options.deadlineMs === undefined) {
+    await work;
+  } else {
+    const timer = deadline(options.deadlineMs);
     try {
-      written = await saveSocialSnapshots(snapshots, hourBucket());
-    } catch (error) {
-      failures.push(`persist: ${message(error)}`);
+      const timedOut = await Promise.race([work.then(() => false), timer.reached]);
+      if (timedOut) failures.push("pulse: deadline exceeded");
+    } finally {
+      timer.cancel();
     }
   }
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { pulseHasWork, pulsePlatforms } from "./run-pulse";
+import { PULSE_DEADLINE_MS, pulseHasWork, pulsePlatforms } from "./run-pulse";
+import { PULSE_REVIEW_FETCH } from "./itunes-reviews";
+import { worstCaseEmptyRetryMs } from "./http";
+import { maxDuration } from "@/app/api/cron/pulse/route";
 import { isDue, PULSE_MAX_AGE_MS } from "./freshen";
 import { audienceIsLive } from "@/components/tv/live-dot";
 import type { SocialConfig } from "@/lib/env";
@@ -134,5 +137,33 @@ describe("audienceIsLive", () => {
       platform: "youtube",
     };
     expect(audienceIsLive([youtube, trend(new Date(now - 20_000).toISOString())], now)).toBe(true);
+  });
+});
+
+/**
+ * The ceiling the pulse has to fit inside.
+ *
+ * The route was being killed by the platform seventeen times a week because
+ * its review fetch could run for over two minutes inside a thirty second
+ * function. Each of these numbers was defensible alone; only their product was
+ * wrong, and nothing in the code multiplied it out.
+ *
+ * maxDuration is read from the route module itself rather than repeated here,
+ * so raising the ceiling can never quietly invalidate the budget below it.
+ */
+describe("the pulse's time budget", () => {
+  it("finishes its review fetch well inside the deadline", () => {
+    expect(worstCaseEmptyRetryMs(PULSE_REVIEW_FETCH)).toBe(17_750);
+    expect(worstCaseEmptyRetryMs(PULSE_REVIEW_FETCH)).toBeLessThan(PULSE_DEADLINE_MS);
+  });
+
+  it("gives up before the platform gives up on it", () => {
+    // The route must return its own body, listing what failed, rather than
+    // being killed mid-flight and leaving an opaque timeout behind.
+    expect(PULSE_DEADLINE_MS).toBeLessThan(maxDuration * 1000);
+  });
+
+  it("would not fit at the shared defaults, which is the bug this pins", () => {
+    expect(worstCaseEmptyRetryMs()).toBeGreaterThan(maxDuration * 1000);
   });
 });

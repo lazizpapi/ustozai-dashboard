@@ -11,7 +11,12 @@
  * outright, so REVIEW_PAGES caps the walk and the daily cadence catches the rest.
  */
 
-import { fetchJson, retryWhileEmpty } from "./http";
+import {
+  fetchJson,
+  retryWhileEmpty,
+  type EmptyRetryBudget,
+  type RetryBudget,
+} from "./http";
 import { IOS_APP_ID, REVIEW_PAGES } from "./config";
 import { ParseError, type Review } from "./types";
 
@@ -86,13 +91,36 @@ async function fetchReviewPage(
   page: number,
   country: string,
   appId: string,
+  budget: RetryBudget = {},
 ): Promise<Review[]> {
   const url =
     `https://itunes.apple.com/${encodeURIComponent(country)}/rss/customerreviews` +
     `/page=${page}/id=${encodeURIComponent(appId)}/sortby=mostrecent/json`;
-  const payload = await fetchJson(url);
+  const payload = await fetchJson(url, budget);
   return parseReviews(payload, country, appId);
 }
+
+/**
+ * What the five-minute pulse may spend on page one.
+ *
+ * The shared defaults are sized for a caller with minutes: three empty-feed
+ * attempts wrapping three fifteen second HTTP attempts comes to 141,750ms,
+ * against the pulse route's thirty second ceiling. That mismatch is what was
+ * killing the function seventeen times a week.
+ *
+ * Cut rather than removed, because the retries are not defensive noise: Apple's
+ * feed genuinely returns well-formed empty pages and one retry still catches
+ * the common blip. What makes cutting safe here specifically is the note below
+ * on fetchLatestReviews — anything page one misses is picked up by the hourly
+ * four-page walk, which keeps the generous budget.
+ *
+ * pulse.test.ts asserts this fits inside PULSE_DEADLINE_MS.
+ */
+export const PULSE_REVIEW_FETCH: EmptyRetryBudget = {
+  attempts: 2,
+  timeoutMs: 4_000,
+  emptyAttempts: 2,
+};
 
 /**
  * Page one only, for the five-minute pulse.
@@ -105,12 +133,22 @@ async function fetchReviewPage(
  * Nothing is lost when this misses something. Reviews are insert-only and
  * deduplicated on Apple's own id, so the hourly four-page walk backfills
  * anything that arrived faster than page one could hold it.
+ *
+ * That property is what licenses the tight budget: giving up early here costs
+ * a delay, never a row, so the caller's deadline is the constraint that should
+ * win. The budget is a default rather than a parameter the pulse passes in, so
+ * that no future caller of this function can inherit the ceiling without the
+ * budget that fits inside it.
  */
 export async function fetchLatestReviews(
   country: string,
   appId: string = IOS_APP_ID,
+  budget: EmptyRetryBudget = PULSE_REVIEW_FETCH,
 ): Promise<Review[]> {
-  return retryWhileEmpty(() => fetchReviewPage(1, country, appId));
+  return retryWhileEmpty(
+    () => fetchReviewPage(1, country, appId, budget),
+    budget.emptyAttempts,
+  );
 }
 
 export async function fetchReviews(

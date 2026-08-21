@@ -1,7 +1,13 @@
 import { isAuthorizedCron, unauthorized } from "@/lib/cron-auth";
-import { runPulse } from "@/lib/collectors/run-pulse";
+import { PULSE_DEADLINE_MS, runPulse } from "@/lib/collectors/run-pulse";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Next requires this to be a literal, so it cannot be derived from
+ * PULSE_DEADLINE_MS. pulse.test.ts imports this value and asserts the deadline
+ * still sits below it, so the two cannot drift apart unnoticed.
+ */
 export const maxDuration = 30;
 
 /**
@@ -20,12 +26,20 @@ export const maxDuration = 30;
  * Same convention as the other cron routes: 200 whenever the run completed,
  * with per-source failures in the body, so a non-2xx keeps meaning "the run
  * could not happen at all".
+ *
+ * Holding to that convention is why the run carries its own deadline. Being
+ * killed by the platform returns no body at all, which is indistinguishable
+ * from the route never having been reached, and the body is the only record
+ * pg_net keeps in net._http_response.
  */
 export async function GET(request: Request) {
   if (!isAuthorizedCron(request)) return unauthorized();
 
   try {
-    const summary = await runPulse({ includeReviews: true });
+    const summary = await runPulse({
+      includeReviews: true,
+      deadlineMs: PULSE_DEADLINE_MS,
+    });
     return Response.json({ ok: summary.failures.length === 0, ...summary });
   } catch (error) {
     return Response.json(

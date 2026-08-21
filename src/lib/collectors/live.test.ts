@@ -15,9 +15,10 @@ import { describe, expect, it } from "vitest";
 import { fetchLookup } from "./itunes-lookup";
 import { fetchChart } from "./itunes-charts";
 import { fetchSearch } from "./itunes-search";
-import { fetchReviews } from "./itunes-reviews";
+import { fetchLatestReviews, fetchReviews, PULSE_REVIEW_FETCH } from "./itunes-reviews";
 import { fetchPlayDetails } from "./play-details";
 import { EDUCATION_GENRE } from "./config";
+import { worstCaseEmptyRetryMs } from "./http";
 
 const TIMEOUT = 45_000;
 
@@ -73,6 +74,23 @@ describe("live endpoints", () => {
 
       expect(reviews.length).toBeGreaterThan(0);
       expect(new Set(reviews.map((r) => r.storeReviewId)).size).toBe(reviews.length);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "page one still answers inside the pulse's much tighter budget",
+    async () => {
+      // The pulse spends a fraction of what the walk above may spend, so this
+      // is the canary for the trade actually being viable: if Apple gets slow
+      // enough that four seconds an attempt stops landing, the reviews on the
+      // wall go stale while every fixture test stays green.
+      const started = Date.now();
+      const reviews = await fetchLatestReviews("uz");
+      const elapsed = Date.now() - started;
+
+      expect(reviews.length).toBeGreaterThan(0);
+      expect(elapsed).toBeLessThan(worstCaseEmptyRetryMs(PULSE_REVIEW_FETCH));
     },
     TIMEOUT,
   );
