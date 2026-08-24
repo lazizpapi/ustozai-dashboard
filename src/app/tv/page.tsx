@@ -2,7 +2,7 @@ import Image from "next/image";
 import { AlertTriangle } from "lucide-react";
 
 import { AudienceRow } from "@/components/tv/audience-row";
-import { AutoRefresh } from "@/components/tv/auto-refresh";
+import { AutoRefresh } from "@/components/dashboard/auto-refresh";
 import { LiveDot, audienceIsLive } from "@/components/tv/live-dot";
 import { DownloadsChart } from "@/components/dashboard/downloads-chart";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";

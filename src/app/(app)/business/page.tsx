@@ -1,3 +1,4 @@
+import { AutoRefresh } from "@/components/dashboard/auto-refresh";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { PageHeader, Section } from "@/components/dashboard/page-header";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
@@ -54,6 +55,7 @@ export default async function BusinessPage() {
 
   return (
     <div className="space-y-8">
+      <AutoRefresh />
       <PageHeader
         title="Business"
         note={`Takings and engagement over the last ${days} days, from the app's own API.`}

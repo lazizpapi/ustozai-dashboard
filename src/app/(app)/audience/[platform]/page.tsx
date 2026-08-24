@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BrandLogo, type BrandKey } from "@/components/tv/brand-logo";
+import { AutoRefresh } from "@/components/dashboard/auto-refresh";
 import { FollowerChart } from "@/components/dashboard/follower-chart";
 import { InstagramInsights } from "@/components/dashboard/instagram-insights";
 import { GrowthChart } from "@/components/dashboard/growth-chart";
@@ -148,6 +149,9 @@ export default async function AudiencePlatformPage({
 
   return (
     <div className="space-y-8">
+      {/* Each refresh re-runs refreshAudienceIfStale above, so the numbers are
+          re-read from the platform rather than re-read from the database. */}
+      <AutoRefresh />
       <PageHeader
         title={spec.label}
         note={`${spec.noun[0].toUpperCase()}${spec.noun.slice(1)} over the last 90 days.`}
