@@ -19,9 +19,46 @@ import type { RunOutcome } from "@/lib/db/persist";
  * The window is deliberately wider than a single day. These endpoints accept
  * a date range and restate recent days, so re-reading the last week each run
  * costs four requests and repairs any day a failed run left behind.
+ *
+ * With one exception, which is why ustozRanges below returns two windows
+ * rather than one. See the note on the visit-summary step.
  */
 
 const BACKFILL_DAYS = 7;
+
+/**
+ * A type alias rather than an interface on purpose: the client's params take a
+ * Record, and only an alias gets the implicit index signature that satisfies it.
+ */
+export type UstozRange = {
+  startDate: string;
+  endDate: string;
+};
+
+/**
+ * The two windows a run needs.
+ *
+ * `wide` is the backfill window, for the endpoints that return a value per day
+ * and restate the ones they already gave. Re-reading a week repairs whatever a
+ * failed run left behind, and asking for more repairs more.
+ *
+ * `daily` is always exactly one day, and exists because the visit summary does
+ * not return a series. It answers for whatever window it is handed, as a single
+ * number. Given the wide window it returns the average across all of it, which
+ * then gets written to one date in a table called app_engagement_daily and read
+ * as though it described that date. Widening the backfill made the headline
+ * session figure less true rather than more complete, which is the opposite of
+ * what a backfill is for.
+ */
+export function ustozRanges(
+  today: string,
+  earliest: string,
+): { wide: UstozRange; daily: UstozRange } {
+  return {
+    wide: { startDate: earliest, endDate: today },
+    daily: { startDate: today, endDate: today },
+  };
+}
 
 /** Tashkent calendar day, the bucket every date in this project uses. */
 function tashkentDay(offsetDays = 0): string {
@@ -64,9 +101,8 @@ export async function collectUstozMetrics(
     };
   }
 
-  const startDate = tashkentDay(-days);
-  const endDate = tashkentDay();
-  const range = { startDate, endDate };
+  const { wide: range, daily: dayRange } = ustozRanges(tashkentDay(), tashkentDay(-days));
+  const { startDate, endDate } = range;
 
   const activeStep = await step("ustoz:active-users", async () => {
     const payload = await get("mauGeneral", range);
@@ -78,8 +114,19 @@ export async function collectUstozMetrics(
     return parseDailyViews(payload);
   });
 
+  /*
+   * Asked for one day, never for the range.
+   *
+   * Unlike the others this endpoint returns a single aggregate rather than a
+   * per-day series, so whatever window it is given comes back as one number.
+   * Handing it `range` meant the hourly poll wrote a seven-day average onto
+   * today's row and a `backfill-ustoz?days=250` run wrote a two-hundred-and-
+   * fifty-day one onto the same row, both stored in a table called
+   * app_engagement_daily and displayed beside a figure that really is daily.
+   * That is how the tile came to read 29.4 minutes.
+   */
   const visitStep = await step("ustoz:visit-summary", async () => {
-    const payload = await get("visitSummary", range);
+    const payload = await get("visitSummary", dayRange);
     return parseVisitSummary(payload);
   });
 
@@ -105,9 +152,14 @@ export async function collectUstozMetrics(
   }
 
   /*
-   * Views are per day; the visit summary covers the whole range at once and
-   * is therefore attributed to the last day of it rather than spread across
-   * days it cannot distinguish.
+   * Views are per day and land on the days they describe. The visit summary is
+   * a single figure, now asked for a single day, so attributing it to that day
+   * is honest rather than the best available approximation.
+   *
+   * Historical rows still hold the trailing-window values written before this
+   * changed. Rewriting them would cost one request per day, the same trade the
+   * Instagram collector documents, and nobody is reading a session average from
+   * March.
    */
   const engagementRows = [
     ...(viewsStep.value ?? []).map((point) => ({ date: point.date, views: point.count })),
