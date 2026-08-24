@@ -212,9 +212,11 @@ export interface TransactionRow {
  * so a new one appears on its own instead of vanishing because this parser
  * only knew PAYME and CLICK on the day it was written.
  *
- * Amounts are passed through exactly as the API reports them. The unit is not
- * documented anywhere we have, and dividing by a guessed hundred would be a
- * hundredfold error in the most quotable number in the company.
+ * Amounts are passed through exactly as the API reports them, which is tiyin
+ * for both Payme and Click. The conversion to som happens once on the way out
+ * of the database, in revenueSummary, so the stored row stays the raw thing the
+ * provider sent: a revised understanding of the unit costs one query change
+ * rather than a rewrite of every row ever collected.
  */
 export function parseTransactions(payload: unknown): TransactionRow[] {
   if (!isRecord(payload)) {

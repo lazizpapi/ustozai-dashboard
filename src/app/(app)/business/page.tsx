@@ -17,11 +17,10 @@ export const dynamic = "force-dynamic";
  * unlock: separating the departments would mean little if any of them could
  * read the company's takings.
  *
- * Amounts are printed exactly as the payment API reports them, with no
- * currency symbol and no scaling. The unit is undocumented in anything we
- * hold, and dividing by a guessed hundred would be a hundredfold error in the
- * most quotable number in the company. The footnote says so rather than
- * leaving a reader to assume.
+ * Amounts are printed in som. Payme and Click report in tiyin, so revenueSummary
+ * divides by a hundred on the way out and everything here is already scaled; the
+ * unit was confirmed with the company rather than guessed from the size of the
+ * number. The footnote names the unit rather than leaving a reader to assume.
  */
 
 export default async function BusinessPage() {
@@ -75,7 +74,7 @@ export default async function BusinessPage() {
         <Metric
           label={`Takings, ${days} days`}
           value={formatNumber(revenue.windowTotal)}
-          detail="as the payment API reports it"
+          detail="som, converted from the API's tiyin"
         />
         <Metric
           label="Daily active"
@@ -139,12 +138,10 @@ export default async function BusinessPage() {
       ) : null}
 
       <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
-        Amounts are printed exactly as the payment API returns them, with no
-        currency symbol and no scaling, because the unit is not documented in
-        anything we hold. Confirm it with the backend team before quoting these
-        figures. The day total is the API&apos;s own rather than a sum of the
-        providers beneath it, so the two can be compared instead of assumed
-        equal.
+        Amounts are in som. Payme and Click both report in tiyin, so every
+        figure here is the API&apos;s value divided by a hundred. The day total
+        is the API&apos;s own rather than a sum of the providers beneath it, so
+        the two can be compared instead of assumed equal.
       </p>
     </div>
   );

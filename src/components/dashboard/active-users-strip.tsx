@@ -111,7 +111,7 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
           href="/business"
           label="Takings, 30 days"
           value={revenue ? formatNumber(revenue.windowTotal) : NO_VALUE}
-          detail="as the payment API reports it"
+          detail="som, converted from the API's tiyin"
         />
         <Metric
           label="Top provider"

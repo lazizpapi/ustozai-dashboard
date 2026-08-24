@@ -1578,12 +1578,20 @@ export interface RevenueSummary {
 }
 
 /**
- * Takings per day and per payment provider.
+ * Tiyin to som. Payme and Click both report in tiyin, the hundredth of a som,
+ * which the company confirmed rather than us inferring it from the size of the
+ * number. The column keeps the raw API value; this is the only place the scale
+ * is applied, so every consumer gets som without having to know that.
  *
- * Amounts are returned exactly as the payment API reports them. The unit is
- * undocumented in anything we hold, so nothing here scales them; a page that
- * divided by a guessed hundred would be wrong by a hundredfold in the most
- * quotable number in the company.
+ * Totals are summed in tiyin and converted once. Dividing each row first and
+ * adding the results would let a window total collect a float tail from a
+ * hundred separate divisions.
+ */
+const TIYIN_PER_SOM = 100;
+const toSom = (tiyin: number) => tiyin / TIYIN_PER_SOM;
+
+/**
+ * Takings per day and per payment provider, in som.
  *
  * The 'ALL' rows are the API's own day totals rather than a sum of the
  * providers, so the two can be compared instead of assumed equal.
@@ -1600,21 +1608,32 @@ export async function revenueSummary(days = 30): Promise<RevenueSummary> {
     .order("date", { ascending: true });
   if (error) throw new Error(`revenueSummary: ${error.message}`);
 
-  const rows = (data ?? []) as {
-    date: string;
-    provider: string;
-    amount: number;
-    transactions: number;
-  }[];
+  return summariseRevenue((data ?? []) as RevenueRow[], weekAgoIso());
+}
 
-  const daily = rows
-    .filter((row) => row.provider === "ALL")
-    .map((row) => ({
-      date: row.date,
-      amount: Number(row.amount),
-      transactions: row.transactions,
-    }));
+/** A row of revenue_daily, in tiyin, as it comes back from the database. */
+export interface RevenueRow {
+  date: string;
+  provider: string;
+  amount: number;
+  transactions: number;
+}
 
+/**
+ * The tiyin-to-som arithmetic, kept separate from the fetch so it can be tested
+ * without a database. This is where the hundredfold lives, and a hundredfold
+ * error here is the most quotable number in the company being wrong.
+ */
+export function summariseRevenue(rows: RevenueRow[], weekAgo: string): RevenueSummary {
+  const dayRows = rows.filter((row) => row.provider === "ALL");
+
+  const daily = dayRows.map((row) => ({
+    date: row.date,
+    amount: toSom(Number(row.amount)),
+    transactions: row.transactions,
+  }));
+
+  // Accumulated in tiyin; converted once when the array is built below.
   const providers = new Map<string, { amount: number; transactions: number }>();
   for (const row of rows) {
     if (row.provider === "ALL") continue;
@@ -1626,18 +1645,18 @@ export async function revenueSummary(days = 30): Promise<RevenueSummary> {
 
   const prior = priorWithinWindow(
     daily.map((day) => ({ capturedAt: `${day.date}T00:00:00Z`, value: day.amount })),
-    weekAgoIso(),
+    weekAgo,
   );
 
   return {
     latest: daily.at(-1) ?? null,
     daily,
     byProvider: [...providers.entries()]
-      .map(([provider, totals]) => ({ provider, ...totals }))
+      .map(([provider, totals]) => ({ ...totals, provider, amount: toSom(totals.amount) }))
       .sort((a, b) => b.amount - a.amount),
     previous: prior?.value ?? null,
     spanDays: prior?.spanDays ?? null,
-    windowTotal: daily.reduce((sum, day) => sum + day.amount, 0),
+    windowTotal: toSom(dayRows.reduce((sum, row) => sum + Number(row.amount), 0)),
   };
 }
 
