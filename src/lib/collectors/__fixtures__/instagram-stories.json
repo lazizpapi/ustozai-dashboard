@@ -1,0 +1,92 @@
+{
+  "data": [
+    {
+      "id": "18364874071212923",
+      "timestamp": "2026-08-22T11:29:59+0000",
+      "media_type": "VIDEO",
+      "permalink": "https://www.instagram.com/stories/ustozai/3969306262348380095",
+      "insights": {
+        "data": [
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 167
+              }
+            ],
+            "title": "Охваченные аккаунты",
+            "description": "Число уникальных аккаунтов, которые видели эту историю хотя бы один раз. Отличие охвата от показов заключается в том, что последние могут включать многократные просмотры вашей истории одним и тем же аккаунтом. Эта метрика является приблизительной.",
+            "id": "18364874071212923/insights/reach/lifetime"
+          },
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 237
+              }
+            ],
+            "title": "Просмотры",
+            "description": "Число воспроизведений или показов вашей истории",
+            "id": "18364874071212923/insights/views/lifetime"
+          },
+          {
+            "name": "replies",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Ответы",
+            "description": "Количество ответов на вашу историю, включая текстовые ответы и реакции.",
+            "id": "18364874071212923/insights/replies/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Поделились",
+            "description": "Число репостов вашей истории.",
+            "id": "18364874071212923/insights/shares/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 16
+              }
+            ],
+            "title": "Взаимодействия с историей",
+            "description": "Число репостов вашей истории и ответов на нее.",
+            "id": "18364874071212923/insights/total_interactions/lifetime"
+          },
+          {
+            "name": "navigation",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 187
+              }
+            ],
+            "title": "Навигация",
+            "description": "Это общее число действий, выполненных из вашей истории. Данные получены на основании метрик, таких как число закрытий, переходов вперед и назад, а также переключений истории.",
+            "id": "18364874071212923/insights/navigation/lifetime"
+          }
+        ]
+      }
+    }
+  ],
+  "paging": {
+    "cursors": {
+      "before": "QVFIVEVrdlpKc2VuYUl3VU5NOGtmd0VYYWtnWjJkenliUEY1NHh0SjlqMFFjUlVhSE0wbks1TFhQZA2FRTzk1WG8xaGtmTGlVNC1SMW9QUHVzbTQwWTdnZAFNR",
+      "after": "QVFIVEVrdlpKc2VuYUl3VU5NOGtmd0VYYWtnWjJkenliUEY1NHh0SjlqMFFjUlVhSE0wbks1TFhQZA2FRTzk1WG8xaGtmTGlVNC1SMW9QUHVzbTQwWTdnZAFNR"
+    }
+  }
+}

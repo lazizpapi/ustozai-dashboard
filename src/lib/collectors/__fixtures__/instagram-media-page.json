@@ -1,0 +1,731 @@
+{
+  "data": [
+    {
+      "id": "17906291625531045",
+      "timestamp": "2026-08-22T11:07:14+0000",
+      "media_product_type": "FEED",
+      "media_type": "CAROUSEL_ALBUM",
+      "permalink": "https://www.instagram.com/p/DcVxJZfAogW/",
+      "caption": "Yoqtirgan ishingni bajar. Bu yo’lda Ustoz AI yordam beradi. 70+ kelajak kasblari va fanlarni bir ilovada o’rganishing mumkin. \n\nMuhimi hozirdan boshla. Ilovada ro’yxatdan o’t. Kelajak kasblarini o’rgan. \n\n#kelajak #top #rek #ustozai #ish",
+      "insights": {
+        "data": [
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 642
+              }
+            ],
+            "title": "Охваченные аккаунты",
+            "description": "Число уникальных аккаунтов, которые посмотрели этот контейнер кольцевой галереи хотя бы один раз. Отличие охвата от показов заключается в том, что последние могут включать многократные просмотры контейнера вашей кольцевой галереи одним и тем же аккаунтом. Эта метрика является приблизительной.",
+            "id": "17906291625531045/insights/reach/lifetime"
+          },
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 2010
+              }
+            ],
+            "title": "Просмотры",
+            "description": "Число воспроизведений или показов вашей публикации.",
+            "id": "17906291625531045/insights/views/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 27
+              }
+            ],
+            "title": "Отметки \"Нравится\"",
+            "description": "Количество отметок \"Нравится\" у вашей публикации.",
+            "id": "17906291625531045/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 2
+              }
+            ],
+            "title": "Комментарии",
+            "description": "Количество комментариев к вашей публикации.",
+            "id": "17906291625531045/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Поделились",
+            "description": "Число репостов вашей публикации.",
+            "id": "17906291625531045/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 5
+              }
+            ],
+            "title": "Сохранено",
+            "description": "Число сохранений вашей публикации.",
+            "id": "17906291625531045/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 35
+              }
+            ],
+            "title": "Взаимодействия с публикацией",
+            "description": "Число отметок \"Нравится\", сохранений, репостов и комментариев у вашей публикации за вычетом числа убранных отметок \"Нравится\", отмененных сохранений и удаленных комментариев.",
+            "id": "17906291625531045/insights/total_interactions/lifetime"
+          },
+          {
+            "name": "profile_visits",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 2
+              }
+            ],
+            "title": "Посещения профиля",
+            "description": "Число посещений вашего профиля.",
+            "id": "17906291625531045/insights/profile_visits/lifetime"
+          },
+          {
+            "name": "follows",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Подписки",
+            "description": "Это число новых подписок на ваш аккаунт.",
+            "id": "17906291625531045/insights/follows/lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "id": "17881030602505413",
+      "timestamp": "2026-08-21T09:11:32+0000",
+      "media_product_type": "REELS",
+      "media_type": "VIDEO",
+      "permalink": "https://www.instagram.com/reel/DcS-4PCCgr1/",
+      "caption": "⚡️ Milliard $ sari — endi MY5 ekranlarida!\n\n📹Ustoz AI ning milliard dollarlik kompaniyaga aylanish yo‘li endi nafaqat jamoamiz ichida, balki MY5 telekanalida ham namoyish etiladi! \n\n“Milliard $ sari” reality-shousini MY5 telekanalida namoyish etish bo‘yicha kelishuvga erishildi!\n\nBu oddiy shou emas.\n✔️ Katta qarorlar.\n✔️ Muhim uchrashuvlar.\n✔️ Kutilmagan burilishlar.\n✔️ Muhim kelishuvlar.\n✔️ Va milliard dollarlik maqsad sari tashlangan real qadamlar.\n\nBuni endi MY5 ekranlarida birga ko‘ramiz! \n\n💡 Xo‘sh, siz milliard dollarlik kompaniya qanday qurilishini ko‘rishga tayyormisiz?",
+      "insights": {
+        "data": [
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 1993
+              }
+            ],
+            "title": "Охваченные аккаунты",
+            "description": "Число уникальных аккаунтов, которые видели это видео Reels хотя бы один раз. Отличие охвата от показов заключается в том, что последние могут включать многократные просмотры вашего видео Reels одним и тем же аккаунтом. Эта метрика является приблизительной.",
+            "id": "17881030602505413/insights/reach/lifetime"
+          },
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 3272
+              }
+            ],
+            "title": "Просмотры",
+            "description": "Число воспроизведений или показов ваших видео Reels.",
+            "id": "17881030602505413/insights/views/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 46
+              }
+            ],
+            "title": "Отметки \"Нравится\"",
+            "description": "Количество отметок \"Нравится\" у вашего видео Reels.",
+            "id": "17881030602505413/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 59
+              }
+            ],
+            "title": "Комментарии",
+            "description": "Количество комментариев к вашему видео Reels.",
+            "id": "17881030602505413/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 11
+              }
+            ],
+            "title": "Поделились",
+            "description": "Число репостов вашего видео Reels.",
+            "id": "17881030602505413/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Сохранено",
+            "description": "Число сохранений вашего видео Reels.",
+            "id": "17881030602505413/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 118
+              }
+            ],
+            "title": "Взаимодействия с видео Reels",
+            "description": "Число отметок \"Нравится\", сохранений, репостов и комментариев у ваших видео Reels за вычетом убранных отметок \"Нравится\", отмененных сохранений и удаленных комментариев.",
+            "id": "17881030602505413/insights/total_interactions/lifetime"
+          },
+          {
+            "name": "ig_reels_avg_watch_time",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 4796
+              }
+            ],
+            "title": "Среднее время просмотра видео Reels (миллисекунды)",
+            "description": "Здесь приведено определение метрики \"Среднее время просмотра видео Reels\"",
+            "id": "17881030602505413/insights/ig_reels_avg_watch_time/lifetime"
+          },
+          {
+            "name": "ig_reels_video_view_total_time",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 10442993
+              }
+            ],
+            "title": "Общее время просмотра видео (milliseconds)",
+            "description": "Здесь определяется время просмотра видео Reels",
+            "id": "17881030602505413/insights/ig_reels_video_view_total_time/lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "id": "17888398023609161",
+      "timestamp": "2026-08-21T05:51:53+0000",
+      "media_product_type": "REELS",
+      "media_type": "VIDEO",
+      "permalink": "https://www.instagram.com/reel/DcSnud4i3Mi/",
+      "caption": "🚀 “Zamonaviy kasblar” tanlovining roʻyxatdan oʻtish muddati uzaytirildi.\n\n✔️ Agar siz:\n1. Grafik dizayn\n2. Veb-sayt yaratish\n3. Mobilografiya bilan shug‘ullansangiz, bu imkoniyatni qo‘ldan boy bermang!\n\n🏆 Bosh sovrin — 100 million so‘m!\n\nIste’dodingizni butun O‘zbekiston oldida namoyish eting va g‘olib bo‘lish imkoniyatini qo‘lga kiriting.\n\nRoʻxatdan oʻtish 30 - avgustga qadar davom etadi.\nIshtirok etish uchun bio’dagi havola ustiga bosing!",
+      "insights": {
+        "data": [
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 4227
+              }
+            ],
+            "title": "Охваченные аккаунты",
+            "description": "Число уникальных аккаунтов, которые видели это видео Reels хотя бы один раз. Отличие охвата от показов заключается в том, что последние могут включать многократные просмотры вашего видео Reels одним и тем же аккаунтом. Эта метрика является приблизительной.",
+            "id": "17888398023609161/insights/reach/lifetime"
+          },
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 6279
+              }
+            ],
+            "title": "Просмотры",
+            "description": "Число воспроизведений или показов ваших видео Reels.",
+            "id": "17888398023609161/insights/views/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 62
+              }
+            ],
+            "title": "Отметки \"Нравится\"",
+            "description": "Количество отметок \"Нравится\" у вашего видео Reels.",
+            "id": "17888398023609161/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 31
+              }
+            ],
+            "title": "Комментарии",
+            "description": "Количество комментариев к вашему видео Reels.",
+            "id": "17888398023609161/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 19
+              }
+            ],
+            "title": "Поделились",
+            "description": "Число репостов вашего видео Reels.",
+            "id": "17888398023609161/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 3
+              }
+            ],
+            "title": "Сохранено",
+            "description": "Число сохранений вашего видео Reels.",
+            "id": "17888398023609161/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 120
+              }
+            ],
+            "title": "Взаимодействия с видео Reels",
+            "description": "Число отметок \"Нравится\", сохранений, репостов и комментариев у ваших видео Reels за вычетом убранных отметок \"Нравится\", отмененных сохранений и удаленных комментариев.",
+            "id": "17888398023609161/insights/total_interactions/lifetime"
+          },
+          {
+            "name": "ig_reels_avg_watch_time",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 6193
+              }
+            ],
+            "title": "Среднее время просмотра видео Reels (миллисекунды)",
+            "description": "Здесь приведено определение метрики \"Среднее время просмотра видео Reels\"",
+            "id": "17888398023609161/insights/ig_reels_avg_watch_time/lifetime"
+          },
+          {
+            "name": "ig_reels_video_view_total_time",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 29393180
+              }
+            ],
+            "title": "Общее время просмотра видео (milliseconds)",
+            "description": "Здесь определяется время просмотра видео Reels",
+            "id": "17888398023609161/insights/ig_reels_video_view_total_time/lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "id": "17945392335056359",
+      "timestamp": "2026-08-20T15:51:41+0000",
+      "media_product_type": "FEED",
+      "media_type": "IMAGE",
+      "permalink": "https://www.instagram.com/p/DcRH-2jiG5o/",
+      "caption": "⚡️ Milliard $ sari — endi MY5 ekranlarida!\n\n📹Ustoz AI ning milliard dollarlik kompaniyaga aylanish yo‘li endi nafaqat jamoamiz ichida, balki MY5 telekanalida ham namoyish etiladi! \n\n“Milliard $ sari” reality-shousini MY5 telekanalida namoyish etish bo‘yicha kelishuvga erishildi!\n\nBu oddiy shou emas.\n✔️ Katta qarorlar.\n✔️ Muhim uchrashuvlar.\n✔️ Kutilmagan burilishlar.\n✔️ Muhim kelishuvlar.\n✔️ Va milliard dollarlik maqsad sari tashlangan real qadamlar.\n\nBuni endi MY5 ekranlarida birga ko‘ramiz! \n\n💡 Xo‘sh, siz milliard dollarlik kompaniya qanday qurilishini ko‘rishga tayyormisiz?",
+      "insights": {
+        "data": [
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 5355
+              }
+            ],
+            "title": "Охваченные аккаунты",
+            "description": "Число уникальных аккаунтов, которые посмотрели эту публикацию хотя бы один раз. Отличие охвата от показов заключается в том, что последние могут включать многократные просмотры вашей публикации одним и тем же аккаунтом. Эта метрика является приблизительной.",
+            "id": "17945392335056359/insights/reach/lifetime"
+          },
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 10488
+              }
+            ],
+            "title": "Просмотры",
+            "description": "Число воспроизведений или показов вашей публикации.",
+            "id": "17945392335056359/insights/views/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 65
+              }
+            ],
+            "title": "Отметки \"Нравится\"",
+            "description": "Количество отметок \"Нравится\" у вашей публикации.",
+            "id": "17945392335056359/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 16
+              }
+            ],
+            "title": "Комментарии",
+            "description": "Количество комментариев к вашей публикации.",
+            "id": "17945392335056359/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 3
+              }
+            ],
+            "title": "Поделились",
+            "description": "Число репостов вашей публикации.",
+            "id": "17945392335056359/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 3
+              }
+            ],
+            "title": "Сохранено",
+            "description": "Число сохранений вашей публикации.",
+            "id": "17945392335056359/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 89
+              }
+            ],
+            "title": "Взаимодействия с публикацией",
+            "description": "Число отметок \"Нравится\", сохранений, репостов и комментариев у вашей публикации за вычетом числа убранных отметок \"Нравится\", отмененных сохранений и удаленных комментариев.",
+            "id": "17945392335056359/insights/total_interactions/lifetime"
+          },
+          {
+            "name": "profile_visits",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 12
+              }
+            ],
+            "title": "Посещения профиля",
+            "description": "Число посещений вашего профиля.",
+            "id": "17945392335056359/insights/profile_visits/lifetime"
+          },
+          {
+            "name": "follows",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Подписки",
+            "description": "Это число новых подписок на ваш аккаунт.",
+            "id": "17945392335056359/insights/follows/lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "id": "18121205242871971",
+      "timestamp": "2026-08-19T15:28:39+0000",
+      "media_product_type": "REELS",
+      "media_type": "VIDEO",
+      "permalink": "https://www.instagram.com/reel/DcOgQkyi3yV/",
+      "caption": "🤔 Stakan nega bunday?\n\nHamma bir stakanga har xil tarafdan qaraydi. Insonning kelib chiqishi, muhiti va kasbi bu fikrlarga ta’sir qiladi.\n\n⚡️ Ustoz AI’da 70 dan ortiq zamonaviy kasb va fanlarni bemalol o’rganishingiz mumkin. \n\nSiz esa o’rganyotgan sohangizga qarab stakanni ta’riflab keting-chi…\n\n#stakan #trend #top #rek #ustozai",
+      "insights": {
+        "data": [
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 3595
+              }
+            ],
+            "title": "Охваченные аккаунты",
+            "description": "Число уникальных аккаунтов, которые видели это видео Reels хотя бы один раз. Отличие охвата от показов заключается в том, что последние могут включать многократные просмотры вашего видео Reels одним и тем же аккаунтом. Эта метрика является приблизительной.",
+            "id": "18121205242871971/insights/reach/lifetime"
+          },
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 5195
+              }
+            ],
+            "title": "Просмотры",
+            "description": "Число воспроизведений или показов ваших видео Reels.",
+            "id": "18121205242871971/insights/views/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 100
+              }
+            ],
+            "title": "Отметки \"Нравится\"",
+            "description": "Количество отметок \"Нравится\" у вашего видео Reels.",
+            "id": "18121205242871971/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 44
+              }
+            ],
+            "title": "Комментарии",
+            "description": "Количество комментариев к вашему видео Reels.",
+            "id": "18121205242871971/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 31
+              }
+            ],
+            "title": "Поделились",
+            "description": "Число репостов вашего видео Reels.",
+            "id": "18121205242871971/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 6
+              }
+            ],
+            "title": "Сохранено",
+            "description": "Число сохранений вашего видео Reels.",
+            "id": "18121205242871971/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 186
+              }
+            ],
+            "title": "Взаимодействия с видео Reels",
+            "description": "Число отметок \"Нравится\", сохранений, репостов и комментариев у ваших видео Reels за вычетом убранных отметок \"Нравится\", отмененных сохранений и удаленных комментариев.",
+            "id": "18121205242871971/insights/total_interactions/lifetime"
+          },
+          {
+            "name": "ig_reels_avg_watch_time",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 8164
+              }
+            ],
+            "title": "Среднее время просмотра видео Reels (миллисекунды)",
+            "description": "Здесь приведено определение метрики \"Среднее время просмотра видео Reels\"",
+            "id": "18121205242871971/insights/ig_reels_avg_watch_time/lifetime"
+          },
+          {
+            "name": "ig_reels_video_view_total_time",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 30503300
+              }
+            ],
+            "title": "Общее время просмотра видео (milliseconds)",
+            "description": "Здесь определяется время просмотра видео Reels",
+            "id": "18121205242871971/insights/ig_reels_video_view_total_time/lifetime"
+          }
+        ]
+      }
+    },
+    {
+      "id": "18063636977744128",
+      "timestamp": "2026-08-19T14:14:41+0000",
+      "media_product_type": "FEED",
+      "media_type": "IMAGE",
+      "permalink": "https://www.instagram.com/p/DcOYMJECRTB/",
+      "caption": "“Milliard dollar sari” reality-shousi rahbari — Nietbay Keulimjaev.\n\n🚀 Biz milliard dollarlik kompaniya qurishni maqsad qilganmiz. Ammo bu cho‘qqiga chiqish uchun, avvalo, milliard dollarlik kompaniya darajasiga yetishimiz zarur.\n\nBuning uchun Payme, TBC Bank, Click, Uzum, Higgsfield, Kaspi.kz va boshqa yirik kompaniyalarning bilim va tajribalarini o‘rganib, eng samarali tajribalarni Ustoz AI faoliyatiga joriy etamiz.\n\n🤝 Ayrim kompaniyalar bilan allaqachon kelishuvlarga erishganmiz, ayrimlari bilan esa hamkorlik qilish jarayonida.\n\n🎬 “Milliard dollar sari” — Ustoz AI’ni milliard dollarlik kompaniyaga aylantirish jarayonini real vaqtga yaqin formatda namoyish etuvchi reality-shou.\n\n✔️Bu — shunchaki reality-shou emas. \nBu — milliard dollarlik kompaniya qanday qurilishini bosqichma-bosqich ko‘rsatadigan real tajriba.\n\nSiz qaysi kompaniyani Ustoz AI bilan hamkorlikda koʻrishni istaysiz?",
+      "insights": {
+        "data": [
+          {
+            "name": "reach",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 2350
+              }
+            ],
+            "title": "Охваченные аккаунты",
+            "description": "Число уникальных аккаунтов, которые посмотрели эту публикацию хотя бы один раз. Отличие охвата от показов заключается в том, что последние могут включать многократные просмотры вашей публикации одним и тем же аккаунтом. Эта метрика является приблизительной.",
+            "id": "18063636977744128/insights/reach/lifetime"
+          },
+          {
+            "name": "views",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 4892
+              }
+            ],
+            "title": "Просмотры",
+            "description": "Число воспроизведений или показов вашей публикации.",
+            "id": "18063636977744128/insights/views/lifetime"
+          },
+          {
+            "name": "likes",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 31
+              }
+            ],
+            "title": "Отметки \"Нравится\"",
+            "description": "Количество отметок \"Нравится\" у вашей публикации.",
+            "id": "18063636977744128/insights/likes/lifetime"
+          },
+          {
+            "name": "comments",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Комментарии",
+            "description": "Количество комментариев к вашей публикации.",
+            "id": "18063636977744128/insights/comments/lifetime"
+          },
+          {
+            "name": "shares",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 14
+              }
+            ],
+            "title": "Поделились",
+            "description": "Число репостов вашей публикации.",
+            "id": "18063636977744128/insights/shares/lifetime"
+          },
+          {
+            "name": "saved",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Сохранено",
+            "description": "Число сохранений вашей публикации.",
+            "id": "18063636977744128/insights/saved/lifetime"
+          },
+          {
+            "name": "total_interactions",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 45
+              }
+            ],
+            "title": "Взаимодействия с публикацией",
+            "description": "Число отметок \"Нравится\", сохранений, репостов и комментариев у вашей публикации за вычетом числа убранных отметок \"Нравится\", отмененных сохранений и удаленных комментариев.",
+            "id": "18063636977744128/insights/total_interactions/lifetime"
+          },
+          {
+            "name": "profile_visits",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 4
+              }
+            ],
+            "title": "Посещения профиля",
+            "description": "Число посещений вашего профиля.",
+            "id": "18063636977744128/insights/profile_visits/lifetime"
+          },
+          {
+            "name": "follows",
+            "period": "lifetime",
+            "values": [
+              {
+                "value": 0
+              }
+            ],
+            "title": "Подписки",
+            "description": "Это число новых подписок на ваш аккаунт.",
+            "id": "18063636977744128/insights/follows/lifetime"
+          }
+        ]
+      }
+    }
+  ],
+  "paging": {
+    "cursors": {
+      "before": "QVFIVHJyWE5SZAEh5UEJBOWlKZAHJuYS1KbWp6VlpzaFpfRXRERGFsMmZAIOFNOT1NkWTc5NTZAOdGJhc0JIVlpYOWM0TWRiTTBlLTJEMTUwN0MzOXhwTWtUUlZAR",
+      "after": "QVFIVGlEd0JORmZAHSEdxa3RkdkdlMkdFRG5ucXREVnRtRi1WbUtYS2VELV8waDhpWkpDSUtyWG9UbUdqMXU5ejBJLVUzRmJJUkV0dzJ6YWRZAZAGJlWTNGb19n"
+    },
+    "next": "https://graph.instagram.com/v26.0/17841459295166745/media?fields=id%2Ctimestamp%2Cmedia_product_type%2Cmedia_type%2Cpermalink%2Ccaption%2Cinsights.metric%28reach%2Cviews%2Clikes%2Ccomments%2Cshares%2Csaved%2Ctotal_interactions%2Cprofile_visits%2Cfollows%2Cig_reels_avg_watch_time%2Cig_reels_video_view_total_time%29&limit=6&after=QVFIVGlEd0JORmZAHSEdxa3RkdkdlMkdFRG5ucXREVnRtRi1WbUtYS2VELV8waDhpWkpDSUtyWG9UbUdqMXU5ejBJLVUzRmJJUkV0dzJ6YWRZAZAGJlWTNGb19n"
+  }
+}

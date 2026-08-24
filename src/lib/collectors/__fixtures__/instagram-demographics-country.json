@@ -1,0 +1,292 @@
+{
+  "data": [
+    {
+      "name": "follower_demographics",
+      "period": "lifetime",
+      "title": "Демографические данные подписчиков",
+      "description": "Демографические характеристики подписчиков, включая страны, города и пол.",
+      "total_value": {
+        "breakdowns": [
+          {
+            "dimension_keys": [
+              "country"
+            ],
+            "results": [
+              {
+                "dimension_values": [
+                  "RS"
+                ],
+                "value": 6
+              },
+              {
+                "dimension_values": [
+                  "DE"
+                ],
+                "value": 101
+              },
+              {
+                "dimension_values": [
+                  "FI"
+                ],
+                "value": 7
+              },
+              {
+                "dimension_values": [
+                  "RU"
+                ],
+                "value": 3821
+              },
+              {
+                "dimension_values": [
+                  "PT"
+                ],
+                "value": 5
+              },
+              {
+                "dimension_values": [
+                  "JO"
+                ],
+                "value": 5
+              },
+              {
+                "dimension_values": [
+                  "BG"
+                ],
+                "value": 30
+              },
+              {
+                "dimension_values": [
+                  "JP"
+                ],
+                "value": 50
+              },
+              {
+                "dimension_values": [
+                  "LT"
+                ],
+                "value": 15
+              },
+              {
+                "dimension_values": [
+                  "LV"
+                ],
+                "value": 8
+              },
+              {
+                "dimension_values": [
+                  "HR"
+                ],
+                "value": 12
+              },
+              {
+                "dimension_values": [
+                  "FR"
+                ],
+                "value": 6
+              },
+              {
+                "dimension_values": [
+                  "UA"
+                ],
+                "value": 14
+              },
+              {
+                "dimension_values": [
+                  "SA"
+                ],
+                "value": 24
+              },
+              {
+                "dimension_values": [
+                  "SE"
+                ],
+                "value": 9
+              },
+              {
+                "dimension_values": [
+                  "BY"
+                ],
+                "value": 19
+              },
+              {
+                "dimension_values": [
+                  "SK"
+                ],
+                "value": 7
+              },
+              {
+                "dimension_values": [
+                  "ID"
+                ],
+                "value": 8
+              },
+              {
+                "dimension_values": [
+                  "GB"
+                ],
+                "value": 44
+              },
+              {
+                "dimension_values": [
+                  "KG"
+                ],
+                "value": 1132
+              },
+              {
+                "dimension_values": [
+                  "CA"
+                ],
+                "value": 14
+              },
+              {
+                "dimension_values": [
+                  "GE"
+                ],
+                "value": 14
+              },
+              {
+                "dimension_values": [
+                  "US"
+                ],
+                "value": 128
+              },
+              {
+                "dimension_values": [
+                  "EG"
+                ],
+                "value": 27
+              },
+              {
+                "dimension_values": [
+                  "IL"
+                ],
+                "value": 35
+              },
+              {
+                "dimension_values": [
+                  "AE"
+                ],
+                "value": 44
+              },
+              {
+                "dimension_values": [
+                  "AF"
+                ],
+                "value": 16
+              },
+              {
+                "dimension_values": [
+                  "IN"
+                ],
+                "value": 50
+              },
+              {
+                "dimension_values": [
+                  "UZ"
+                ],
+                "value": 61154
+              },
+              {
+                "dimension_values": [
+                  "SY"
+                ],
+                "value": 16
+              },
+              {
+                "dimension_values": [
+                  "KR"
+                ],
+                "value": 449
+              },
+              {
+                "dimension_values": [
+                  "IR"
+                ],
+                "value": 34
+              },
+              {
+                "dimension_values": [
+                  "IT"
+                ],
+                "value": 8
+              },
+              {
+                "dimension_values": [
+                  "CN"
+                ],
+                "value": 39
+              },
+              {
+                "dimension_values": [
+                  "MY"
+                ],
+                "value": 20
+              },
+              {
+                "dimension_values": [
+                  "KZ"
+                ],
+                "value": 710
+              },
+              {
+                "dimension_values": [
+                  "AU"
+                ],
+                "value": 9
+              },
+              {
+                "dimension_values": [
+                  "TJ"
+                ],
+                "value": 1004
+              },
+              {
+                "dimension_values": [
+                  "CZ"
+                ],
+                "value": 12
+              },
+              {
+                "dimension_values": [
+                  "AZ"
+                ],
+                "value": 6
+              },
+              {
+                "dimension_values": [
+                  "TM"
+                ],
+                "value": 166
+              },
+              {
+                "dimension_values": [
+                  "PK"
+                ],
+                "value": 5
+              },
+              {
+                "dimension_values": [
+                  "PL"
+                ],
+                "value": 64
+              },
+              {
+                "dimension_values": [
+                  "NL"
+                ],
+                "value": 13
+              },
+              {
+                "dimension_values": [
+                  "TR"
+                ],
+                "value": 432
+              }
+            ]
+          }
+        ]
+      },
+      "id": "17841459295166745/insights/follower_demographics/lifetime"
+    }
+  ]
+}

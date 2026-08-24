@@ -6,8 +6,23 @@ import { fetchAppleHints, fetchAppleTrending, fetchPlaySuggest } from "./suggest
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
 import { KEYWORDS } from "./config";
 import {
+  fetchInstagramDemographics,
+  fetchInstagramPosts,
+  fetchInstagramSeries,
+  fetchInstagramTotals,
+  isoDate,
+  recentPosts,
+  startOfUtcDay,
+} from "./instagram";
+import {
   hourBucket,
   recordRuns,
+  saveInstagramDemographics,
+  saveInstagramNewFollowers,
+  saveInstagramPostMetrics,
+  saveInstagramPosts,
+  saveInstagramReach,
+  saveInstagramTotals,
   saveKeywordRanks,
   saveReviews,
   saveSuggestions,
@@ -161,13 +176,73 @@ export async function runDaily(): Promise<DailySummary> {
     }
   });
 
+  /*
+   * Instagram insights: the account's own performance, its posts, and who is
+   * following it.
+   *
+   * Gated on the token rather than on SOCIAL_INSTAGRAM_HANDLE, unlike the
+   * follower counter in run-poll. These endpoints all address /me, so the
+   * account is whichever one authorised the credential; a handle would be
+   * decoration that could disagree with reality.
+   */
+  const igToken = await instagramToken();
+  const today = isoDate(startOfUtcDay(new Date()));
+
+  const instagramDailyStep = igToken
+    ? await step("instagram:daily", async () => {
+        /*
+         * Three days rather than just yesterday. A run that failed or was
+         * skipped leaves a hole, and re-reading the window costs the same one
+         * request as reading a single day, so the gap heals itself.
+         */
+        const until = startOfUtcDay(new Date());
+        const since = new Date(until.getTime() - 3 * 86_400_000);
+        const yesterday = new Date(until.getTime() - 86_400_000);
+
+        const [reach, newFollowers, totals] = await Promise.all([
+          fetchInstagramSeries(igToken.accessToken, "reach", since, until),
+          fetchInstagramSeries(igToken.accessToken, "follower_count", since, until),
+          fetchInstagramTotals(igToken.accessToken, yesterday),
+        ]);
+        return { reach, newFollowers, totals };
+      })
+    : skipped("instagram:daily", "no token configured");
+
+  const instagramPostsStep = igToken
+    ? await step("instagram:posts", () => fetchInstagramPosts(igToken.accessToken))
+    : skipped("instagram:posts", "no token configured");
+
+  const instagramDemographicsStep = igToken
+    ? await step("instagram:demographics", () => fetchInstagramDemographics(igToken.accessToken))
+    : skipped("instagram:demographics", "no token configured");
+
   const keywordRanks = values(keywordSteps);
   const reviews: Review[] = reviewStep.value ?? [];
+
+  const instagramDaily = instagramDailyStep.value;
+  const instagramPosts = instagramPostsStep.value ?? [];
+  const instagramDemographics = instagramDemographicsStep.value ?? [];
 
   const writes = await Promise.allSettled([
     saveKeywordRanks(keywordRanks, capturedAt),
     saveReviews(reviews),
     saveSuggestions(values(suggestionSteps), capturedAt),
+    instagramDaily
+      ? Promise.all([
+          saveInstagramReach(instagramDaily.reach),
+          saveInstagramNewFollowers(instagramDaily.newFollowers),
+          saveInstagramTotals([instagramDaily.totals]),
+        ]).then((counts) => counts.reduce((sum, n) => sum + n, 0))
+      : Promise.resolve(0),
+    // Sequential on purpose: instagram_post_metrics references
+    // instagram_posts, so a post first seen today has no parent row until the
+    // posts write lands.
+    (async () => {
+      const saved = await saveInstagramPosts(instagramPosts);
+      await saveInstagramPostMetrics(recentPosts(instagramPosts), today);
+      return saved;
+    })(),
+    saveInstagramDemographics(instagramDemographics, today),
   ]);
 
   const newReviews =
@@ -175,7 +250,14 @@ export async function runDaily(): Promise<DailySummary> {
 
   // Success is recorded too, so a single bad run does not leave the health
   // panel showing a permanent failure. See the note in run-poll.ts.
-  const writeLabels = ["persist:keyword_ranks", "persist:reviews", "persist:suggestions"];
+  const writeLabels = [
+    "persist:keyword_ranks",
+    "persist:reviews",
+    "persist:suggestions",
+    "persist:instagram_daily",
+    "persist:instagram_posts",
+    "persist:instagram_demographics",
+  ];
   const writeOutcomes = writes.map((result, index) =>
     result.status === "rejected"
       ? {
@@ -199,6 +281,9 @@ export async function runDaily(): Promise<DailySummary> {
       analyticsStep,
       discoveryStep,
       tokenStep,
+      instagramDailyStep,
+      instagramPostsStep,
+      instagramDemographicsStep,
     ]),
     ...writeOutcomes,
   ];

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { BrandLogo, type BrandKey } from "@/components/tv/brand-logo";
 import { FollowerChart } from "@/components/dashboard/follower-chart";
+import { InstagramInsights } from "@/components/dashboard/instagram-insights";
 import { GrowthChart } from "@/components/dashboard/growth-chart";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { PageHeader, Section } from "@/components/dashboard/page-header";
@@ -13,6 +14,10 @@ import { socialEnv } from "@/lib/env";
 import {
   followerHistory,
   growthSeries,
+  instagramAudience,
+  instagramPerformance,
+  instagramStories,
+  instagramTopPosts,
   socialTrends,
   type GrowthSeriesKey,
 } from "@/lib/db/queries";
@@ -34,6 +39,29 @@ export const dynamic = "force-dynamic";
  * now, what shape its curve has, and how much it moved per period. The last
  * one reuses the growth page's own series so the two can never disagree.
  */
+
+/**
+ * The Instagram-only extras, gathered separately and allowed to fail.
+ *
+ * These sections are additive to a page that already works without them, so a
+ * missing table — the usual cause being migration 0015 not yet applied to this
+ * environment — should cost the new sections and nothing else. Letting it
+ * throw would take the follower chart down with it and report the whole page
+ * as unconfigured, which would be a worse answer than a shorter page.
+ */
+async function instagramInsights() {
+  try {
+    const [performance, posts, audience, stories] = await Promise.all([
+      instagramPerformance(90),
+      instagramTopPosts(90, 10),
+      instagramAudience(),
+      instagramStories(14),
+    ]);
+    return { performance, posts, audience, stories };
+  } catch {
+    return null;
+  }
+}
 
 const PLATFORMS = {
   telegram: {
@@ -92,6 +120,7 @@ export default async function AudiencePlatformPage({
       trend: trends.find((entry) => entry.platform === platform) ?? null,
       history,
       growth,
+      insights: platform === "instagram" ? await instagramInsights() : null,
     };
   }, "/audience");
 
@@ -100,7 +129,7 @@ export default async function AudiencePlatformPage({
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { trend, history, growth } = result.data;
+  const { trend, history, growth, insights } = result.data;
 
   const configured = socialEnv()[platform];
   const handle = trend?.handle ?? (configured && "handle" in configured
@@ -214,6 +243,16 @@ export default async function AudiencePlatformPage({
           emptyNote="Not enough complete periods yet to show a change."
         />
       </Section>
+
+      {insights ? (
+        <InstagramInsights
+          performance={insights.performance}
+          posts={insights.posts}
+          audience={insights.audience}
+          stories={insights.stories}
+          followers={trend?.current ?? null}
+        />
+      ) : null}
 
       <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
         {spec.note}{" "}

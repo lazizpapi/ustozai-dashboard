@@ -12,6 +12,11 @@ import type {
 } from "@/lib/collectors/types";
 import type { ListingRecord } from "@/lib/collectors/listing";
 import type { SocialSnapshot } from "@/lib/collectors/social";
+import type {
+  InstagramDemographic,
+  InstagramPost,
+  InstagramStory,
+} from "@/lib/collectors/instagram";
 
 /**
  * Every database write in the application lives here.
@@ -359,6 +364,217 @@ export async function saveSocialSnapshots(
     .from("social_snapshots")
     .upsert(rows, { onConflict: "platform,captured_at" });
   if (error) throw new Error(`saveSocialSnapshots: ${error.message}`);
+  return rows.length;
+}
+
+/**
+ * Instagram insights.
+ *
+ * instagram_daily is filled by two collectors that never run together: the
+ * backfill writes reach and new_followers across two years, the daily run
+ * writes the window totals for one day. Both land on the same row.
+ *
+ * That makes the column list of each upsert load-bearing. PostgREST builds its
+ * ON CONFLICT DO UPDATE from the keys present in the payload, so a row object
+ * carrying only date and reach leaves the other columns alone, while one
+ * carrying an undefined views would overwrite a real figure with null. Rows in
+ * a single call must therefore all have the same keys, which the guard below
+ * enforces rather than trusts: a mismatch silently erases a day of metrics,
+ * and nobody would notice until a chart went holey weeks later.
+ */
+async function saveDailyColumns(
+  table: string,
+  rows: Record<string, unknown>[],
+  label: string,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const shape = Object.keys(rows[0]).sort().join(",");
+  for (const row of rows) {
+    if (Object.keys(row).sort().join(",") !== shape) {
+      throw new Error(`${label}: rows must all carry the same columns, or an upsert nulls a column it never meant to touch`);
+    }
+  }
+
+  const { error } = await serviceClient().from(table).upsert(rows, { onConflict: "date" });
+  if (error) throw new Error(`${label}: ${error.message}`);
+  return rows.length;
+}
+
+/** Daily reach, the one account metric the API serves as a real series. */
+export async function saveInstagramReach(
+  points: { date: string; value: number }[],
+): Promise<number> {
+  const collectedAt = new Date().toISOString();
+  return saveDailyColumns(
+    "instagram_daily",
+    points.map((point) => ({ date: point.date, reach: point.value, collected_at: collectedAt })),
+    "saveInstagramReach",
+  );
+}
+
+/** Gross new follows per day. Never net, so it cannot be differenced. */
+export async function saveInstagramNewFollowers(
+  points: { date: string; value: number }[],
+): Promise<number> {
+  const collectedAt = new Date().toISOString();
+  return saveDailyColumns(
+    "instagram_daily",
+    points.map((point) => ({
+      date: point.date,
+      new_followers: point.value,
+      collected_at: collectedAt,
+    })),
+    "saveInstagramNewFollowers",
+  );
+}
+
+/**
+ * One day's window totals.
+ *
+ * Every column is written on every call, including the ones the API omitted,
+ * so a metric that stops being reported reverts to null rather than freezing
+ * at its last known value and looking current forever.
+ */
+export async function saveInstagramTotals(
+  totals: { date: string; values: Record<string, number> }[],
+): Promise<number> {
+  const collectedAt = new Date().toISOString();
+  return saveDailyColumns(
+    "instagram_daily",
+    totals.map((total) => ({
+      date: total.date,
+      views: total.values.views ?? null,
+      accounts_engaged: total.values.accounts_engaged ?? null,
+      total_interactions: total.values.total_interactions ?? null,
+      likes: total.values.likes ?? null,
+      comments: total.values.comments ?? null,
+      shares: total.values.shares ?? null,
+      saves: total.values.saves ?? null,
+      replies: total.values.replies ?? null,
+      profile_views: total.values.profile_views ?? null,
+      website_clicks: total.values.website_clicks ?? null,
+      collected_at: collectedAt,
+    })),
+    "saveInstagramTotals",
+  );
+}
+
+export async function saveInstagramPosts(posts: InstagramPost[]): Promise<number> {
+  if (posts.length === 0) return 0;
+  const collectedAt = new Date().toISOString();
+
+  const rows = posts.map((post) => ({
+    media_id: post.mediaId,
+    posted_at: post.postedAt,
+    media_product_type: post.mediaProductType,
+    media_type: post.mediaType,
+    permalink: post.permalink,
+    caption: post.caption,
+    reach: post.reach,
+    views: post.views,
+    likes: post.likes,
+    comments: post.comments,
+    shares: post.shares,
+    saved: post.saved,
+    total_interactions: post.totalInteractions,
+    profile_visits: post.profileVisits,
+    follows: post.follows,
+    avg_watch_time_ms: post.avgWatchTimeMs,
+    total_watch_time_ms: post.totalWatchTimeMs,
+    collected_at: collectedAt,
+  }));
+
+  const { error } = await serviceClient()
+    .from("instagram_posts")
+    .upsert(rows, { onConflict: "media_id" });
+  if (error) throw new Error(`saveInstagramPosts: ${error.message}`);
+  return rows.length;
+}
+
+/**
+ * A day's reading of a recent post's counters.
+ *
+ * Must run after saveInstagramPosts: the table references instagram_posts, so
+ * a post seen for the first time today has no parent row until that write
+ * lands.
+ */
+export async function saveInstagramPostMetrics(
+  posts: InstagramPost[],
+  date: string,
+): Promise<number> {
+  if (posts.length === 0) return 0;
+  const collectedAt = new Date().toISOString();
+
+  const rows = posts.map((post) => ({
+    media_id: post.mediaId,
+    date,
+    reach: post.reach,
+    views: post.views,
+    likes: post.likes,
+    comments: post.comments,
+    shares: post.shares,
+    saved: post.saved,
+    total_interactions: post.totalInteractions,
+    collected_at: collectedAt,
+  }));
+
+  const { error } = await serviceClient()
+    .from("instagram_post_metrics")
+    .upsert(rows, { onConflict: "media_id,date" });
+  if (error) throw new Error(`saveInstagramPostMetrics: ${error.message}`);
+  return rows.length;
+}
+
+export async function saveInstagramDemographics(
+  rows: InstagramDemographic[],
+  date: string,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const collectedAt = new Date().toISOString();
+
+  const payload = rows.map((row) => ({
+    date,
+    breakdown: row.breakdown,
+    bucket: row.bucket,
+    followers: row.followers,
+    collected_at: collectedAt,
+  }));
+
+  const { error } = await serviceClient()
+    .from("instagram_demographics")
+    .upsert(payload, { onConflict: "date,breakdown,bucket" });
+  if (error) throw new Error(`saveInstagramDemographics: ${error.message}`);
+  return payload.length;
+}
+
+/**
+ * Stories, overwritten on every poll so the row holds the last reading taken
+ * before the story expired. Later readings are strictly better than earlier
+ * ones, so a plain upsert is the right merge.
+ */
+export async function saveInstagramStories(stories: InstagramStory[]): Promise<number> {
+  if (stories.length === 0) return 0;
+  const collectedAt = new Date().toISOString();
+
+  const rows = stories.map((story) => ({
+    media_id: story.mediaId,
+    posted_at: story.postedAt,
+    media_type: story.mediaType,
+    permalink: story.permalink,
+    reach: story.reach,
+    views: story.views,
+    replies: story.replies,
+    shares: story.shares,
+    total_interactions: story.totalInteractions,
+    navigation: story.navigation,
+    collected_at: collectedAt,
+  }));
+
+  const { error } = await serviceClient()
+    .from("instagram_stories")
+    .upsert(rows, { onConflict: "media_id" });
+  if (error) throw new Error(`saveInstagramStories: ${error.message}`);
   return rows.length;
 }
 

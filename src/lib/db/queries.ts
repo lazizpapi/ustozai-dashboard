@@ -1775,3 +1775,267 @@ export async function hasAnyData(): Promise<boolean> {
   if (error) return false;
   return (count ?? 0) > 0;
 }
+
+// ---------------------------------------------------------------------------
+// Instagram insights
+// ---------------------------------------------------------------------------
+
+/**
+ * One day of the account's own performance.
+ *
+ * reach stands apart from the rest of these figures: it counts unique
+ * accounts within its window, so it can be charted per day but never added
+ * up. The column comment in 0015 carries the measured size of that error.
+ */
+export interface InstagramDay {
+  date: string;
+  reach: number | null;
+  views: number | null;
+  newFollowers: number | null;
+  totalInteractions: number | null;
+  profileViews: number | null;
+}
+
+export interface InstagramPerformance {
+  /** Oldest first, ready to chart. */
+  daily: InstagramDay[];
+  latest: InstagramDay | null;
+  /**
+   * Sums over the window, for the additive metrics only.
+   *
+   * There is deliberately no windowReach. Adding seven days of reach
+   * double-counts everyone who saw the account on more than one of them:
+   * measured against Instagram's own weekly figure, the sum overstated it by
+   * a tenth. A window reach can only be read from the API for that window,
+   * and we hold no such reading, so the page reports the best single day
+   * rather than implying a total nothing here supports.
+   */
+  windowViews: number | null;
+  windowInteractions: number | null;
+  windowNewFollowers: number | null;
+  /** The same sums over the window before this one, for a comparison. */
+  previousViews: number | null;
+  previousInteractions: number | null;
+  bestReachDay: InstagramDay | null;
+  spanDays: number;
+}
+
+const sumOrNull = (values: (number | null)[]): number | null => {
+  const present = values.filter((value): value is number => value !== null);
+  return present.length === 0 ? null : present.reduce((a, b) => a + b, 0);
+};
+
+export async function instagramPerformance(days = 90): Promise<InstagramPerformance> {
+  // Both windows are fetched together so the comparison needs no second round
+  // trip, and so a half-collected older window shows up as a gap rather than
+  // being read as a fall.
+  const since = new Date(Date.now() - days * 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const rows = await fetchAllPages<{
+    date: string;
+    reach: number | null;
+    views: number | null;
+    new_followers: number | null;
+    total_interactions: number | null;
+    profile_views: number | null;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("instagram_daily")
+        .select("date, reach, views, new_followers, total_interactions, profile_views")
+        .gte("date", since)
+        .order("date", { ascending: true })
+        .range(from, to),
+    "instagramPerformance",
+  );
+
+  const all: InstagramDay[] = rows.map((row) => ({
+    date: row.date,
+    reach: row.reach,
+    views: row.views,
+    newFollowers: row.new_followers,
+    totalInteractions: row.total_interactions,
+    profileViews: row.profile_views,
+  }));
+
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const daily = all.filter((day) => day.date >= cutoff);
+  const previous = all.filter((day) => day.date < cutoff);
+
+  const withReach = daily.filter((day) => day.reach !== null);
+  const bestReachDay =
+    withReach.length === 0
+      ? null
+      : withReach.reduce((best, day) => ((day.reach ?? 0) > (best.reach ?? 0) ? day : best));
+
+  return {
+    daily,
+    latest: daily.at(-1) ?? null,
+    windowViews: sumOrNull(daily.map((day) => day.views)),
+    windowInteractions: sumOrNull(daily.map((day) => day.totalInteractions)),
+    windowNewFollowers: sumOrNull(daily.map((day) => day.newFollowers)),
+    previousViews: sumOrNull(previous.map((day) => day.views)),
+    previousInteractions: sumOrNull(previous.map((day) => day.totalInteractions)),
+    bestReachDay,
+    spanDays: days,
+  };
+}
+
+export interface InstagramTopPost {
+  mediaId: string;
+  postedAt: string;
+  mediaProductType: string;
+  mediaType: string;
+  caption: string | null;
+  permalink: string | null;
+  reach: number | null;
+  views: number | null;
+  totalInteractions: number | null;
+  saved: number | null;
+  shares: number | null;
+  avgWatchTimeMs: number | null;
+  /** Interactions per account reached. Null when either side is missing. */
+  engagementRate: number | null;
+}
+
+/**
+ * The posts that travelled furthest.
+ *
+ * Ranked on reach rather than likes. Reach is what a post actually bought,
+ * whereas likes track audience size more than they track whether the post
+ * worked.
+ *
+ * These are lifetime counters, so a post from March has had months to
+ * accumulate what a post from yesterday has not. Restricting the ranking to
+ * posts published inside the window is what keeps that comparison fair.
+ */
+export async function instagramTopPosts(days = 90, limit = 10): Promise<InstagramTopPost[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await serviceClient()
+    .from("instagram_posts")
+    .select(
+      "media_id, posted_at, media_product_type, media_type, caption, permalink, reach, views, total_interactions, saved, shares, avg_watch_time_ms",
+    )
+    .gte("posted_at", since)
+    .order("reach", { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (error) throw new Error(`instagramTopPosts: ${error.message}`);
+
+  return (data ?? []).map((row) => {
+    const reach = row.reach as number | null;
+    const interactions = row.total_interactions as number | null;
+    return {
+      mediaId: row.media_id as string,
+      postedAt: row.posted_at as string,
+      mediaProductType: row.media_product_type as string,
+      mediaType: row.media_type as string,
+      caption: row.caption as string | null,
+      permalink: row.permalink as string | null,
+      reach,
+      views: row.views as number | null,
+      totalInteractions: interactions,
+      saved: row.saved as number | null,
+      shares: row.shares as number | null,
+      avgWatchTimeMs: row.avg_watch_time_ms as number | null,
+      engagementRate:
+        reach !== null && reach > 0 && interactions !== null ? interactions / reach : null,
+    };
+  });
+}
+
+export interface InstagramAudienceBucket {
+  bucket: string;
+  followers: number;
+}
+
+export interface InstagramAudience {
+  date: string;
+  countries: InstagramAudienceBucket[];
+  cities: InstagramAudienceBucket[];
+  age: InstagramAudienceBucket[];
+  gender: InstagramAudienceBucket[];
+  /**
+   * What the buckets add up to, which sits below the follower count by design.
+   *
+   * Instagram withholds buckets too small to report without identifying
+   * people, so a share has to be quoted against this figure rather than
+   * against the follower total. A chart implying the cuts cover everybody
+   * would be wrong by however much Instagram declined to attribute.
+   */
+  attributed: number;
+}
+
+export async function instagramAudience(): Promise<InstagramAudience | null> {
+  const { data: latest, error: latestError } = await serviceClient()
+    .from("instagram_demographics")
+    .select("date")
+    .order("date", { ascending: false })
+    .limit(1);
+
+  if (latestError) throw new Error(`instagramAudience: ${latestError.message}`);
+  const date = latest?.[0]?.date as string | undefined;
+  if (!date) return null;
+
+  const rows = await fetchAllPages<{ breakdown: string; bucket: string; followers: number }>(
+    (from, to) =>
+      serviceClient()
+        .from("instagram_demographics")
+        .select("breakdown, bucket, followers")
+        .eq("date", date)
+        .order("followers", { ascending: false })
+        .range(from, to),
+    "instagramAudience",
+  );
+
+  const pick = (breakdown: string) =>
+    rows
+      .filter((row) => row.breakdown === breakdown)
+      .map((row) => ({ bucket: row.bucket, followers: row.followers }));
+
+  const countries = pick("country");
+
+  return {
+    date,
+    countries,
+    cities: pick("city"),
+    age: pick("age"),
+    gender: pick("gender"),
+    attributed: countries.reduce((sum, row) => sum + row.followers, 0),
+  };
+}
+
+export interface InstagramStoryRow {
+  mediaId: string;
+  postedAt: string;
+  permalink: string | null;
+  mediaType: string;
+  reach: number | null;
+  views: number | null;
+  replies: number | null;
+  navigation: number | null;
+}
+
+export async function instagramStories(days = 14): Promise<InstagramStoryRow[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await serviceClient()
+    .from("instagram_stories")
+    .select("media_id, posted_at, permalink, media_type, reach, views, replies, navigation")
+    .gte("posted_at", since)
+    .order("posted_at", { ascending: false });
+
+  if (error) throw new Error(`instagramStories: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    mediaId: row.media_id as string,
+    postedAt: row.posted_at as string,
+    permalink: row.permalink as string | null,
+    mediaType: row.media_type as string,
+    reach: row.reach as number | null,
+    views: row.views as number | null,
+    replies: row.replies as number | null,
+    navigation: row.navigation as number | null,
+  }));
+}

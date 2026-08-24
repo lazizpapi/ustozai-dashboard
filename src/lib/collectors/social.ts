@@ -186,11 +186,19 @@ export async function fetchInstagramViaApi(
   token: string,
   handle: string,
 ): Promise<SocialSnapshot> {
-  const url =
-    "https://graph.instagram.com/v23.0/me" +
-    `?fields=followers_count,username&access_token=${encodeURIComponent(token)}`;
+  const url = "https://graph.instagram.com/v23.0/me?fields=followers_count,username";
 
-  const payload = await fetchJson(url);
+  /*
+   * The credential travels in a header, not the query string.
+   *
+   * HttpError's message is `${url} returned ${status}`, run-step writes that
+   * message into collector_runs, and collector_runs grants authenticated read
+   * to every signed-in user. With the token in the URL, one 5xx from Meta
+   * publishes a live sixty-day credential to everyone holding any department
+   * password. Meta accepts bearer auth on this endpoint, so the whole class of
+   * accident is avoidable rather than something to remember to redact.
+   */
+  const payload = await fetchJson(url, {}, { Authorization: `Bearer ${token}` });
   if (payload === null) throw new ParseError("social-instagram", "empty API response");
   return parseInstagramApi(payload, handle);
 }

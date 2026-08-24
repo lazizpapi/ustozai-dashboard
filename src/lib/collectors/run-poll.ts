@@ -13,6 +13,7 @@ import {
   fetchYoutubeSubscribers,
   type SocialSnapshot,
 } from "./social";
+import { fetchInstagramStories } from "./instagram";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
 import { collectUstozMetrics } from "@/lib/ustoz/collect";
 import {
@@ -31,6 +32,7 @@ import {
   saveListings,
   saveReviews,
   saveSnapshots,
+  saveInstagramStories,
   saveSocialSnapshots,
 } from "@/lib/db/persist";
 import { socialEnv } from "@/lib/env";
@@ -218,6 +220,25 @@ export async function runPoll(): Promise<PollSummary> {
       : skipped("social:youtube", "no handle configured"),
   ];
 
+  /*
+   * Stories, which are the one thing here that cannot be collected late.
+   *
+   * Instagram drops a story from the API twenty-four hours after it is posted,
+   * so a story missed is a story lost rather than merely delayed. Hourly is
+   * the cheapest schedule that cannot miss one, and an empty list is the
+   * normal answer for most hours rather than a failure.
+   *
+   * It lives in the hourly poll rather than the five-minute pulse because
+   * pulse.test.ts asserts the retry budget fits inside a thirty second
+   * function, and this is a request that can itself fan out.
+   */
+  const instagramTokenRow = await instagramToken();
+  const storiesStep = instagramTokenRow
+    ? await step("instagram:stories", () =>
+        fetchInstagramStories(instagramTokenRow.accessToken),
+      )
+    : skipped("instagram:stories", "no token configured");
+
   const allSteps: StepResult<unknown>[] = [
     ...lookupSteps,
     ...chartSteps,
@@ -226,6 +247,7 @@ export async function runPoll(): Promise<PollSummary> {
     ...playReviewSteps,
     ...competitorSteps,
     ...socialSteps,
+    storiesStep,
   ];
 
   // parseLookup returns a null snapshot for storefronts that do not carry the
@@ -261,6 +283,7 @@ export async function runPoll(): Promise<PollSummary> {
     saveListings(listings),
     saveReviews(allReviews),
     saveSocialSnapshots(socialSnapshots, capturedAt),
+    saveInstagramStories(storiesStep.value ?? []),
   ]);
 
   const writeLabels = [
@@ -270,6 +293,7 @@ export async function runPoll(): Promise<PollSummary> {
     "persist:listings",
     "persist:reviews",
     "persist:social",
+    "persist:instagram_stories",
   ];
 
   // Record success as well as failure. The health panel shows the most recent
