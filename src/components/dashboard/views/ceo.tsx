@@ -9,6 +9,7 @@ import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
+import { PLAY_EDUCATION_CATEGORY } from "@/lib/collectors/config";
 import { latestInstallRate } from "@/lib/installs";
 import {
   activeUsersTrend,
@@ -66,6 +67,7 @@ export async function CeoView() {
   const result = await load(() =>
     Promise.all([
       rankTrend(),
+      rankTrend("topfree", "uz", PLAY_EDUCATION_CATEGORY, "android"),
       ratingTrend("ios"),
       ratingTrend("android"),
       androidDailyInstalls(30),
@@ -90,6 +92,7 @@ export async function CeoView() {
 
   const [
     rank,
+    playRank,
     ios,
     android,
     installs,
@@ -117,14 +120,30 @@ export async function CeoView() {
       */}
       <ActiveUsersStrip active={active} revenue={revenue} engagement={engagement} />
       <MetricStrip wide>
+        {/*
+          Two tiles rather than one. This was a single "Education, UZ" that
+          meant Apple and never said so, which is unreadable next to the
+          install and rating tiles that do name their store.
+        */}
         <Metric
-          label="Education, UZ"
+          label="Education, App Store"
           value={
             rank.current === null && rank.feedSize
               ? `outside ${rank.feedSize}`
               : formatRank(rank.current)
           }
           change={rankDelta(rank.current, rank.previous, rank.spanDays)}
+        />
+
+        <Metric
+          label="Education, Google Play"
+          value={
+            playRank.current === null && playRank.feedSize
+              ? `outside ${playRank.feedSize}`
+              : formatRank(playRank.current)
+          }
+          change={rankDelta(playRank.current, playRank.previous, playRank.spanDays)}
+          detail={playRank.current === null && !playRank.feedSize ? "not collected yet" : undefined}
         />
 
         <Metric

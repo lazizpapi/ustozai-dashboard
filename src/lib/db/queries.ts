@@ -152,13 +152,22 @@ export interface RankPoint {
   feedSize: number;
 }
 
+/**
+ * The platform argument is load-bearing, not decoration.
+ *
+ * chart_ranks holds both stores, separated only by which app row each rank
+ * points at. Reading without filtering would return Apple and Play positions
+ * interleaved on one timeline, and the resulting chart would look like the app
+ * lurching sixteen places every hour.
+ */
 export async function rankHistory(
   chartType = "topfree",
   country = "uz",
   genre: string = EDUCATION_GENRE,
   days = 90,
+  platform: "ios" | "android" = "ios",
 ): Promise<RankPoint[]> {
-  const id = await appId("ios");
+  const id = await appId(platform);
   if (!id) return [];
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -192,8 +201,9 @@ export async function rankTrend(
   chartType = "topfree",
   country = "uz",
   genre: string = EDUCATION_GENRE,
+  platform: "ios" | "android" = "ios",
 ): Promise<Trend & { feedSize: number | null }> {
-  const history = await rankHistory(chartType, country, genre, 30);
+  const history = await rankHistory(chartType, country, genre, 30, platform);
   if (history.length === 0) {
     return { ...trend<number>(null, null, null), feedSize: null };
   }

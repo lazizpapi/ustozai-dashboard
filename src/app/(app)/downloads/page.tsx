@@ -71,8 +71,20 @@ export default async function DownloadsPage() {
           }
           detail={cumulative?.installLabel ? `Play shows ${cumulative.installLabel}` : undefined}
         />
+        {/*
+          The label names whichever store the date came from. It used to read
+          "Latest day recorded" for a value that falls back from Apple to Play,
+          so the same tile meant a different store depending on what had
+          arrived, and never said which.
+        */}
         <Metric
-          label="Latest day recorded"
+          label={
+            ios.at(-1)
+              ? "Latest App Store day"
+              : android.at(-1)
+                ? "Latest Google Play day"
+                : "Latest day recorded"
+          }
           value={
             ios.at(-1)
               ? formatDay(ios.at(-1)!.date)

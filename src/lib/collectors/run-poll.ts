@@ -14,6 +14,7 @@ import {
   type SocialSnapshot,
 } from "./social";
 import { fetchInstagramStories } from "./instagram";
+import { fetchPlayChart, parsePlayChart } from "./play-charts";
 import { notifyStatusChanges } from "./alerts";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
 import { collectorHealth } from "@/lib/db/queries";
@@ -24,6 +25,7 @@ import {
   COMPETITORS,
   COUNTRIES,
   IOS_APP_ID,
+  PLAY_CHART_TYPES,
   PLAY_REVIEW_LANGS,
 } from "./config";
 import {
@@ -36,6 +38,7 @@ import {
   saveSnapshots,
   saveInstagramStories,
   saveSocialSnapshots,
+  type RunOutcome,
 } from "@/lib/db/persist";
 import { socialEnv } from "@/lib/env";
 import { instagramToken } from "@/lib/db/tokens";
@@ -128,6 +131,41 @@ export async function runPoll(): Promise<PollSummary> {
       ),
     ),
   );
+
+  /*
+   * The same question asked of the other store.
+   *
+   * Sequential rather than raced, following the etiquette note in
+   * docs/competitor-data-collection.md: near-identical requests arriving at one
+   * endpoint in the same instant is the shape that gets rate limited. Two
+   * charts, so two requests an hour.
+   *
+   * Only our own app is read from these. Apple's feed is parsed for every
+   * tracked competitor because the payload is the same hundred entries whoever
+   * is asking; the same is true here, and adding competitors later costs
+   * parsing rather than requests.
+   */
+  const playChartSteps: ChartRank[] = [];
+  const playChartOutcomes: RunOutcome[] = [];
+  for (const country of CHART_COUNTRIES) {
+    for (const chart of PLAY_CHART_TYPES) {
+      const result = await step(
+        `play-charts:${country}:${chart.key}:${chart.genre}`,
+        async () => {
+          const query = {
+            country,
+            collection: chart.collection,
+            category: chart.category,
+            genre: chart.genre,
+            chartType: chart.key,
+          };
+          return parsePlayChart(await fetchPlayChart(query), query);
+        },
+      );
+      playChartOutcomes.push(result.outcome);
+      if (result.value) playChartSteps.push(result.value);
+    }
+  }
 
   const playStep = await step("play-details:uz", () => readPlayStore("uz"));
 
@@ -266,7 +304,12 @@ export async function runPoll(): Promise<PollSummary> {
     reading.listing ? [reading.listing] : [],
   );
 
-  const ranks: ChartRank[] = values(chartSteps).flatMap((chart) => chart.ranks);
+  // One write for both stores. saveChartRanks resolves app_id from each rank's
+  // own platform, so Apple and Play rows differ only in which app they point at.
+  const ranks: ChartRank[] = [
+    ...values(chartSteps).flatMap((chart) => chart.ranks),
+    ...playChartSteps,
+  ];
   const chartTops: ChartApp[] = values(chartSteps).flatMap((chart) => chart.top);
 
   const socialSnapshots = values(socialSteps);
@@ -327,7 +370,12 @@ export async function runPoll(): Promise<PollSummary> {
    */
   const ustoz = await collectUstozMetrics();
 
-  const all = [...outcomes(allSteps), ...writeOutcomes, ...ustoz.outcomes];
+  const all = [
+    ...outcomes(allSteps),
+    ...playChartOutcomes,
+    ...writeOutcomes,
+    ...ustoz.outcomes,
+  ];
 
   /*
    * Read the old health before writing the new, because collectorHealth

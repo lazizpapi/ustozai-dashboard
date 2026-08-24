@@ -34,6 +34,30 @@ export const CHART_TYPES = [
   { key: "topfree", feed: "topfreeapplications", genre: OVERALL_GENRE },
 ] as const;
 
+/** Play's own name for the Education category, used where Apple uses 6017. */
+export const PLAY_EDUCATION_CATEGORY = "EDUCATION";
+
+/**
+ * The Play charts worth polling.
+ *
+ * Genre strings are namespaced per store rather than shared: Apple numbers its
+ * genres, Google names them, and the two never collide because chart_ranks
+ * rows are separated by app_id and every app row carries its platform.
+ *
+ * Measured 2026-08-24, UZ: Education #5, and outside the top 100 overall. The
+ * shape matches Apple exactly, which is why the overall chart is worth keeping
+ * even though the app does not appear in it.
+ */
+export const PLAY_CHART_TYPES = [
+  {
+    key: "topfree",
+    collection: "TOP_FREE",
+    category: PLAY_EDUCATION_CATEGORY,
+    genre: PLAY_EDUCATION_CATEGORY,
+  },
+  { key: "topfree", collection: "TOP_FREE", category: undefined, genre: OVERALL_GENRE },
+] as const;
+
 /**
  * Search terms, tracked in the UZ storefront.
  *
