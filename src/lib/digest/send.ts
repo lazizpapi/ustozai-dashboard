@@ -1,7 +1,7 @@
 import "server-only";
 
 import { formatDigest, type DigestInput } from "./format";
-import { telegramEnv } from "@/lib/env";
+import { sendTelegramMessage } from "./telegram";
 import { ESCALATE_WHEN_DAYS_LEFT, daysUntilExpiry, loadToken } from "@/lib/db/tokens";
 import {
   androidDailyInstalls,
@@ -94,28 +94,5 @@ async function gather(): Promise<DigestInput> {
 }
 
 export async function sendDailyDigest(): Promise<DigestResult> {
-  const config = telegramEnv();
-  if (!config) return { sent: false, reason: "Telegram is not configured" };
-
-  const message = formatDigest(await gather());
-
-  const response = await fetch(
-    `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendMessage`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: config.TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    return { sent: false, reason: `Telegram ${response.status}: ${detail.slice(0, 200)}` };
-  }
-  return { sent: true };
+  return sendTelegramMessage(formatDigest(await gather()));
 }

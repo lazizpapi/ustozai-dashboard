@@ -14,7 +14,9 @@ import {
   type SocialSnapshot,
 } from "./social";
 import { fetchInstagramStories } from "./instagram";
+import { notifyStatusChanges } from "./alerts";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
+import { collectorHealth } from "@/lib/db/queries";
 import { collectUstozMetrics } from "@/lib/ustoz/collect";
 import {
   CHART_COUNTRIES,
@@ -326,7 +328,19 @@ export async function runPoll(): Promise<PollSummary> {
   const ustoz = await collectUstozMetrics();
 
   const all = [...outcomes(allSteps), ...writeOutcomes, ...ustoz.outcomes];
+
+  /*
+   * Read the old health before writing the new, because collectorHealth
+   * returns the most recent row per source and after recordRuns that row is
+   * this run rather than the one being compared against.
+   *
+   * The alert rides the hourly poll rather than the daily run: the daily run
+   * is itself a thing that can stop, and an alarm wired into the machine it is
+   * meant to watch is not an alarm.
+   */
+  const before = await collectorHealth();
   await recordRuns(all);
+  await notifyStatusChanges(before, all);
 
   return {
     capturedAt,

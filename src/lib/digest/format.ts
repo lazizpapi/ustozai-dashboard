@@ -59,6 +59,23 @@ function ratingMove(current: number | null, previous: number | null): string {
 export function formatDigest(input: DigestInput): string {
   const lines: string[] = [`<b>Ustoz AI, ${escape(input.date)}</b>`, ""];
 
+  /*
+   * Problems first, above the numbers rather than under them.
+   *
+   * This block used to sit last, after the chart position and the downloads
+   * and the follower counts. A reader who skims the top of a daily message and
+   * stops when the news looks fine will never reach the bottom, which is how
+   * the Instagram collector stayed dead for four days while a message naming
+   * it arrived every morning.
+   */
+  if (input.failures.length > 0) {
+    lines.push("<b>Collector problems</b>");
+    for (const failure of input.failures.slice(0, 5)) {
+      lines.push(`  ${escape(failure.slice(0, 140))}`);
+    }
+    lines.push("");
+  }
+
   // Position
   if (input.rank.current !== null) {
     lines.push(
@@ -156,13 +173,6 @@ export function formatDigest(input: DigestInput): string {
         ? `Instagram access expires in ${days} day${days === 1 ? "" : "s"}. Reauthorise it before then or the follower count stops updating.`
         : "Instagram access has expired. Reauthorise it to resume the follower count.",
     );
-  }
-
-  if (input.failures.length > 0) {
-    lines.push("", "<b>Collector problems</b>");
-    for (const failure of input.failures.slice(0, 5)) {
-      lines.push(`  ${escape(failure.slice(0, 140))}`);
-    }
   }
 
   return lines.join("\n");
