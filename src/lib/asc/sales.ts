@@ -45,6 +45,16 @@ export interface DailyUnits {
   units: number;
 }
 
+export interface DailyProceeds {
+  date: string;
+  country: string;
+  /** Units that actually earned money, not total downloads. */
+  units: number;
+  /** Already multiplied out. See parseProceedsTsv. */
+  proceeds: number;
+  currency: string;
+}
+
 /**
  * Classify Apple's Product Type Identifier.
  *
@@ -109,6 +119,77 @@ export function parseSalesTsv(tsv: string, appleId: string): DailyUnits[] {
   return [...totals.values()];
 }
 
+/**
+ * Developer proceeds out of the same report the unit counts come from.
+ *
+ * Apple states Developer Proceeds PER UNIT, so a row is worth Units times
+ * that figure. Reading the column as a row total understates a day by exactly
+ * the number of units sold. The UstozAI transactions endpoint carries the same
+ * shape and was misread the same way, which is why this is laboured here
+ * rather than left to the reader.
+ *
+ * Deliberately not filtered through classify(). That function drops in-app
+ * purchases because they are not installs, and in-app purchases are precisely
+ * where the money is: filtering the same way would leave this permanently
+ * empty for any app that is free to download.
+ *
+ * Rows earning nothing are skipped rather than stored as zero. Ustoz AI is a
+ * free download monetised outside the App Store, so keeping them would write
+ * a few thousand rows a year that all say no money changed hands, and an
+ * empty table is the more honest way to say the same thing.
+ */
+export function parseProceedsTsv(tsv: string, appleId: string): DailyProceeds[] {
+  const lines = tsv.split("\n").filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const header = lines[0].split("\t").map((h) => h.trim());
+  const column = (name: string) => header.indexOf(name);
+
+  const idxUnits = column("Units");
+  const idxProceeds = column("Developer Proceeds");
+  const idxCurrency = column("Currency of Proceeds");
+  const idxCountry = column("Country Code");
+  const idxDate = column("Begin Date");
+  const idxAppleId = column("Apple Identifier");
+
+  // A report without the proceeds columns is not a failure. Apple varies the
+  // shape by report subtype, and the unit counts are parsed separately.
+  if (idxProceeds < 0 || idxUnits < 0 || idxCountry < 0 || idxDate < 0) return [];
+
+  const totals = new Map<string, DailyProceeds>();
+
+  for (const line of lines.slice(1)) {
+    const cells = line.split("\t");
+    if (idxAppleId >= 0 && cells[idxAppleId]?.trim() !== appleId) continue;
+
+    const perUnit = Number.parseFloat(cells[idxProceeds] ?? "");
+    const units = Number.parseInt(cells[idxUnits] ?? "", 10);
+    if (!Number.isFinite(perUnit) || !Number.isFinite(units)) continue;
+    if (perUnit === 0 || units === 0) continue;
+
+    const country = (cells[idxCountry] ?? "").trim().toLowerCase();
+    const date = normaliseDate(cells[idxDate] ?? "");
+    const currency = (cells[idxCurrency] ?? "").trim().toUpperCase() || "USD";
+    if (!country || !date) continue;
+
+    const key = date + "|" + country + "|" + currency;
+    const existing = totals.get(key);
+    if (existing) {
+      existing.units += units;
+      existing.proceeds += units * perUnit;
+    } else {
+      totals.set(key, { date, country, units, proceeds: units * perUnit, currency });
+    }
+  }
+
+  // Rounded once at the end. Money in floating point drifts, and four places
+  // keeps every real currency's minor unit intact.
+  return [...totals.values()].map((entry) => ({
+    ...entry,
+    proceeds: Math.round(entry.proceeds * 10000) / 10000,
+  }));
+}
+
 /** Apple writes Begin Date as MM/DD/YYYY in these reports. */
 function normaliseDate(raw: string): string | null {
   const value = raw.trim();
@@ -133,6 +214,23 @@ export async function fetchDailySales(
   appleId: string,
   token?: string,
 ): Promise<DailyUnits[] | null> {
+  const report = await fetchDailySalesReport(config, date, appleId, token);
+  return report ? report.units : null;
+}
+
+/**
+ * The whole report, parsed both ways.
+ *
+ * One request, two readings. Proceeds and unit counts come out of the same
+ * TSV, and fetching it twice to get them would double the calls against a
+ * rate limited endpoint for no gain.
+ */
+export async function fetchDailySalesReport(
+  config: AscConfig,
+  date: string,
+  appleId: string,
+  token?: string,
+): Promise<{ units: DailyUnits[]; proceeds: DailyProceeds[] } | null> {
   token ??= await createAscToken(config);
   const params = new URLSearchParams({
     "filter[frequency]": "DAILY",
@@ -156,5 +254,5 @@ export async function fetchDailySales(
 
   const gzipped = Buffer.from(await response.arrayBuffer());
   const tsv = gunzipSync(gzipped).toString("utf8");
-  return parseSalesTsv(tsv, appleId);
+  return { units: parseSalesTsv(tsv, appleId), proceeds: parseProceedsTsv(tsv, appleId) };
 }

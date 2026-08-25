@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { decodeJwt, decodeProtectedHeader } from "jose";
 
 import { createAscToken, decodePrivateKey } from "./jwt";
-import { ReportGoneError, parseSalesTsv } from "./sales";
+import { ReportGoneError, parseProceedsTsv, parseSalesTsv } from "./sales";
 import type { AscConfig } from "@/lib/env";
 
 function throwawayConfig(): AscConfig {
@@ -180,5 +180,96 @@ describe("parseSalesTsv", () => {
     const tsv = [shuffled, ["42", "UZ", "08/10/2026", "1F"].join("\t")].join("\n");
 
     expect(parseSalesTsv(tsv, "6504815934")[0]).toMatchObject({ units: 42, country: "uz" });
+  });
+});
+
+describe("parseProceedsTsv", () => {
+  /*
+   * Developer Proceeds is what Apple pays for ONE unit, so a row's takings are
+   * Units multiplied by it. Reading the column as a row total understates a
+   * day by exactly the number of units sold, which is the same mistake the
+   * UstozAI transactions parser made and the reason this is spelled out twice.
+   *
+   * Free downloads carry a proceeds of 0 and are skipped rather than stored as
+   * zero rows: the app is free, so storing them would write thousands of rows a
+   * year that all say nothing was earned.
+   */
+  const header = [
+    "Provider", "Provider Country", "SKU", "Developer", "Title", "Version",
+    "Product Type Identifier", "Units", "Developer Proceeds", "Begin Date",
+    "End Date", "Customer Currency", "Country Code", "Currency of Proceeds",
+    "Apple Identifier",
+  ].join("\t");
+
+  const row = (
+    type: string,
+    units: string,
+    proceeds: string,
+    country: string,
+    currency = "USD",
+    appleId = "6504815934",
+  ) =>
+    [
+      "APPLE", "UZ", "ustozai", "Ustoz EDU", "Ustoz AI", "2.2.6",
+      type, units, proceeds, "08/10/2026", "08/10/2026", "UZS", country,
+      currency, appleId,
+    ].join("\t");
+
+  it("multiplies the per-unit proceeds by the units sold", () => {
+    const tsv = [header, row("IA1", "5", "0.70", "UZ")].join("\n");
+    const result = parseProceedsTsv(tsv, "6504815934");
+
+    // Not 0.70.
+    expect(result).toEqual([
+      { date: "2026-08-10", country: "uz", units: 5, proceeds: 3.5, currency: "USD" },
+    ]);
+  });
+
+  it("skips free downloads rather than storing them as zero", () => {
+    const tsv = [header, row("1F", "120", "0", "UZ"), row("7F", "40", "0", "UZ")].join("\n");
+
+    expect(parseProceedsTsv(tsv, "6504815934")).toEqual([]);
+  });
+
+  it("counts in-app purchases, which the downloads parser deliberately drops", () => {
+    const tsv = [header, row("IA1", "3", "1.40", "UZ"), row("1F", "99", "0", "UZ")].join("\n");
+    const result = parseProceedsTsv(tsv, "6504815934");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ units: 3, proceeds: 4.2 });
+  });
+
+  it("keeps currencies apart instead of adding unlike money", () => {
+    const tsv = [
+      header,
+      row("IA1", "2", "1.00", "UZ", "USD"),
+      row("IA1", "2", "1.00", "UZ", "EUR"),
+    ].join("\n");
+    const result = parseProceedsTsv(tsv, "6504815934");
+
+    expect(result).toHaveLength(2);
+    expect(result.map((entry) => entry.currency).sort()).toEqual(["EUR", "USD"]);
+  });
+
+  it("sums several rows for one country and day", () => {
+    const tsv = [
+      header,
+      row("IA1", "2", "0.50", "UZ"),
+      row("IA9", "4", "0.25", "UZ"),
+    ].join("\n");
+
+    expect(parseProceedsTsv(tsv, "6504815934")[0]).toMatchObject({ units: 6, proceeds: 2 });
+  });
+
+  it("ignores rows belonging to another app", () => {
+    const tsv = [header, row("IA1", "9", "1.00", "UZ", "USD", "111111")].join("\n");
+
+    expect(parseProceedsTsv(tsv, "6504815934")).toEqual([]);
+  });
+
+  it("survives a report with no proceeds column at all", () => {
+    const slim = ["Units\tCountry Code\tBegin Date\tProduct Type Identifier", "5\tUZ\t08/10/2026\tIA1"].join("\n");
+
+    expect(parseProceedsTsv(slim, "6504815934")).toEqual([]);
   });
 });

@@ -397,6 +397,72 @@ export async function iosDailyDownloads(days = 60): Promise<DailyDownloads[]> {
   return [...byDate.values()];
 }
 
+export interface ProceedsTotal {
+  currency: string;
+  proceeds: number;
+  units: number;
+  from: string;
+  to: string;
+}
+
+/**
+ * What Apple actually owes us, by currency.
+ *
+ * Expected to be empty, and the page treats empty as "nothing to show" rather
+ * than as a fault. The app is a free download paid for through Payme and
+ * Click, so Apple collects nothing on its behalf; a row appears here only if
+ * an in-app purchase is ever sold.
+ *
+ * Grouped by currency rather than converted. Apple settles in the currency of
+ * each storefront and publishes no rate in this report, so adding them would
+ * mean inventing one.
+ */
+export async function iosProceeds(days = 30): Promise<ProceedsTotal[]> {
+  const id = await appId("ios");
+  if (!id) return [];
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const data = await fetchAllPages<{
+    date: string;
+    currency: string;
+    proceeds: number;
+    units: number;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("ios_proceeds_daily")
+        .select("date, currency, proceeds, units")
+        .eq("app_id", id)
+        .gte("date", since)
+        .order("date", { ascending: true })
+        .range(from, to),
+    "iosProceeds",
+  );
+
+  const byCurrency = new Map<string, ProceedsTotal>();
+  for (const row of data) {
+    const currency = row.currency as string;
+    const date = row.date as string;
+    const entry = byCurrency.get(currency) ?? {
+      currency,
+      proceeds: 0,
+      units: 0,
+      from: date,
+      to: date,
+    };
+    entry.proceeds += Number(row.proceeds) || 0;
+    entry.units += Number(row.units) || 0;
+    if (date < entry.from) entry.from = date;
+    if (date > entry.to) entry.to = date;
+    byCurrency.set(currency, entry);
+  }
+
+  return [...byCurrency.values()].sort((a, b) => b.proceeds - a.proceeds);
+}
+
 // ---------------------------------------------------------------------------
 // Keywords, reviews, health
 // ---------------------------------------------------------------------------

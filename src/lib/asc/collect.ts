@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createAscToken } from "./jwt";
-import { ReportGoneError, fetchDailySales, type DailyUnits } from "./sales";
+import { ReportGoneError, fetchDailySalesReport, type DailyProceeds, type DailyUnits } from "./sales";
 import { serviceClient } from "@/lib/db/client";
 import { resolveAppIds } from "@/lib/db/persist";
 import { IOS_APP_ID } from "@/lib/collectors/config";
@@ -83,6 +83,8 @@ export async function collectIosDownloads(
   const TOKEN_TTL_MS = 10 * 60 * 1000;
 
   const collected: DailyUnits[] = [];
+  // Same report, read a second way. See fetchDailySalesReport.
+  const earned: DailyProceeds[] = [];
   let daysWithData = 0;
   let daysFailed = 0;
   let reachedRetentionLimit = false;
@@ -96,16 +98,22 @@ export async function collectIosDownloads(
 
     walked += 1;
     try {
-      const units = await fetchDailySales(config, isoDaysAgo(back), IOS_APP_ID, token);
+      const report = await fetchDailySalesReport(
+        config,
+        isoDaysAgo(back),
+        IOS_APP_ID,
+        token,
+      );
 
-      if (units === null) {
+      if (report === null) {
         // No report for that date. Ordinary: the most recent day is usually
         // not closed yet, and days before release never existed.
         continue;
       }
 
       daysWithData += 1;
-      collected.push(...units);
+      collected.push(...report.units);
+      earned.push(...report.proceeds);
     } catch (error) {
       // Apple stating where the archive ends. Everything older is gone too, so
       // stop walking, and do not count it against the run.
@@ -157,5 +165,39 @@ export async function collectIosDownloads(
     if (error) throw new Error(`collectIosDownloads: ${error.message}`);
   }
 
+  await saveProceeds(appId, earned);
+
   return { ...summary, rows: rows.length };
+}
+
+/**
+ * Developer proceeds for the days just walked.
+ *
+ * Usually nothing, and that is the expected state rather than a fault: Ustoz
+ * AI is a free download that takes payment through Payme and Click, so Apple
+ * owes nothing for it and parseProceedsTsv drops the zero rows. The table
+ * fills by itself the day an in-app purchase is sold, without anyone
+ * remembering to switch a collector on.
+ */
+async function saveProceeds(appId: string, earned: DailyProceeds[]): Promise<void> {
+  if (earned.length === 0) return;
+
+  const rows = earned.map((entry) => ({
+    app_id: appId,
+    date: entry.date,
+    country: entry.country,
+    units: entry.units,
+    proceeds: entry.proceeds,
+    currency: entry.currency,
+  }));
+
+  const CHUNK = 500;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await serviceClient()
+      .from("ios_proceeds_daily")
+      .upsert(rows.slice(i, i + CHUNK), {
+        onConflict: "app_id,date,country,currency",
+      });
+    if (error) throw new Error(`saveProceeds: ${error.message}`);
+  }
 }
