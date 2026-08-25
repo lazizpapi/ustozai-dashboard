@@ -1,7 +1,12 @@
 import Link from "next/link";
 
 import { ActiveUsersStrip } from "@/components/dashboard/active-users-strip";
-import { BrandLogo, type BrandKey } from "@/components/tv/brand-logo";
+import {
+  APP_STORE_MARK,
+  BrandLogo,
+  GOOGLE_PLAY_MARK,
+  type BrandKey,
+} from "@/components/tv/brand-logo";
 import { MarketPulse } from "@/components/dashboard/market-pulse";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { RankChart } from "@/components/dashboard/rank-chart";
@@ -63,6 +68,27 @@ const HEALTH_DOT = {
   red: "bg-status-critical",
 } as const;
 
+/**
+ * How a chart position reads on a tile.
+ *
+ * Three states, because "we are not in the top hundred" and "this chart has
+ * never been polled" are different facts and a bare dash says neither. The
+ * feed size is quoted from the reading rather than hardcoded: Apple caps at
+ * 100 today, and a tile that assumed it would quietly lie the day it changes.
+ */
+function rankTile(trend: { current: number | null; feedSize: number | null }) {
+  if (trend.current !== null) {
+    return {
+      value: formatRank(trend.current),
+      detail: trend.feedSize ? `of top ${trend.feedSize} in Uzbekistan` : "Uzbekistan",
+    };
+  }
+  if (trend.feedSize) {
+    return { value: `outside ${trend.feedSize}`, detail: "Uzbekistan" };
+  }
+  return { value: formatRank(null), detail: "not collected yet" };
+}
+
 export async function CeoView() {
   const result = await load(() =>
     Promise.all([
@@ -73,6 +99,9 @@ export async function CeoView() {
       androidDailyInstalls(30),
       iosDailyDownloads(30),
       rankHistory("topfree", "uz", undefined, 90),
+      // The Play equivalent, for its tile's curve. Thirty days rather than
+      // ninety: the tile shows a month, and the big chart below is Apple's.
+      rankHistory("topfree", "uz", PLAY_EDUCATION_CATEGORY, 30, "android"),
       // Chained so socialTrends sees the new reading, and inside the
       // Promise.all so the fetch overlaps the other queries.
       refreshAudienceIfStale().then(() => socialTrends()),
@@ -98,6 +127,7 @@ export async function CeoView() {
     installs,
     downloads,
     history,
+    playHistory,
     social,
     playToday,
     chart,
@@ -107,6 +137,34 @@ export async function CeoView() {
     engagement,
   ] = result.data;
 
+  /*
+   * The strip's curves, all cut to the same thirty days so four tiles side
+   * by side cover one window. history arrives as ninety for the chart below.
+   */
+  /*
+   * Cut by timestamp rather than by a count of rows: the poll runs every three
+   * hours today, and counting back a fixed number of readings would quietly
+   * mean a different window the moment that interval changes.
+   *
+   * Measured back from the newest reading, not from now. Reading the clock
+   * during render is impure, and anchoring to the data also keeps the window
+   * honest if a collector stalls: thirty days of readings stays thirty days of
+   * readings rather than decaying into a stub as the gap grows.
+   */
+  const newest = history.at(-1)?.capturedAt;
+  const since = newest ? new Date(newest).getTime() - 30 * 24 * 60 * 60 * 1000 : 0;
+  const rankSpark = history
+    .filter((point) => new Date(point.capturedAt).getTime() >= since)
+    .map((point) => ({ at: point.capturedAt, value: point.rank }));
+  const playRankSpark = playHistory.map((point) => ({
+    at: point.capturedAt,
+    value: point.rank,
+  }));
+  const downloadSpark = downloads.map((row) => ({ at: row.date, value: row.downloads }));
+  const installSpark = installs.map((row) => ({ at: row.date, value: row.installs }));
+
+  const appStoreRank = rankTile(rank);
+  const playStoreRank = rankTile(playRank);
   const installRate = latestInstallRate(installs);
   const lastDownload = downloads.at(-1) ?? null;
   const report = analyst?.report ?? null;
@@ -124,30 +182,44 @@ export async function CeoView() {
           Two tiles rather than one. This was a single "Education, UZ" that
           meant Apple and never said so, which is unreadable next to the
           install and rating tiles that do name their store.
+
+          Every store tile now carries its mark and names its store in full.
+          Six of the nine figures here belong to one shop or the other, and
+          "iOS rating" beside "Play installs" asked the reader to hold two
+          naming schemes at once: one named the operating system, the other
+          named the shop. The pairs also run Apple first throughout, so the
+          order is learned once rather than re-read on every row.
         */}
         <Metric
+          icon={APP_STORE_MARK}
           label="Education, App Store"
-          value={
-            rank.current === null && rank.feedSize
-              ? `outside ${rank.feedSize}`
-              : formatRank(rank.current)
-          }
+          value={appStoreRank.value}
+          detail={appStoreRank.detail}
           change={rankDelta(rank.current, rank.previous, rank.spanDays)}
+          spark={{ points: rankSpark, invert: true }}
         />
 
         <Metric
+          icon={GOOGLE_PLAY_MARK}
           label="Education, Google Play"
-          value={
-            playRank.current === null && playRank.feedSize
-              ? `outside ${playRank.feedSize}`
-              : formatRank(playRank.current)
-          }
+          value={playStoreRank.value}
+          detail={playStoreRank.detail}
           change={rankDelta(playRank.current, playRank.previous, playRank.spanDays)}
-          detail={playRank.current === null && !playRank.feedSize ? "not collected yet" : undefined}
+          spark={{ points: playRankSpark, invert: true }}
         />
 
         <Metric
-          label="Play installs, daily"
+          icon={APP_STORE_MARK}
+          label="App Store downloads, daily"
+          value={lastDownload ? formatNumber(lastDownload.downloads) : NO_VALUE}
+          detail={lastDownload ? undefined : "not connected"}
+          asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
+          spark={{ points: downloadSpark }}
+        />
+
+        <Metric
+          icon={GOOGLE_PLAY_MARK}
+          label="Google Play installs, daily"
           /*
            * Google publishes a running total and moves it in batches, landing
            * every day or two rather than daily. So the last derived day is
@@ -173,17 +245,12 @@ export async function CeoView() {
                 : "first full day lands tomorrow"
           }
           asOf={installRate ? `to ${formatDay(installRate.date)}` : undefined}
+          spark={{ points: installSpark }}
         />
 
         <Metric
-          label="App Store, daily"
-          value={lastDownload ? formatNumber(lastDownload.downloads) : NO_VALUE}
-          detail={lastDownload ? undefined : "not connected"}
-          asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
-        />
-
-        <Metric
-          label="iOS rating"
+          icon={APP_STORE_MARK}
+          label="App Store rating"
           value={formatRating(ios.current)}
           detail={
             ios.ratingCount !== null ? `${formatNumber(ios.ratingCount)} ratings` : undefined
@@ -192,7 +259,8 @@ export async function CeoView() {
         />
 
         <Metric
-          label="Android rating"
+          icon={GOOGLE_PLAY_MARK}
+          label="Google Play rating"
           value={formatRating(android.current)}
           detail={
             android.ratingCount !== null

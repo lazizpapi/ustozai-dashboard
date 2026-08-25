@@ -30,12 +30,15 @@ export function PageHeader({
 }
 
 export function Section({
+  icon,
   title,
   note,
   children,
   /** Drops the inner padding, for a table that should meet the card edge. */
   flush = false,
 }: {
+  /** Optional leading mark, e.g. a store logo, shown beside the title. */
+  icon?: React.ReactNode;
   title: string;
   note?: string;
   children: React.ReactNode;
@@ -49,7 +52,10 @@ export function Section({
      */
     <section className="bg-card min-w-0 rounded-lg border">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b px-4 py-3">
-        <h2 className="text-sm font-medium">{title}</h2>
+        <h2 className="flex items-center gap-1.5 text-sm font-medium">
+          {icon}
+          {title}
+        </h2>
         {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
       </div>
       <div className={flush ? "" : "p-4"}>{children}</div>

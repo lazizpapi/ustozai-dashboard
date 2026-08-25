@@ -210,6 +210,22 @@
   --status-critical: #cd2b31;
 
   /*
+   * Which way a metric moved, as a tint under the arrow that already says it.
+   *
+   * Separate tokens from the status triple above, which reports whether a
+   * system is healthy. A rank sliding three places is not an incident, and
+   * borrowing the incident colour for it would spend the loudest signal on
+   * the most ordinary event.
+   *
+   * The green is stepped well below --status-ok. That value measures 3.10:1
+   * on the card: enough behind a health dot, short of the 4.5:1 this needs as
+   * 12px text. This one measures 5.08:1, which sits beside the red's 5.27:1
+   * so neither direction reads as louder than the other.
+   */
+  --delta-up: #2f7d41;
+  --delta-down: #cd2b31;
+
+  /*
    * Competitor lines on the rank race chart.
    *
    * Neutral by design, and now doubly so: with a single accent, grey is what
@@ -276,6 +292,11 @@
   --status-warn: #f7b955;
   --status-critical: #ff6369;
 
+  /* 8.77:1 and 6.83:1 on the dark card. Both clear 4.5:1 comfortably, so the
+   * dark theme keeps the brighter pair rather than the light theme's. */
+  --delta-up: #62c073;
+  --delta-down: #ff6369;
+
   /* The ramp stepped for the dark surface, not an automatic inversion.
    * Measured by painting each stroke and reading the pixel back, since the
    * ramp is authored in oklch and the naive contrast maths gets it wrong:
@@ -299,6 +320,8 @@
   --color-status-ok: var(--status-ok);
   --color-status-warn: var(--status-warn);
   --color-status-critical: var(--status-critical);
+  --color-delta-up: var(--delta-up);
+  --color-delta-down: var(--delta-down);
   --color-input-line: var(--input-line);
   --color-rival-1: var(--rival-1);
   --color-rival-2: var(--rival-2);

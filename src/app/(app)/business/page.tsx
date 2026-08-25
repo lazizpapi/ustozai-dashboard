@@ -65,6 +65,7 @@ export default async function BusinessPage() {
         <Metric
           label="Takings, latest day"
           value={revenue.latest ? formatNumber(revenue.latest.amount) : NO_VALUE}
+          unit={revenue.latest ? "UZS" : undefined}
           detail={
             revenue.latest
               ? `${formatNumber(revenue.latest.transactions)} transactions`
@@ -76,6 +77,7 @@ export default async function BusinessPage() {
         <Metric
           label={`Takings, ${days} days`}
           value={formatNumber(revenue.windowTotal)}
+          unit="UZS"
           detail="som, converted from the API's tiyin"
         />
         <Metric
@@ -112,7 +114,9 @@ export default async function BusinessPage() {
               <thead>
                 <tr className="text-muted-foreground border-b text-xs">
                   <th className="px-3 py-2 text-left font-medium">Provider</th>
-                  <th className="px-3 py-2 text-right font-medium">Amount</th>
+                  {/* The unit belongs to the column, so it is stated once here
+                      instead of repeated down every row. */}
+                  <th className="px-3 py-2 text-right font-medium">Amount, UZS</th>
                   <th className="px-3 py-2 text-right font-medium">Transactions</th>
                   <th className="px-3 py-2 text-right font-medium">Share</th>
                 </tr>

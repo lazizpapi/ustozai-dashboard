@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 
-import { BrandLogo, type BrandKey } from "./brand-logo";
+import { BrandLogo, type SocialKey } from "./brand-logo";
 import { formatNumber, timeAgo } from "@/lib/format";
 import type { SocialTrend } from "@/lib/db/queries";
 
@@ -13,14 +13,14 @@ import type { SocialTrend } from "@/lib/db/queries";
  * arrow works for anyone who cannot separate the two hues.
  */
 
-const LABELS: Record<BrandKey, string> = {
+const LABELS: Record<SocialKey, string> = {
   telegram: "Telegram",
   instagram: "Instagram",
   youtube: "YouTube",
 };
 
 export function AudienceRow({ trend }: { trend: SocialTrend }) {
-  const platform = trend.platform as BrandKey;
+  const platform = trend.platform as SocialKey;
 
   const change =
     trend.current !== null && trend.previous !== null ? trend.current - trend.previous : null;

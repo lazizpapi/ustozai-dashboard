@@ -95,6 +95,7 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
           href="/business"
           label="Takings, latest day"
           value={revenue?.latest ? formatNumber(revenue.latest.amount) : NO_VALUE}
+          unit={revenue?.latest ? "UZS" : undefined}
           detail={
             revenue?.latest
               ? `${formatNumber(revenue.latest.transactions)} transactions`
@@ -111,7 +112,10 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
           href="/business"
           label="Takings, 30 days"
           value={revenue ? formatNumber(revenue.windowTotal) : NO_VALUE}
-          detail="som, converted from the API's tiyin"
+          unit={revenue ? "UZS" : undefined}
+          // The unit now sits on the figure, so this says only where the
+          // hundredfold came from.
+          detail="converted from the API's tiyin"
         />
         <Metric
           label="Top provider"

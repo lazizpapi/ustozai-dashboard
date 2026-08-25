@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { APP_STORE_MARK, GOOGLE_PLAY_MARK } from "@/components/tv/brand-logo";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
@@ -76,9 +77,36 @@ export async function ProductView() {
 
   return (
     <div className="space-y-8">
+      {/*
+        Dailies first, then the ratings they move. The two figures with a month
+        of history behind them sit together so their curves share an edge, and
+        each pair still runs App Store before Google Play.
+      */}
       <MetricStrip>
         <Metric
-          label="iOS rating"
+          icon={APP_STORE_MARK}
+          label="App Store downloads, daily"
+          value={lastDownload ? formatNumber(lastDownload.downloads) : NO_VALUE}
+          asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
+          spark={{ points: downloads.map((row) => ({ at: row.date, value: row.downloads })) }}
+        />
+
+        <Metric
+          icon={GOOGLE_PLAY_MARK}
+          label="Google Play installs, daily"
+          value={installRate ? formatNumber(installRate.perDay) : NO_VALUE}
+          detail={
+            installRate && installRate.spanDays > 1
+              ? `over ${installRate.spanDays} days`
+              : undefined
+          }
+          asOf={installRate ? `to ${formatDay(installRate.date)}` : undefined}
+          spark={{ points: installs.map((row) => ({ at: row.date, value: row.installs })) }}
+        />
+
+        <Metric
+          icon={APP_STORE_MARK}
+          label="App Store rating"
           value={formatRating(ios.current)}
           detail={
             ios.ratingCount !== null ? `${formatNumber(ios.ratingCount)} ratings` : undefined
@@ -87,7 +115,8 @@ export async function ProductView() {
         />
 
         <Metric
-          label="Android rating"
+          icon={GOOGLE_PLAY_MARK}
+          label="Google Play rating"
           value={formatRating(android.current)}
           detail={
             android.ratingCount !== null
@@ -95,23 +124,6 @@ export async function ProductView() {
               : undefined
           }
           change={formatRatingDelta(android.current, android.previous, android.spanDays)}
-        />
-
-        <Metric
-          label="App Store, daily"
-          value={lastDownload ? formatNumber(lastDownload.downloads) : NO_VALUE}
-          asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
-        />
-
-        <Metric
-          label="Play installs, daily"
-          value={installRate ? formatNumber(installRate.perDay) : NO_VALUE}
-          detail={
-            installRate && installRate.spanDays > 1
-              ? `over ${installRate.spanDays} days`
-              : undefined
-          }
-          asOf={installRate ? `to ${formatDay(installRate.date)}` : undefined}
         />
       </MetricStrip>
 

@@ -65,7 +65,9 @@ export function RevenueChart({ points }: { points: { date: string; amount: numbe
           content={
             <ChartTooltipContent
               labelFormatter={(label) => formatDay(label as string)}
-              formatter={(value) => [formatNumber(value as number), " taken"]}
+              // Named in the tooltip, not on the axis: a currency repeated
+              // down every tick crowds the scale it is meant to explain.
+              formatter={(value) => [`${formatNumber(value as number)} UZS`, " taken"]}
             />
           }
         />

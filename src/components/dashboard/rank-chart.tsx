@@ -33,11 +33,24 @@ const config = {
 
 interface RankChartProps {
   points: RankPoint[];
+  /**
+   * What the rank is a rank *in*, for the tooltip.
+   *
+   * Defaulted rather than required because most panels are the Education
+   * chart. It exists at all because the tooltip said "in Education, UZ" on
+   * every panel including the ones charting the ungenred feed, which
+   * mislabelled a whole-store position as a category one.
+   */
+  context?: string;
   /** Height override, so a view that owns its vertical space can fill it. */
   className?: string;
 }
 
-export function RankChart({ points, className }: RankChartProps) {
+export function RankChart({
+  points,
+  context = "in Education, UZ",
+  className,
+}: RankChartProps) {
   const reducedMotion = useReducedMotion();
 
   if (points.length === 0) {
@@ -55,12 +68,27 @@ export function RankChart({ points, className }: RankChartProps) {
 
   const feedSize = points.at(-1)?.feedSize ?? 100;
   const outside = points.filter((point) => point.rank === null).length;
+  const ranked = points.map((p) => p.rank).filter((r): r is number => r !== null);
+
+  /*
+   * Never charted in this window. Drawing it anyway leaves an empty plot under
+   * a caption about breaks in the line, which reads as a broken chart rather
+   * than as the finding it is. The app sits outside the ungenred Play top 100
+   * today, so this is a state the page reaches in normal operation.
+   */
+  if (ranked.length === 0) {
+    return (
+      <p className="text-muted-foreground py-12 text-sm">
+        Outside the top {feedSize} at every reading in this window. The line
+        starts on the day the app first charts.
+      </p>
+    );
+  }
 
   // Zoom to the range actually occupied, so a move from #24 to #21 is visible
   // rather than a flat line squashed against a 1-to-100 axis.
-  const ranked = points.map((p) => p.rank).filter((r): r is number => r !== null);
-  const best = ranked.length ? Math.max(1, Math.min(...ranked) - 3) : 1;
-  const worst = ranked.length ? Math.min(feedSize, Math.max(...ranked) + 3) : feedSize;
+  const best = Math.max(1, Math.min(...ranked) - 3);
+  const worst = Math.min(feedSize, Math.max(...ranked) + 3);
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
@@ -104,7 +132,7 @@ export function RankChart({ points, className }: RankChartProps) {
                 labelFormatter={(_, payload) =>
                   formatDay(payload?.[0]?.payload?.capturedAt as string)
                 }
-                formatter={(value) => [`#${value}`, " in Education, UZ"]}
+                formatter={(value) => [`#${value}`, ` ${context}`]}
               />
             }
           />

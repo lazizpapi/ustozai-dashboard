@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { APP_STORE_MARK, GOOGLE_PLAY_MARK } from "@/components/tv/brand-logo";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { PageHeader, Section } from "@/components/dashboard/page-header";
 import { RankChart } from "@/components/dashboard/rank-chart";
@@ -137,16 +138,19 @@ export default async function CompetitorPage({
 
       <MetricStrip>
         <Metric
-          label="Play installs / day"
+          icon={GOOGLE_PLAY_MARK}
+          label="Google Play installs / day"
           value={installRate === null ? NO_VALUE : formatSigned(installRate)}
           detail={installRate === null ? "needs two days of readings" : "recent average"}
         />
         <Metric
-          label="Play installs, total"
+          icon={GOOGLE_PLAY_MARK}
+          label="Google Play installs, total"
           value={formatNumber(latestInstalls)}
           detail="as Google publishes it"
         />
         <Metric
+          icon={APP_STORE_MARK}
           label="App Store rating"
           value={formatRating(app.iosRating)}
           detail={
@@ -156,7 +160,8 @@ export default async function CompetitorPage({
           }
         />
         <Metric
-          label="Play rating"
+          icon={GOOGLE_PLAY_MARK}
+          label="Google Play rating"
           value={formatRating(app.playRating)}
           detail={
             app.playRatingCount === null

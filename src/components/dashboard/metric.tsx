@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowRight, ArrowUp, Minus } from "lucide-react";
 import Link from "next/link";
 
+import { Sparkline, type SparkPoint } from "@/components/dashboard/sparkline";
 import { cn } from "@/lib/utils";
 import type { Delta } from "@/lib/format";
 
@@ -12,10 +13,14 @@ import type { Delta } from "@/lib/format";
  * across the row. A grid of separate boxes buys nothing here and costs the
  * alignment that makes a strip readable at a glance.
  *
- * Direction is carried by the arrow glyph rather than by red and green. The
- * dashboard runs on one accent, so a second and third hue for up and down
- * would be inventing meaning; the glyph also works for anyone who cannot
- * separate the two colours.
+ * Direction is carried by the arrow glyph, and tinted behind it. The glyph
+ * leads because it survives greyscale, a colour-blind reader and a photocopy;
+ * the tint follows because a strip of nine figures otherwise gives no way to
+ * tell a good week from a bad one without reading every delta in turn.
+ *
+ * The tint is its own token pair, not the status triple. Those report whether
+ * a system is healthy, and a rank slipping three places is not an incident.
+ * Both pairs are measured against the card for 4.5:1 as text; see globals.css.
  */
 
 interface MetricProps {
@@ -23,6 +28,18 @@ interface MetricProps {
   icon?: React.ReactNode;
   label: string;
   value: string;
+  /**
+   * The unit the figure is counted in, set beside it.
+   *
+   * For money, which is the only figure here that is meaningless without one.
+   * A follower count needs no unit and a rating would be worse for having one,
+   * so this stays empty on almost every tile.
+   *
+   * Rendered after the number rather than before it: Uzbek writes the currency
+   * after the amount, and a prefix would put three letters where the eye is
+   * looking for the first digit.
+   */
+  unit?: string;
   /** Small qualifier under the value, e.g. "from 1,178 ratings". */
   detail?: string;
   change?: Delta;
@@ -40,6 +57,14 @@ interface MetricProps {
    * are numbers first.
    */
   href?: string;
+  /**
+   * The last thirty readings, drawn small under the figure.
+   *
+   * Only for metrics whose history the page already holds. Fetching a series
+   * per tile to decorate it would be paying in queries for something the
+   * Rankings and Downloads pages already answer properly.
+   */
+  spark?: { points: SparkPoint[]; invert?: boolean };
 }
 
 function DeltaGlyph({ change }: { change: Delta }) {
@@ -57,7 +82,12 @@ function DeltaGlyph({ change }: { change: Delta }) {
 
   const Arrow = change.direction === "up" ? ArrowUp : ArrowDown;
   return (
-    <span className="inline-flex items-center gap-1">
+    <span
+      className={cn(
+        "inline-flex items-center gap-1",
+        change.direction === "up" ? "text-delta-up" : "text-delta-down",
+      )}
+    >
       <Arrow className="size-3" aria-hidden />
       <span className="tnum">{change.label}</span>
     </span>
@@ -68,10 +98,12 @@ export function Metric({
   icon,
   label,
   value,
+  unit,
   detail,
   change,
   asOf,
   href,
+  spark,
 }: MetricProps) {
   const body = (
     <>
@@ -92,6 +124,13 @@ export function Metric({
         className="tnum text-3xl leading-none font-medium tracking-tight"
       >
         {value}
+        {/* Quieter and smaller than the figure. The amount is the subject; the
+            currency only qualifies it, and at the same weight it competes. */}
+        {unit ? (
+          <span className="text-muted-foreground ml-1.5 text-base font-normal tracking-normal">
+            {unit}
+          </span>
+        ) : null}
       </span>
 
       <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-xs">
@@ -111,10 +150,20 @@ export function Metric({
       {asOf ? (
         <span className="text-muted-foreground/70 text-[11px]">{asOf}</span>
       ) : null}
+
+      {/* mt-auto so the curves in a row share a baseline even where one tile
+          carries a detail line and its neighbour does not. */}
+      {spark ? (
+        <Sparkline
+          points={spark.points}
+          invert={spark.invert}
+          className="mt-auto pt-2"
+        />
+      ) : null}
     </>
   );
 
-  const shell = "flex flex-col gap-1.5 px-4 py-3.5";
+  const shell = "flex h-full flex-col gap-1.5 px-4 py-3.5";
 
   if (!href) return <div className={shell}>{body}</div>;
 
