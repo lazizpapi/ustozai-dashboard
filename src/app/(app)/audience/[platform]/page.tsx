@@ -45,12 +45,29 @@ export const dynamic = "force-dynamic";
  * The Instagram-only extras, gathered separately and allowed to fail.
  *
  * These sections are additive to a page that already works without them, so a
- * missing table — the usual cause being migration 0015 not yet applied to this
- * environment — should cost the new sections and nothing else. Letting it
+ * missing table should cost the new sections and nothing else. Letting it
  * throw would take the follower chart down with it and report the whole page
  * as unconfigured, which would be a worse answer than a shorter page.
+ *
+ * Three outcomes rather than two, because the page previously had no way to
+ * tell them apart and simply got shorter, which is the one failure in this
+ * dashboard a reader could not see. "missing" is the tables not existing;
+ * "empty" is them existing with nothing in them, which is what an account
+ * with no access token looks like once the migration has been applied.
+ * Both are stated rather than rendered as a wall of dashes.
  */
-async function instagramInsights() {
+type InstagramState =
+  | { kind: "missing" }
+  | { kind: "empty" }
+  | {
+      kind: "ready";
+      performance: Awaited<ReturnType<typeof instagramPerformance>>;
+      posts: Awaited<ReturnType<typeof instagramTopPosts>>;
+      audience: Awaited<ReturnType<typeof instagramAudience>>;
+      stories: Awaited<ReturnType<typeof instagramStories>>;
+    };
+
+async function instagramInsights(): Promise<InstagramState> {
   try {
     const [performance, posts, audience, stories] = await Promise.all([
       instagramPerformance(90),
@@ -58,9 +75,17 @@ async function instagramInsights() {
       instagramAudience(),
       instagramStories(14),
     ]);
-    return { performance, posts, audience, stories };
+
+    const nothingYet =
+      performance.daily.length === 0 &&
+      posts.length === 0 &&
+      stories.length === 0 &&
+      audience === null;
+
+    if (nothingYet) return { kind: "empty" };
+    return { kind: "ready", performance, posts, audience, stories };
   } catch {
-    return null;
+    return { kind: "missing" };
   }
 }
 
@@ -248,7 +273,7 @@ export default async function AudiencePlatformPage({
         />
       </Section>
 
-      {insights ? (
+      {insights?.kind === "ready" ? (
         <InstagramInsights
           performance={insights.performance}
           posts={insights.posts}
@@ -256,6 +281,25 @@ export default async function AudiencePlatformPage({
           stories={insights.stories}
           followers={trend?.current ?? null}
         />
+      ) : null}
+
+      {/*
+        An absence with a reason. Rendering the sections against no data would
+        give a screen of dashes, and rendering nothing at all was worse still:
+        the page simply got shorter and nobody could tell that reach, posts,
+        demographics and stories were meant to be there.
+      */}
+      {insights && insights.kind !== "ready" ? (
+        <Section
+          title="Reach, posts and demographics"
+          note={insights.kind === "missing" ? "not available here" : "not collected yet"}
+        >
+          <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed">
+            {insights.kind === "missing"
+              ? "These tables do not exist in this environment, so nothing has been recorded. Applying the Instagram insights migration adds them; the follower count above is unaffected either way."
+              : "The tables are ready and empty. Instagram serves this through the official API rather than the public page, so it starts filling once an access token is configured. The follower count above comes from a different source and keeps working without one."}
+          </p>
+        </Section>
       ) : null}
 
       <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
