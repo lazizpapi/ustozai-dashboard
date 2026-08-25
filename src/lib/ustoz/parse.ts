@@ -217,6 +217,19 @@ export interface TransactionRow {
  * of the database, in revenueSummary, so the stored row stays the raw thing the
  * provider sent: a revised understanding of the unit costs one query change
  * rather than a rewrite of every row ever collected.
+ *
+ * Within a provider array, `amount` is the price of a single transaction and
+ * `count` is how many went through at that price. A day is therefore the sum
+ * of amount * count, not the sum of amount.
+ *
+ * This was read the other way round at first, which understated every provider
+ * figure in the table and, on days where the cheaper provider happened to sell
+ * more, named the wrong one as the biggest earner. The arithmetic is checkable
+ * against the payload itself: the day carries its own totalAmount, and over the
+ * eleven days to 2026-08-25 that total matched the amount * count sum on all
+ * eleven and the plain sum on only the two where every count was one. The ALL
+ * row has always been right, because it is read from totalAmount directly, so
+ * the discrepancy sat in plain sight as a total that exceeded its own parts.
  */
 export function parseTransactions(payload: unknown): TransactionRow[] {
   if (!isRecord(payload)) {
@@ -247,8 +260,11 @@ export function parseTransactions(payload: unknown): TransactionRow[] {
       let transactions = 0;
       for (const entry of entries) {
         if (!isRecord(entry)) continue;
-        amount += num(entry.amount) ?? 0;
-        transactions += num(entry.count) ?? 0;
+        // A missing count means one transaction, not none: dropping the entry
+        // would lose money the day total still counts.
+        const count = num(entry.count) ?? 1;
+        amount += (num(entry.amount) ?? 0) * count;
+        transactions += count;
       }
       rows.push({ date, provider, amount, transactions });
     }

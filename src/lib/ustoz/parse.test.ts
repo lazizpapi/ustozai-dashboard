@@ -206,12 +206,24 @@ describe("parseVisitSummary", () => {
 });
 
 describe("parseTransactions", () => {
+  /*
+   * amount is the price of one transaction, count is how many went through at
+   * that price. The day's takings are therefore the sum of amount * count, and
+   * this fixture is built so the providers reconcile with totalAmount exactly
+   * as the live payload does: 300 * 2 + 100 * 2 = 800.
+   *
+   * The earlier fixture here quietly asserted the opposite, summing amount and
+   * ignoring count, and the invented totalAmount was written to agree with it.
+   * Checked against the live endpoint for the eleven days to 2026-08-25,
+   * totalAmount equalled the amount * count sum on all eleven and the plain
+   * sum on only the two where every count happened to be one.
+   */
   const payload = {
     "2026-08-18": {
-      totalAmount: 500,
+      totalAmount: 800,
       totalCount: 4,
       PAYME: [{ amount: 300, count: 2 }],
-      CLICK: [{ amount: 200, count: 2 }],
+      CLICK: [{ amount: 100, count: 2 }],
     },
   };
 
@@ -219,18 +231,53 @@ describe("parseTransactions", () => {
     const rows = parseTransactions(payload);
 
     expect(rows).toEqual([
-      { date: "2026-08-18", provider: "ALL", amount: 500, transactions: 4 },
-      { date: "2026-08-18", provider: "PAYME", amount: 300, transactions: 2 },
+      { date: "2026-08-18", provider: "ALL", amount: 800, transactions: 4 },
+      { date: "2026-08-18", provider: "PAYME", amount: 600, transactions: 2 },
       { date: "2026-08-18", provider: "CLICK", amount: 200, transactions: 2 },
     ]);
   });
 
-  it("sums several entries under one provider", () => {
-    // A provider arrives as an array, and a day with two settlement batches
-    // has two entries that both belong to that provider.
+  it("multiplies the unit price by the count", () => {
+    const rows = parseTransactions({
+      "2026-08-18": { totalAmount: 900, totalCount: 3, PAYME: [{ amount: 300, count: 3 }] },
+    });
+
+    // Not 300. Summing the price alone understated every provider figure in
+    // the database, by more than half on some days.
+    expect(rows.find((row) => row.provider === "PAYME")?.amount).toBe(900);
+  });
+
+  it("reconciles the providers against the day's own total", () => {
     const rows = parseTransactions({
       "2026-08-18": {
-        totalAmount: 500,
+        totalAmount: 1400,
+        totalCount: 5,
+        PAYME: [{ amount: 300, count: 2 }, { amount: 100, count: 1 }],
+        CLICK: [{ amount: 350, count: 2 }],
+      },
+    });
+
+    const all = rows.find((row) => row.provider === "ALL")!;
+    const providers = rows.filter((row) => row.provider !== "ALL");
+
+    expect(providers.reduce((sum, row) => sum + row.amount, 0)).toBe(all.amount);
+    expect(providers.reduce((sum, row) => sum + row.transactions, 0)).toBe(all.transactions);
+  });
+
+  it("treats a missing count as one rather than as nothing", () => {
+    const rows = parseTransactions({
+      "2026-08-18": { totalAmount: 250, totalCount: 1, PAYME: [{ amount: 250 }] },
+    });
+
+    expect(rows.find((row) => row.provider === "PAYME")?.amount).toBe(250);
+  });
+  it("sums several entries under one provider", () => {
+    // A provider arrives as an array, and a day with two settlement batches
+    // has two entries that both belong to that provider. Each batch carries
+    // its own unit price, so each is multiplied before they are added.
+    const rows = parseTransactions({
+      "2026-08-18": {
+        totalAmount: 1000,
         totalCount: 4,
         PAYME: [
           { amount: 300, count: 2 },
@@ -242,7 +289,7 @@ describe("parseTransactions", () => {
     expect(rows).toContainEqual({
       date: "2026-08-18",
       provider: "PAYME",
-      amount: 500,
+      amount: 1000,
       transactions: 4,
     });
   });
