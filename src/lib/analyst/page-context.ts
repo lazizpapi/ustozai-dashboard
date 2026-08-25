@@ -32,6 +32,22 @@ export const PAGE_CONTEXT: Record<string, PageContext> = {
       "What should we work on next?",
     ],
   },
+  "/business": {
+    name: "Business (takings, payment providers and active users)",
+    suggestions: [
+      "How much did we take last month?",
+      "Which payment provider is growing?",
+      "Are active users keeping pace with takings?",
+    ],
+  },
+  "/audience": {
+    name: "Audience (followers across the three channels)",
+    suggestions: [
+      "Which channel is growing fastest?",
+      "Did any channel stop growing?",
+      "How much of our audience is on Telegram?",
+    ],
+  },
   "/analyst": {
     name: "Analyst (the daily report)",
     suggestions: [
@@ -90,6 +106,40 @@ export const PAGE_CONTEXT: Record<string, PageContext> = {
   },
 };
 
+/**
+ * Routes with something variable in the path.
+ *
+ * A competitor profile lives at /market/{slug} and a platform at
+ * /audience/{platform}, so neither can be a key in the table above. They were
+ * simply missing before: the dock rendered on both and sent no context at all,
+ * which is the case this list closes. Ordered longest first, since a prefix
+ * table is only unambiguous if the more specific entry is tried first.
+ */
+const PREFIX_CONTEXT: [string, PageContext][] = [
+  [
+    "/market/",
+    {
+      name: "a single competitor profile",
+      suggestions: [
+        "How is this app doing against us?",
+        "What has this app changed recently?",
+        "Is this app growing faster than we are?",
+      ],
+    },
+  ],
+  [
+    "/audience/",
+    {
+      name: "one audience platform in detail",
+      suggestions: [
+        "How fast is this channel growing?",
+        "When did this channel last move?",
+        "How does this compare with the other channels?",
+      ],
+    },
+  ],
+];
+
 /** Strips the query string and any trailing slash, keeping "/" intact. */
 function normalise(pathname: string): string {
   const path = (pathname || "/").split("?")[0].split("#")[0];
@@ -102,10 +152,15 @@ function normalise(pathname: string): string {
  * Null rather than a guess: this ends up in the system prompt, and telling the
  * model the user is on a page they are not is worse than telling it nothing.
  */
+function resolve(pathname: string): PageContext | null {
+  const path = normalise(pathname);
+  return PAGE_CONTEXT[path] ?? PREFIX_CONTEXT.find(([at]) => path.startsWith(at))?.[1] ?? null;
+}
+
 export function pageName(pathname: string): string | null {
-  return PAGE_CONTEXT[normalise(pathname)]?.name ?? null;
+  return resolve(pathname)?.name ?? null;
 }
 
 export function pageSuggestions(pathname: string): string[] {
-  return PAGE_CONTEXT[normalise(pathname)]?.suggestions ?? GENERAL;
+  return resolve(pathname)?.suggestions ?? GENERAL;
 }

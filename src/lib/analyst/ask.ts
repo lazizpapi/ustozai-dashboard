@@ -18,6 +18,11 @@ import {
   marketOverview,
   recentListingChanges,
   recentReviews,
+  activeUsersTrend,
+  engagementSummary,
+  instagramPerformance,
+  instagramTopPosts,
+  revenueSummary,
   socialTrends,
   type GrowthSeriesKey,
 } from "@/lib/db/queries";
@@ -124,6 +129,50 @@ async function runTool(name: string, args: Record<string, unknown>): Promise<unk
 
     case "get_latest_report":
       return (await latestAnalystReport()) ?? { available: false };
+
+    case "get_revenue":
+      return revenueSummary(args.days as number);
+
+    case "get_active_users": {
+      const days = args.days as number;
+      const [active, engagement] = await Promise.all([
+        activeUsersTrend(),
+        engagementSummary(days),
+      ]);
+      return {
+        activeUsers: active,
+        engagement,
+        note:
+          "Monthly active users are not collected: the upstream figure varies " +
+          "with the window requested and is not a distinct-user count.",
+      };
+    }
+
+    case "get_instagram": {
+      const days = args.days as number;
+      /*
+       * Allowed to fail rather than taking the whole answer down, matching the
+       * audience page. Without the insights tables or a token this is an
+       * absence to report, not an error to raise.
+       */
+      try {
+        const [performance, posts] = await Promise.all([
+          instagramPerformance(days),
+          instagramTopPosts(days, 10),
+        ]);
+        if (performance.daily.length === 0 && posts.length === 0) {
+          return {
+            available: false,
+            reason:
+              "nothing collected yet; Instagram insights need an access token, " +
+              "and the follower count comes from a different source",
+          };
+        }
+        return { performance, topPosts: posts };
+      } catch {
+        return { available: false, reason: "the Instagram insight tables are not present" };
+      }
+    }
 
     case "get_collector_health":
       return collectorHealth();

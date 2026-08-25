@@ -45,6 +45,9 @@ const TOOL_LABEL: Record<string, string> = {
   get_listing_changes: "listing changes",
   get_latest_report: "the last report",
   get_collector_health: "collector health",
+  get_revenue: "takings",
+  get_active_users: "active users",
+  get_instagram: "Instagram",
 };
 
 /** How long the orb holds its "done" face before settling back to idle. */

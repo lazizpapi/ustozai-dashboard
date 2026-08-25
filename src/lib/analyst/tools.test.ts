@@ -76,3 +76,34 @@ describe("clampArgs", () => {
     expect(() => clampArgs("drop_everything", { x: 1 })).not.toThrow();
   });
 });
+
+describe("the tools that reach past the stores", () => {
+  it("clamps the day range on every new tool", () => {
+    for (const tool of ["get_revenue", "get_active_users", "get_instagram"]) {
+      expect(clampArgs(tool, { days: 99_999 })).toEqual({ days: 365 });
+      expect(clampArgs(tool, { days: -5 })).toEqual({ days: 1 });
+      expect(clampArgs(tool, {})).toEqual({ days: 30 });
+    }
+  });
+
+  it("declares each of them with a description", () => {
+    const named = Object.fromEntries(
+      (ASK_TOOLS as { name: string; description?: string }[]).map((t) => [t.name, t]),
+    );
+
+    for (const tool of ["get_revenue", "get_active_users", "get_instagram"]) {
+      expect(named[tool]).toBeDefined();
+      expect(named[tool].description?.length ?? 0).toBeGreaterThan(40);
+    }
+  });
+
+  it("warns the model off summing Instagram reach", () => {
+    // Reach is a unique count. Summing seven days overstates it by about a
+    // tenth, which is the single easiest figure here to quote wrongly.
+    const instagram = (ASK_TOOLS as { name: string; description?: string }[]).find(
+      (t) => t.name === "get_instagram",
+    );
+
+    expect(instagram?.description).toMatch(/does not add up|never sum/i);
+  });
+});

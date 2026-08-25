@@ -180,6 +180,42 @@ export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
     parameters: noArgs,
   },
   {
+    name: "get_revenue",
+    description:
+      "Money taken through the app, in som: the day total, the window total, " +
+      "the split across payment providers (Payme, Click) and the transaction " +
+      "counts. This is the company's own revenue, not App Store or Google Play " +
+      "proceeds, which are separate and near zero because the app is a free " +
+      "download. Use for any question about takings, payments or providers.",
+    type: "function",
+    strict: false,
+    parameters: daysSchema("How many days of takings to aggregate."),
+  },
+  {
+    name: "get_active_users",
+    description:
+      "How many people actually use the app, from the product's own API rather " +
+      "than the stores: daily active users, plus views, logins and average " +
+      "session length. Monthly active users are deliberately absent, because " +
+      "the upstream figure changes with the window it is asked over and is not " +
+      "a distinct-user count. Use for engagement and retention questions.",
+    type: "function",
+    strict: false,
+    parameters: daysSchema("How many days of engagement history to return."),
+  },
+  {
+    name: "get_instagram",
+    description:
+      "Instagram beyond the follower count: daily reach and views, new follows, " +
+      "and the best performing recent posts with their reach, saves and " +
+      "engagement. Reach is a unique count and does not add up across days, so " +
+      "never sum it for a week. Returns empty when no access token is " +
+      "configured, which is not the same as the account having no activity.",
+    type: "function",
+    strict: false,
+    parameters: daysSchema("How many days of Instagram history to return."),
+  },
+  {
     name: "get_collector_health",
     description:
       "Status of every data collector and when each last ran. Use to check " +
@@ -211,6 +247,9 @@ export function clampArgs(tool: string, raw: unknown): Record<string, unknown> {
   switch (tool) {
     case "get_downloads":
     case "get_conversion_funnel":
+    case "get_revenue":
+    case "get_active_users":
+    case "get_instagram":
       return { days: clampNumber(args.days, DAYS) };
 
     case "get_reviews": {

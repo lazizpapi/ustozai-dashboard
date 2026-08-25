@@ -64,3 +64,54 @@ describe("pageSuggestions", () => {
     }
   });
 });
+
+describe("the pages that had no context at all", () => {
+  /*
+   * The dock rendered on all of these and sent nothing, so the model was told
+   * the user was nowhere. Two of them are dynamic routes, which an exact
+   * lookup can never match.
+   */
+
+  it("names the business page, where the money is", () => {
+    expect(pageName("/business")).toContain("Business");
+  });
+
+  it("names the audience index", () => {
+    expect(pageName("/audience")).toContain("Audience");
+  });
+
+  it("names a competitor profile behind its slug", () => {
+    expect(pageName("/market/praktika")).toBe("a single competitor profile");
+    expect(pageName("/market/ibrat-academy")).toBe("a single competitor profile");
+  });
+
+  it("names a single audience platform behind its slug", () => {
+    expect(pageName("/audience/telegram")).toBe("one audience platform in detail");
+    expect(pageName("/audience/instagram")).toBe("one audience platform in detail");
+  });
+
+  it("prefers the exact page over the prefix that also matches it", () => {
+    // "/audience" must stay the index, not fall through to the platform entry.
+    expect(pageName("/audience")).toContain("three channels");
+  });
+
+  it("offers the dynamic routes their own chips rather than the general ones", () => {
+    expect(pageSuggestions("/market/englify")).not.toEqual(pageSuggestions("/nowhere"));
+    expect(pageSuggestions("/audience/youtube")).not.toEqual(pageSuggestions("/nowhere"));
+  });
+
+  it("still admits when a page is genuinely unknown", () => {
+    // Null rather than a guess: this line goes into the system prompt.
+    expect(pageName("/marketing-costs")).toBeNull();
+    expect(pageName("/audiencex")).toBeNull();
+  });
+
+  it("holds the house rules on the new chips too", () => {
+    for (const path of ["/business", "/audience", "/market/praktika", "/audience/telegram"]) {
+      for (const suggestion of pageSuggestions(path)) {
+        expect(suggestion.length).toBeLessThanOrEqual(60);
+        expect(suggestion).not.toMatch(/[—–]/);
+      }
+    }
+  });
+});
