@@ -1,6 +1,6 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import {
   ChartContainer,
@@ -12,7 +12,7 @@ import { dayTicks } from "@/lib/compare";
 import { formatDay } from "@/lib/format";
 import { useReducedMotion } from "@/lib/use-reduced-motion";
 import { cn } from "@/lib/utils";
-import type { RankPoint } from "@/lib/db/queries";
+import type { RankPoint, ReleaseMarker } from "@/lib/db/queries";
 
 /**
  * Chart position over time.
@@ -42,6 +42,14 @@ interface RankChartProps {
    * mislabelled a whole-store position as a category one.
    */
   context?: string;
+  /**
+   * Our own releases, drawn as vertical hairlines.
+   *
+   * Filtered to the window on render rather than by the caller, so a page
+   * can hand over every release it knows about without also having to know
+   * which of them this particular chart covers.
+   */
+  markers?: ReleaseMarker[];
   /** Height override, so a view that owns its vertical space can fill it. */
   className?: string;
 }
@@ -49,6 +57,7 @@ interface RankChartProps {
 export function RankChart({
   points,
   context = "in Education, UZ",
+  markers,
   className,
 }: RankChartProps) {
   const reducedMotion = useReducedMotion();
@@ -136,6 +145,22 @@ export function RankChart({
               />
             }
           />
+          {snapToWindow(markers, data.map((point) => point.capturedAt)).map((marker) => (
+            <ReferenceLine
+              key={`${marker.platform}-${marker.version}`}
+              x={marker.at}
+              stroke="var(--chart-line-secondary)"
+              strokeDasharray="3 3"
+              strokeOpacity={0.7}
+              label={{
+                value: marker.version,
+                position: "top",
+                fontSize: 10,
+                fill: "var(--color-muted-foreground)",
+              }}
+            />
+          ))}
+
           <Area
             dataKey="rank"
             type="monotone"
@@ -159,4 +184,45 @@ export function RankChart({
       </p>
     </div>
   );
+}
+
+/**
+ * A release, drawn where it happened.
+ *
+ * The question a rank chart is really asked is whether what we shipped
+ * changed anything, and until now answering it meant holding the release
+ * dates in your head while looking at the line. This is the thing Play
+ * Console gets right and the one worth borrowing.
+ *
+ * Drawn quiet on purpose: a dashed hairline behind the series, not a second
+ * thing competing with it. The line is the data; the marker is an annotation
+ * on it, and an annotation that shouts is worse than no annotation.
+ */
+export function snapToWindow(
+  markers: ReleaseMarker[] | undefined,
+  timestamps: string[],
+): { at: string; version: string; platform: string }[] {
+  if (!markers?.length || timestamps.length === 0) return [];
+
+  const first = timestamps[0].slice(0, 10);
+  const last = timestamps[timestamps.length - 1].slice(0, 10);
+
+  const snapped: { at: string; version: string; platform: string }[] = [];
+
+  for (const marker of markers) {
+    if (marker.date < first || marker.date > last) continue;
+
+    /*
+     * Snapped to a real point on the axis rather than drawn at the raw date.
+     * This axis is categorical: recharts places a reference line by matching
+     * the value against the data, so a date with no reading behind it lands
+     * nowhere and the marker silently does not appear. Readings are hourly and
+     * a release is a day, so the first reading of that day is the honest place
+     * to put it.
+     */
+    const at = timestamps.find((stamp) => stamp.slice(0, 10) === marker.date);
+    if (at) snapped.push({ at, version: marker.version, platform: marker.platform });
+  }
+
+  return snapped;
 }

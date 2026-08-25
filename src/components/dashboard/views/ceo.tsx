@@ -25,6 +25,7 @@ import {
   educationChartTop,
   iosDailyDownloads,
   latestAnalystReport,
+  ownReleases,
   rankHistory,
   rankTrend,
   ratingTrend,
@@ -102,6 +103,7 @@ export async function CeoView() {
       // The Play equivalent, for its tile's curve. Thirty days rather than
       // ninety: the tile shows a month, and the big chart below is Apple's.
       rankHistory("topfree", "uz", PLAY_EDUCATION_CATEGORY, 30, "android"),
+      ownReleases(90),
       // Chained so socialTrends sees the new reading, and inside the
       // Promise.all so the fetch overlaps the other queries.
       refreshAudienceIfStale().then(() => socialTrends()),
@@ -128,6 +130,7 @@ export async function CeoView() {
     downloads,
     history,
     playHistory,
+    releases,
     social,
     playToday,
     chart,
@@ -294,7 +297,13 @@ export async function CeoView() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <Section title="Position over time" note="Education chart, Uzbekistan, iPhone">
-<RankChart points={history} className="h-[300px]" />
+<RankChart
+            points={history}
+            // The panel charts the iPhone Education feed, so only our iOS
+            // builds belong on it.
+            markers={releases.filter((release) => release.platform === "ios")}
+            className="h-[300px]"
+          />
         </Section>
 
         <Section title="Analyst">

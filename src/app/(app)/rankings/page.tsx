@@ -3,7 +3,7 @@ import { PageHeader, Section } from "@/components/dashboard/page-header";
 import { RankChart } from "@/components/dashboard/rank-chart";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
-import { rankHistory } from "@/lib/db/queries";
+import { ownReleases, rankHistory } from "@/lib/db/queries";
 import {
   EDUCATION_GENRE,
   OVERALL_GENRE,
@@ -89,12 +89,17 @@ const CHARTS = [
 
 export default async function RankingsPage() {
   const result = await load(
-    () =>
-      Promise.all(
-        CHARTS.map((chart) =>
-          rankHistory(chart.key, "uz", chart.genre, 90, chart.platform),
+    async () => {
+      const [series, releases] = await Promise.all([
+        Promise.all(
+          CHARTS.map((chart) =>
+            rankHistory(chart.key, "uz", chart.genre, 90, chart.platform),
+          ),
         ),
-      ),
+        ownReleases(90),
+      ]);
+      return { series, releases };
+    },
     "/rankings",
   );
 
@@ -119,7 +124,18 @@ export default async function RankingsPage() {
           title={chart.title}
           note={chart.note}
         >
-          <RankChart points={result.data[index]} context={chart.context} />
+          {/*
+            Each panel is marked with its own store's releases. An iPhone chart
+            annotated with the day the Android build shipped would invite
+            reading a coincidence as a cause.
+          */}
+          <RankChart
+            points={result.data.series[index]}
+            context={chart.context}
+            markers={result.data.releases.filter(
+              (release) => release.platform === chart.platform,
+            )}
+          />
         </Section>
       ))}
     </div>

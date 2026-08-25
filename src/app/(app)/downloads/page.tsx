@@ -9,6 +9,7 @@ import {
   iosDailyDownloads,
   iosDiscoveryFunnel,
   iosProceeds,
+  ownReleases,
   snapshotHistory,
 } from "@/lib/db/queries";
 import { delta, formatDay, formatNumber, formatPercent, NO_VALUE} from "@/lib/format";
@@ -21,14 +22,15 @@ function sum(values: number[]): number {
 
 export default async function DownloadsPage() {
   const result = await load(async () => {
-    const [ios, android, androidSnapshots, funnel, proceeds] = await Promise.all([
+    const [ios, android, androidSnapshots, funnel, proceeds, releases] = await Promise.all([
       iosDailyDownloads(60),
       androidDailyInstalls(60),
       snapshotHistory("android", "uz", 60),
       iosDiscoveryFunnel(30),
       iosProceeds(30),
+      ownReleases(60),
     ]);
-    return { ios, android, androidSnapshots, funnel, proceeds };
+    return { ios, android, androidSnapshots, funnel, proceeds, releases };
   }, "/downloads");
 
   if (result.kind === "unconfigured") {
@@ -36,7 +38,7 @@ export default async function DownloadsPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { ios, android, androidSnapshots, funnel, proceeds } = result.data;
+  const { ios, android, androidSnapshots, funnel, proceeds, releases } = result.data;
 
   const iosLast7 = sum(ios.slice(-7).map((row) => row.downloads));
   const iosPrior7 = sum(ios.slice(-14, -7).map((row) => row.downloads));
@@ -172,7 +174,7 @@ export default async function DownloadsPage() {
       ) : null}
 
       <Section title="Daily installs" note="last 60 days, one shared axis">
-        <DownloadsChart ios={ios} android={android} />
+        <DownloadsChart ios={ios} android={android} markers={releases} />
       </Section>
     </div>
   );

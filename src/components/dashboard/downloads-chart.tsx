@@ -1,6 +1,6 @@
 "use client";
 
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import {
   ChartContainer,
@@ -11,7 +11,8 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { formatDay } from "@/lib/format";
-import type { DailyDownloads, DailyInstalls } from "@/lib/db/queries";
+import { snapToWindow } from "@/components/dashboard/rank-chart";
+import type { DailyDownloads, DailyInstalls, ReleaseMarker } from "@/lib/db/queries";
 
 /**
  * Daily installs, both platforms on one axis.
@@ -40,13 +41,21 @@ const config = {
 interface DownloadsChartProps {
   ios: DailyDownloads[];
   android: DailyInstalls[];
+  /** Our own releases, drawn as vertical hairlines. */
+  markers?: ReleaseMarker[];
   /** Fill the parent instead of a fixed height. Used by the wall display. */
   fill?: boolean;
   /** Drop the explanatory caption where space is scarce and nobody can read it. */
   compact?: boolean;
 }
 
-export function DownloadsChart({ ios, android, fill, compact }: DownloadsChartProps) {
+export function DownloadsChart({
+  ios,
+  android,
+  markers,
+  fill,
+  compact,
+}: DownloadsChartProps) {
   const byDate = new Map<string, { date: string; ios: number | null; android: number | null }>();
 
   for (const row of ios) {
@@ -98,6 +107,22 @@ export function DownloadsChart({ ios, android, fill, compact }: DownloadsChartPr
             }
           />
           <ChartLegend content={<ChartLegendContent />} />
+          {snapToWindow(markers, data.map((point) => point.date)).map((marker) => (
+            <ReferenceLine
+              key={`${marker.platform}-${marker.version}`}
+              x={marker.at}
+              stroke="var(--chart-line-secondary)"
+              strokeDasharray="3 3"
+              strokeOpacity={0.7}
+              label={{
+                value: marker.version,
+                position: "top",
+                fontSize: 10,
+                fill: "var(--color-muted-foreground)",
+              }}
+            />
+          ))}
+
           <Line
             dataKey="ios"
             name="App Store"

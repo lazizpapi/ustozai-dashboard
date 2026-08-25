@@ -949,6 +949,108 @@ export async function educationChartTop(): Promise<ReturnType<typeof chartMovers
   );
 }
 
+export interface ReleaseMarker {
+  /** The day the new version was first seen, as YYYY-MM-DD. */
+  date: string;
+  platform: "ios" | "android";
+  version: string;
+}
+
+/**
+ * Turning a run of listing readings into the days we shipped.
+ *
+ * Pure, and separated from the fetch because the interesting decision here is
+ * a judgement rather than a query: the first reading of an app is not a
+ * release. Every tracked app has a row dated the day collection started, and
+ * treating those as releases would draw a line on the charts announcing that
+ * we shipped 2.2.7 on the afternoon somebody first ran the collector.
+ *
+ * So a release is a version that differs from the one before it on the same
+ * store, and the first reading is only ever a baseline. That also disposes of
+ * the other false positive: a listing edit that changes the description or the
+ * screenshots leaves the version alone, and is a marketing change rather than
+ * a build.
+ *
+ * Rows may arrive in any order and are sorted here. A version going backwards
+ * still counts: a rolled-back build is a release, and one worth seeing on a
+ * chart more than most.
+ */
+export function releaseMarkers(
+  rows: { platform: string; version: string | null; detectedAt: string }[],
+): ReleaseMarker[] {
+  const byPlatform = new Map<string, typeof rows>();
+  for (const row of rows) {
+    if (row.platform !== "ios" && row.platform !== "android") continue;
+    const list = byPlatform.get(row.platform) ?? [];
+    list.push(row);
+    byPlatform.set(row.platform, list);
+  }
+
+  const markers: ReleaseMarker[] = [];
+
+  for (const [platform, list] of byPlatform) {
+    const ordered = [...list].sort((a, b) => a.detectedAt.localeCompare(b.detectedAt));
+
+    let previous: string | null = null;
+    let first = true;
+
+    for (const row of ordered) {
+      const version = row.version;
+      if (typeof version !== "string" || version.length === 0) continue;
+
+      // The baseline. We learned the version, we did not watch it change.
+      if (first) {
+        previous = version;
+        first = false;
+        continue;
+      }
+
+      if (version !== previous) {
+        markers.push({
+          date: row.detectedAt.slice(0, 10),
+          platform: platform as "ios" | "android",
+          version,
+        });
+        previous = version;
+      }
+    }
+  }
+
+  return markers.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * The days our own app shipped a new build, for marking on a chart.
+ *
+ * Ours only. A competitor release is interesting on the market pages and would
+ * be noise on a chart of our own rank, where the question being asked is
+ * whether what we did changed anything.
+ */
+export async function ownReleases(days = 90): Promise<ReleaseMarker[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await serviceClient()
+    .from("listing_versions")
+    .select("fields, detected_at, apps!inner(platform, role)")
+    .eq("apps.role", "own")
+    .gte("detected_at", since)
+    .order("detected_at", { ascending: true })
+    .limit(500);
+  if (error) throw new Error(`ownReleases: ${error.message}`);
+
+  return releaseMarkers(
+    (data ?? []).map((row) => {
+      const app = row.apps as unknown as { platform: string };
+      const fields = row.fields as Record<string, unknown>;
+      return {
+        platform: app.platform,
+        version: typeof fields?.version === "string" ? fields.version : null,
+        detectedAt: row.detected_at as string,
+      };
+    }),
+  );
+}
+
 /**
  * Recent listing changes across every tracked app, ours included.
  *
