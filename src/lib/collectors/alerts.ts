@@ -35,7 +35,11 @@ export interface StatusChange {
 const MAX_LISTED = 6;
 const MAX_ERROR_CHARS = 160;
 
-const escape = (value: string) =>
+/**
+ * Shared with the metric alerts, which send into the same channel and would
+ * otherwise carry a second copy of the same three replacements.
+ */
+export const escapeHtml = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /**
@@ -83,7 +87,7 @@ export function formatStatusAlert(change: StatusChange): string | null {
   if (change.broke.length > 0) {
     lines.push("<b>Collector stopped</b>");
     for (const entry of change.broke.slice(0, MAX_LISTED)) {
-      lines.push(`  ${escape(entry.source)}: ${escape(entry.error.slice(0, MAX_ERROR_CHARS))}`);
+      lines.push(`  ${escapeHtml(entry.source)}: ${escapeHtml(entry.error.slice(0, MAX_ERROR_CHARS))}`);
     }
     const hidden = change.broke.length - MAX_LISTED;
     if (hidden > 0) lines.push(`  and ${hidden} more`);
@@ -92,7 +96,7 @@ export function formatStatusAlert(change: StatusChange): string | null {
   if (change.recovered.length > 0) {
     if (lines.length > 0) lines.push("");
     lines.push("<b>Collecting again</b>");
-    lines.push(`  ${change.recovered.slice(0, MAX_LISTED).map(escape).join(", ")}`);
+    lines.push(`  ${change.recovered.slice(0, MAX_LISTED).map(escapeHtml).join(", ")}`);
   }
 
   return lines.join("\n");

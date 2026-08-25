@@ -4,7 +4,15 @@ import { fetchSearch } from "./itunes-search";
 import { fetchReviews } from "./itunes-reviews";
 import { fetchAppleHints, fetchAppleTrending, fetchPlaySuggest } from "./suggest";
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
-import { KEYWORDS } from "./config";
+import { KEYWORDS, EDUCATION_GENRE, PLAY_EDUCATION_CATEGORY } from "./config";
+import {
+  checkDownloadSlump,
+  checkRankDrop,
+  checkRatingDrop,
+  notifyMetricAnomalies,
+  type MetricAlert,
+} from "./metric-alerts";
+import { iosDailyDownloads, rankHistory, snapshotHistory } from "@/lib/db/queries";
 import {
   fetchInstagramDemographics,
   fetchInstagramPosts,
@@ -289,6 +297,10 @@ export async function runDaily(): Promise<DailySummary> {
   ];
   await recordRuns(all);
 
+  // After the writes, so the rules read the figures this run just recorded
+  // rather than yesterday’s. Never throws; see notifyMetricAnomalies.
+  await checkMetrics();
+
   return {
     capturedAt,
     keywords: keywordRanks.length,
@@ -298,4 +310,72 @@ export async function runDaily(): Promise<DailySummary> {
       .filter((outcome) => outcome.status === "failed")
       .map((outcome) => `${outcome.source}: ${outcome.error}`),
   };
+}
+
+/**
+ * Did any headline figure move badly enough to be worth a message?
+ *
+ * Reads rather than collects, which is why it sits at the end of the run and
+ * outside the step machinery: a rule failing to evaluate is not a collector
+ * outage and should not appear in the health panel as one. Anything that goes
+ * wrong here is swallowed, because a daily collection must not fail on account
+ * of an alert it was only trying to send as a courtesy.
+ *
+ * Every window here is one day, because every rule compares today against
+ * yesterday. Both queries return each reading in the window oldest first, so
+ * the ends of the array are the two readings a rule wants.
+ *
+ * Ratings come from snapshotHistory rather than ratingTrend for that reason:
+ * ratingTrend compares against roughly a week ago, which would keep finding
+ * the same drop every day for the six days after it happened.
+ */
+async function checkMetrics(): Promise<void> {
+  try {
+    const [appleRanks, playRanks, downloads, iosRatings, androidRatings] = await Promise.all([
+      rankHistory("topfree", "uz", EDUCATION_GENRE, 1, "ios"),
+      rankHistory("topfree", "uz", PLAY_EDUCATION_CATEGORY, 1, "android"),
+      iosDailyDownloads(21),
+      snapshotHistory("ios", "uz", 1),
+      snapshotHistory("android", "uz", 1),
+    ]);
+
+    const ends = <T,>(rows: T[]): [T | null, T | null] => [
+      rows[0] ?? null,
+      rows.length > 1 ? rows[rows.length - 1] : null,
+    ];
+
+    const [appleThen, appleNow] = ends(appleRanks);
+    const [playThen, playNow] = ends(playRanks);
+    const [iosThen, iosNow] = ends(iosRatings);
+    const [androidThen, androidNow] = ends(androidRatings);
+
+    const alerts = [
+      checkRankDrop(
+        "Education, App Store",
+        appleNow?.rank ?? null,
+        appleThen?.rank ?? null,
+        appleNow?.feedSize ?? null,
+      ),
+      checkRankDrop(
+        "Education, Google Play",
+        playNow?.rank ?? null,
+        playThen?.rank ?? null,
+        playNow?.feedSize ?? null,
+      ),
+      checkDownloadSlump(
+        "App Store downloads",
+        downloads.map((day) => ({ date: day.date, downloads: day.downloads })),
+      ),
+      checkRatingDrop("App Store rating", iosNow?.rating ?? null, iosThen?.rating ?? null),
+      checkRatingDrop(
+        "Google Play rating",
+        androidNow?.rating ?? null,
+        androidThen?.rating ?? null,
+      ),
+    ].filter((alert): alert is MetricAlert => alert !== null);
+
+    await notifyMetricAnomalies(alerts);
+  } catch (error) {
+    console.error("could not check metric anomalies:", error);
+  }
 }
