@@ -1,4 +1,5 @@
 import { ask, type AskTurn } from "@/lib/analyst/ask";
+import { currentRole } from "@/app/load";
 import { openaiKey } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,16 @@ export const maxDuration = 300;
  *
  * Not behind the cron secret: this one is reached by a signed-in person, and
  * proxy.ts already gates every route except /api/cron and /api/webhook behind
- * the dashboard session. Adding a second check here would be theatre.
+ * the dashboard session.
+ *
+ * A session is not enough here, though, and this is the one endpoint where
+ * that matters. proxy.ts asks only whether the cookie is valid, not whose it
+ * is, while the layout mounts the chat for the CEO alone on the grounds that
+ * the agent can read every table and a department would be handed the figures
+ * its own dashboard withholds. Hiding the control was never the check: a
+ * marketing session could post here directly. So the role is verified in the
+ * one place a caller cannot skip, and the tools that read the company
+ * finances exist only behind it.
  *
  * The conversation lives in the browser and is posted back each turn. That
  * keeps questions about the company's numbers out of the database, and means
@@ -20,6 +30,15 @@ const MAX_QUESTION = 2_000;
 const MAX_HISTORY = 20;
 
 export async function POST(request: Request) {
+  /*
+   * Ahead of the key check on purpose. Which roles may ask is a property of
+   * the deployment, and answering "the analyst needs a key" to a caller who
+   * may not ask at all would confirm the endpoint exists and works.
+   */
+  if ((await currentRole()) !== "ceo") {
+    return Response.json({ error: "Not available for this account." }, { status: 403 });
+  }
+
   if (!openaiKey()) {
     return Response.json(
       { error: "The analyst needs OPENAI_API_KEY set in the environment." },
