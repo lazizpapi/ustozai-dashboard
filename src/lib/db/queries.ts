@@ -18,8 +18,10 @@ import {
 import { stickiness } from "@/lib/active-users";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import type { AnalystReport } from "@/lib/analyst/schema";
+import type { MetricKey } from "@/lib/metric-keys";
 import {
   countByBucket,
+  localDate,
   netChangeByBucket,
   sumByBucket,
   type GrowthPoint,
@@ -2235,4 +2237,238 @@ export async function instagramStories(days = 14): Promise<InstagramStoryRow[]> 
     replies: row.replies as number | null,
     navigation: row.navigation as number | null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Metric notes, written by the explainer when a number moves
+// ---------------------------------------------------------------------------
+
+export interface MetricNoteRow {
+  id: string;
+  createdAt: string;
+  metricKey: MetricKey;
+  /** The Tashkent day the movement describes, not the day it was written. */
+  movementDate: string;
+  direction: "up" | "down";
+  /** The movement in words, as the alert stated it on the day. */
+  magnitude: string;
+  noteUz: string;
+  /** True when the model found nothing in the data that explains the move. */
+  noClearDriver: boolean;
+}
+
+interface NoteQuery {
+  /**
+   * Which metrics the caller may read. Required rather than optional, and
+   * required even where the answer is "all of them": takings are CEO-only, and
+   * a note travels further than the page it was written for. An optional filter
+   * is one a call site forgets, and forgetting is silent.
+   */
+  keys: MetricKey[];
+  /** How far back to look, in days. */
+  days?: number;
+  /** A single metric, when the caller wants one series rather than the feed. */
+  metricKey?: MetricKey;
+}
+
+function toNoteRow(row: Record<string, unknown>): MetricNoteRow {
+  return {
+    id: row.id as string,
+    createdAt: row.created_at as string,
+    metricKey: row.metric_key as MetricKey,
+    movementDate: row.movement_date as string,
+    direction: row.direction as "up" | "down",
+    magnitude: row.magnitude as string,
+    noteUz: row.note_uz as string,
+    noClearDriver: (row.no_clear_driver as boolean | null) ?? false,
+  };
+}
+
+const NOTE_COLUMNS =
+  "id, created_at, metric_key, movement_date, direction, magnitude, note_uz, no_clear_driver";
+
+/**
+ * Which movements already have a note, so a re-run does not buy a second one.
+ *
+ * Takes the dates rather than the pairs because PostgREST has no clean way to
+ * ask for a set of tuples, and the days in one run are few. The pairing is done
+ * by the caller, which is pure and testable; this is only the fetch.
+ */
+export async function notedMovements(
+  dates: string[],
+): Promise<{ metricKey: string; movementDate: string }[]> {
+  const wanted = [...new Set(dates)];
+  if (wanted.length === 0) return [];
+
+  const { data, error } = await serviceClient()
+    .from("metric_notes")
+    .select("metric_key, movement_date")
+    .in("movement_date", wanted);
+  if (error) throw new Error(`notedMovements: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    metricKey: row.metric_key as string,
+    movementDate: row.movement_date as string,
+  }));
+}
+
+/**
+ * The freshest note per metric, for the markers on the tiles.
+ *
+ * Windowed because a marker is a "look at this" and a movement from March is
+ * not that. The note stays in the table and on the feed; it just stops
+ * decorating the tile once nobody would still be wondering about it.
+ */
+export async function latestNotes(
+  keys: MetricKey[],
+  withinDays = 3,
+): Promise<Map<MetricKey, MetricNoteRow>> {
+  const found = new Map<MetricKey, MetricNoteRow>();
+  if (keys.length === 0) return found;
+
+  const since = new Date(Date.now() - withinDays * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await serviceClient()
+    .from("metric_notes")
+    .select(NOTE_COLUMNS)
+    .eq("status", "ok")
+    .in("metric_key", keys)
+    .gte("movement_date", since)
+    .order("movement_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`latestNotes: ${error.message}`);
+
+  // Newest first from the query, so the first of each key wins and the rest
+  // are older notes about the same metric.
+  for (const row of data ?? []) {
+    const note = toNoteRow(row as Record<string, unknown>);
+    if (!found.has(note.metricKey)) found.set(note.metricKey, note);
+  }
+
+  return found;
+}
+
+/**
+ * The note feed, newest first.
+ *
+ * Failed rows are excluded. They exist so a movement nobody could explain is
+ * distinguishable from a quiet day when somebody goes looking in the table, but
+ * a feed entry saying the model errored is noise to the people reading it.
+ */
+export async function noteHistory(
+  limit: number,
+  query: NoteQuery,
+): Promise<MetricNoteRow[]> {
+  const keys = query.metricKey
+    ? query.keys.filter((key) => key === query.metricKey)
+    : query.keys;
+  if (keys.length === 0) return [];
+
+  let builder = serviceClient()
+    .from("metric_notes")
+    .select(NOTE_COLUMNS)
+    .eq("status", "ok")
+    .in("metric_key", keys);
+
+  if (query.days !== undefined) {
+    const since = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    builder = builder.gte("movement_date", since);
+  }
+
+  const { data, error } = await builder
+    .order("movement_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`noteHistory: ${error.message}`);
+
+  return (data ?? []).map((row) => toNoteRow(row as Record<string, unknown>));
+}
+
+/**
+ * Daily active users as a plain series, oldest first.
+ *
+ * activeUsersTrend answers "what is it now, and how does that compare", which
+ * is what a tile needs. A median rule needs the whole run of days, and reducing
+ * one to the other would mean fetching a summary in order to throw the summary
+ * away.
+ */
+export async function dauSeries(days = 21): Promise<{ date: string; value: number }[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await serviceClient()
+    .from("active_users_daily")
+    .select("date, dau")
+    .eq("platform", "all")
+    .gte("date", since)
+    .order("date", { ascending: true });
+  if (error) throw new Error(`dauSeries: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    date: row.date as string,
+    value: row.dau as number,
+  }));
+}
+
+export interface FollowerDay {
+  /** Tashkent day. */
+  date: string;
+  followers: number;
+}
+
+/**
+ * Followers as one reading per day per platform, oldest first.
+ *
+ * socialTrends already reports movement, but against roughly a week ago, which
+ * is the right comparison for a tile and the wrong one for an alert: a movement
+ * measured against a week stays true for a week, so a rule reading it would
+ * report the same gain every morning for seven days.
+ *
+ * The last reading of a day wins, matching how the rankings page treats a day's
+ * position, and days with no reading at all are absent rather than zero. A
+ * platform that stopped answering should break the series, not appear to have
+ * lost its entire audience.
+ */
+export async function followerDayEnds(days = 3): Promise<Map<string, FollowerDay[]>> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const rows = await fetchAllPages<{
+    platform: string;
+    followers: number;
+    captured_at: string;
+    checked_at: string | null;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("social_snapshots")
+        .select("platform, followers, captured_at, checked_at")
+        .gte("captured_at", since)
+        .order("captured_at", { ascending: true })
+        .range(from, to),
+    "followerDayEnds",
+  );
+
+  // Ascending from the query, so a later reading overwrites an earlier one and
+  // each day ends up holding the last count seen that day.
+  const byPlatform = new Map<string, Map<string, number>>();
+  for (const row of rows) {
+    const date = localDate(row.checked_at ?? row.captured_at);
+    const day = byPlatform.get(row.platform) ?? new Map<string, number>();
+    day.set(date, row.followers);
+    byPlatform.set(row.platform, day);
+  }
+
+  return new Map(
+    [...byPlatform].map(([platform, day]) => [
+      platform,
+      [...day.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, followers]) => ({ date, followers })),
+    ]),
+  );
 }

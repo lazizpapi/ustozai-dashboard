@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowRight, ArrowUp, Minus } from "lucide-react";
 import Link from "next/link";
 
+import { NoteMarker, type MetricNoteProp } from "@/components/dashboard/note-marker";
 import { Sparkline, type SparkPoint } from "@/components/dashboard/sparkline";
 import { cn } from "@/lib/utils";
 import type { Delta } from "@/lib/format";
@@ -65,6 +66,14 @@ interface MetricProps {
    * Rankings and Downloads pages already answer properly.
    */
   spark?: { points: SparkPoint[]; invert?: boolean };
+  /**
+   * The explanation somebody wrote when this figure last moved notably.
+   *
+   * Rendered as a mark in the corner rather than as text on the tile. Absent on
+   * almost every tile almost every day, which is the point: a mark that is
+   * always there is furniture, and stops being read.
+   */
+  note?: MetricNoteProp;
 }
 
 function DeltaGlyph({ change }: { change: Delta }) {
@@ -104,6 +113,7 @@ export function Metric({
   asOf,
   href,
   spark,
+  note,
 }: MetricProps) {
   const body = (
     <>
@@ -165,9 +175,9 @@ export function Metric({
 
   const shell = "flex h-full flex-col gap-1.5 px-4 py-3.5";
 
-  if (!href) return <div className={shell}>{body}</div>;
-
-  return (
+  const tile = !href ? (
+    <div className={shell}>{body}</div>
+  ) : (
     <Link
       href={href}
       // group so the arrow can reveal on hover; the background shift is the
@@ -176,6 +186,25 @@ export function Metric({
     >
       {body}
     </Link>
+  );
+
+  if (!note) return tile;
+
+  /*
+   * The mark sits beside the tile, not inside it. Where the tile is a link its
+   * whole body is an anchor, and a button inside an anchor is invalid markup
+   * that behaves accordingly: the browser is free to follow the link on the
+   * click that was meant to open the note. Absolutely positioning a sibling
+   * keeps both interactive elements whole, and costs one wrapper on the tiles
+   * that have a note and nothing at all on the ones that do not.
+   */
+  return (
+    <div className="relative h-full">
+      {tile}
+      <span className="absolute top-3 right-3 z-10">
+        <NoteMarker note={note} />
+      </span>
+    </div>
   );
 }
 

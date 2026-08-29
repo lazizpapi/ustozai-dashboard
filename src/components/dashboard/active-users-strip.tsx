@@ -3,8 +3,10 @@ import { delta, formatDay, formatNumber, timeAgo, NO_VALUE} from "@/lib/format";
 import type {
   ActiveUsers,
   EngagementSummary,
+  MetricNoteRow,
   RevenueSummary,
 } from "@/lib/db/queries";
+import type { MetricKey } from "@/lib/metric-keys";
 
 /**
  * What the product itself is doing: active users, engagement and takings.
@@ -28,9 +30,17 @@ interface Props {
   active: ActiveUsers | null;
   revenue?: RevenueSummary;
   engagement?: EngagementSummary | null;
+  /**
+   * Notes for whichever of these figures moved, keyed by metric.
+   *
+   * Passed in whole rather than fetched here: the caller already knows which
+   * role is reading, and the takings are the one figure on this strip that not
+   * every role may see.
+   */
+  notes?: Map<MetricKey, MetricNoteRow>;
 }
 
-export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
+export function ActiveUsersStrip({ active, revenue, engagement, notes }: Props) {
   if (!active) {
     return (
       <div className="bg-card rounded-lg border p-4">
@@ -65,6 +75,7 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
           label="Daily active"
           value={formatNumber(active.dau)}
           change={delta(active.dau, active.dauPrevious, active.dauSpanDays)}
+          note={notes?.get("active_users")}
         />
         <Metric
           label="Views, daily"
@@ -107,6 +118,7 @@ export function ActiveUsersStrip({ active, revenue, engagement }: Props) {
             revenue?.spanDays ?? null,
           )}
           asOf={revenue?.latest ? `on ${formatDay(revenue.latest.date)}` : undefined}
+          note={notes?.get("revenue")}
         />
         <Metric
           href="/business"

@@ -48,6 +48,7 @@ const TOOL_LABEL: Record<string, string> = {
   get_revenue: "takings",
   get_active_users: "active users",
   get_instagram: "Instagram",
+  get_metric_notes: "metric notes",
 };
 
 /** How long the orb holds its "done" face before settling back to idle. */

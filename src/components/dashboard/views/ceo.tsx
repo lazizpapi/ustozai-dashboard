@@ -25,12 +25,14 @@ import {
   educationChartTop,
   iosDailyDownloads,
   latestAnalystReport,
+  latestNotes,
   ownReleases,
   rankHistory,
   rankTrend,
   ratingTrend,
   socialTrends,
 } from "@/lib/db/queries";
+import { SOCIAL_PLATFORM_KEYS, visibleKeys } from "@/lib/metric-keys";
 import {
   delta,
   formatDay,
@@ -113,6 +115,9 @@ export async function CeoView() {
       activeUsersTrend(),
       revenueSummary(30),
       engagementSummary(30),
+      // Every key: this view is the CEO's, and visibleKeys is what keeps the
+      // takings out of a department's copy of the same figures elsewhere.
+      latestNotes(visibleKeys("ceo")),
     ]),
   );
 
@@ -138,6 +143,7 @@ export async function CeoView() {
     active,
     revenue,
     engagement,
+    notes,
   ] = result.data;
 
   /*
@@ -179,7 +185,12 @@ export async function CeoView() {
         people using the app rather than the store pages around it, so they
         answer "are we growing" more directly than a download count does.
       */}
-      <ActiveUsersStrip active={active} revenue={revenue} engagement={engagement} />
+      <ActiveUsersStrip
+        active={active}
+        revenue={revenue}
+        engagement={engagement}
+        notes={notes}
+      />
       <MetricStrip wide>
         {/*
           Two tiles rather than one. This was a single "Education, UZ" that
@@ -200,6 +211,7 @@ export async function CeoView() {
           detail={appStoreRank.detail}
           change={rankDelta(rank.current, rank.previous, rank.spanDays)}
           spark={{ points: rankSpark, invert: true }}
+          note={notes.get("education_rank_ios")}
         />
 
         <Metric
@@ -209,6 +221,7 @@ export async function CeoView() {
           detail={playStoreRank.detail}
           change={rankDelta(playRank.current, playRank.previous, playRank.spanDays)}
           spark={{ points: playRankSpark, invert: true }}
+          note={notes.get("education_rank_android")}
         />
 
         <Metric
@@ -218,6 +231,7 @@ export async function CeoView() {
           detail={lastDownload ? undefined : "not connected"}
           asOf={lastDownload ? `on ${formatDay(lastDownload.date)}` : undefined}
           spark={{ points: downloadSpark }}
+          note={notes.get("ios_downloads")}
         />
 
         <Metric
@@ -259,6 +273,7 @@ export async function CeoView() {
             ios.ratingCount !== null ? `${formatNumber(ios.ratingCount)} ratings` : undefined
           }
           change={formatRatingDelta(ios.current, ios.previous, ios.spanDays)}
+          note={notes.get("ios_rating")}
         />
 
         <Metric
@@ -271,6 +286,7 @@ export async function CeoView() {
               : undefined
           }
           change={formatRatingDelta(android.current, android.previous, android.spanDays)}
+          note={notes.get("android_rating")}
         />
 
         {social.map((trend) => (
@@ -289,6 +305,7 @@ export async function CeoView() {
             detail={trend.isExact ? undefined : "rounded by YouTube"}
             change={delta(trend.current, trend.previous, trend.spanDays)}
             asOf={trend.isStale ? `last read ${timeAgo(trend.capturedAt)}` : undefined}
+            note={notes.get(SOCIAL_PLATFORM_KEYS[trend.platform])}
           />
         ))}
       </MetricStrip>

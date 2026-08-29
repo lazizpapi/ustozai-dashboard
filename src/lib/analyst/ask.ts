@@ -4,29 +4,8 @@ import OpenAI from "openai";
 
 import { ASK_TOOLS, clampArgs } from "./tools";
 import { pageName } from "./page-context";
+import { runTool } from "./run-tool";
 import { analystModel, openaiKey } from "@/lib/env";
-import {
-  androidDailyInstalls,
-  collectorHealth,
-  educationChartTop,
-  growthSeries,
-  iosDailyDownloads,
-  iosDiscoveryFunnel,
-  keywordSuggestionSets,
-  latestAnalystReport,
-  latestKeywordRanks,
-  marketOverview,
-  recentListingChanges,
-  recentReviews,
-  activeUsersTrend,
-  engagementSummary,
-  instagramPerformance,
-  instagramTopPosts,
-  revenueSummary,
-  socialTrends,
-  type GrowthSeriesKey,
-} from "@/lib/db/queries";
-import type { Period } from "@/lib/growth";
 
 /**
  * Ask the analyst a question.
@@ -68,119 +47,6 @@ export interface AskResult {
 }
 
 export type AskTurn = { role: "user" | "assistant"; content: string };
-
-/**
- * Run one tool. The only place a tool name becomes a query.
- *
- * Unknown names return an error string rather than throwing: the model
- * occasionally hallucinates a plausible-sounding tool, and telling it so lets
- * it correct course on the next step instead of failing the whole question.
- */
-async function runTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-  switch (name) {
-    case "get_downloads": {
-      const days = args.days as number;
-      const [ios, android] = await Promise.all([
-        iosDailyDownloads(days),
-        androidDailyInstalls(days),
-      ]);
-      return {
-        appStore: ios,
-        googlePlay: android,
-        note:
-          "Play figures are differenced from a cumulative counter Google updates " +
-          "about once a day; a zero may mean the counter has not moved.",
-      };
-    }
-
-    case "get_market":
-      return marketOverview();
-
-    case "get_chart":
-      return educationChartTop();
-
-    case "get_conversion_funnel": {
-      const funnel = await iosDiscoveryFunnel(args.days as number);
-      return funnel ?? { available: false, reason: "no discovery report data yet" };
-    }
-
-    case "get_keywords": {
-      const [ranks, suggestions] = await Promise.all([
-        latestKeywordRanks("uz"),
-        keywordSuggestionSets(),
-      ]);
-      return { positions: ranks, suggestions };
-    }
-
-    case "get_reviews": {
-      const reviews = await recentReviews(args.limit as number);
-      const max = args.maxRating as number | undefined;
-      return max === undefined ? reviews : reviews.filter((review) => review.rating <= max);
-    }
-
-    case "get_audience":
-      return socialTrends();
-
-    case "get_growth":
-      return growthSeries(args.metric as GrowthSeriesKey, args.period as Period);
-
-    case "get_listing_changes":
-      return recentListingChanges(20);
-
-    case "get_latest_report":
-      return (await latestAnalystReport()) ?? { available: false };
-
-    case "get_revenue":
-      return revenueSummary(args.days as number);
-
-    case "get_active_users": {
-      const days = args.days as number;
-      const [active, engagement] = await Promise.all([
-        activeUsersTrend(),
-        engagementSummary(days),
-      ]);
-      return {
-        activeUsers: active,
-        engagement,
-        note:
-          "Monthly active users are not collected: the upstream figure varies " +
-          "with the window requested and is not a distinct-user count.",
-      };
-    }
-
-    case "get_instagram": {
-      const days = args.days as number;
-      /*
-       * Allowed to fail rather than taking the whole answer down, matching the
-       * audience page. Without the insights tables or a token this is an
-       * absence to report, not an error to raise.
-       */
-      try {
-        const [performance, posts] = await Promise.all([
-          instagramPerformance(days),
-          instagramTopPosts(days, 10),
-        ]);
-        if (performance.daily.length === 0 && posts.length === 0) {
-          return {
-            available: false,
-            reason:
-              "nothing collected yet; Instagram insights need an access token, " +
-              "and the follower count comes from a different source",
-          };
-        }
-        return { performance, topPosts: posts };
-      } catch {
-        return { available: false, reason: "the Instagram insight tables are not present" };
-      }
-    }
-
-    case "get_collector_health":
-      return collectorHealth();
-
-    default:
-      return { error: `no such tool: ${name}` };
-  }
-}
 
 export async function ask(
   question: string,

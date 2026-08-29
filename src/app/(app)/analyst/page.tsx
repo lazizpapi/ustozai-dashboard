@@ -2,9 +2,15 @@ import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 import { Empty, PageHeader, Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
-import { load } from "@/app/load";
-import { latestAnalystReport, recentAnalystRuns, type AnalystRow } from "@/lib/db/queries";
-import { timeAgo } from "@/lib/format";
+import { currentRole, load } from "@/app/load";
+import {
+  latestAnalystReport,
+  noteHistory,
+  recentAnalystRuns,
+  type AnalystRow,
+} from "@/lib/db/queries";
+import { METRIC_LABELS_UZ, visibleKeys } from "@/lib/metric-keys";
+import { formatDay, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -46,8 +52,18 @@ function Direction({ direction }: { direction: "up" | "down" | "flat" }) {
 
 export default async function AnalystPage() {
   const result = await load(async () => {
-    const [latest, runs] = await Promise.all([latestAnalystReport(), recentAnalystRuns()]);
-    return { latest, runs };
+    /*
+     * IT can open this page as well as the CEO, and a note about the takings is
+     * the takings. The keys are filtered by whoever is reading rather than by
+     * what the page is for.
+     */
+    const role = await currentRole();
+    const [latest, runs, notes] = await Promise.all([
+      latestAnalystReport(),
+      recentAnalystRuns(),
+      noteHistory(30, { keys: visibleKeys(role) }),
+    ]);
+    return { latest, runs, notes };
   }, "/analyst");
 
   if (result.kind === "unconfigured") {
@@ -55,7 +71,7 @@ export default async function AnalystPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { latest, runs } = result.data;
+  const { latest, runs, notes } = result.data;
   const report = latest?.report ?? null;
 
   // Runs after the newest good report: a refusal or failure since then is the
@@ -192,6 +208,43 @@ export default async function AnalystPage() {
           ) : null}
         </>
       )}
+
+      {/*
+        The notes the explainer wrote when a figure moved, newest first. In
+        Uzbek because that is the language they were written in; translating
+        them here would put a second author between the reader and the note.
+      */}
+      <Section
+        title="Metric notes"
+        note="written when a figure moved, from the data as it stood that day"
+      >
+        {notes.length === 0 ? (
+          <Empty>
+            Nothing yet. A note appears here when one of the tracked figures
+            moves far enough to be worth explaining.
+          </Empty>
+        ) : (
+          <ul className="divide-y text-sm">
+            {notes.map((note) => (
+              <li key={note.id} className="flex gap-2.5 py-3">
+                <Direction direction={note.direction} />
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-medium">
+                      {METRIC_LABELS_UZ[note.metricKey]}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {formatDay(note.movementDate)}
+                    </span>
+                  </div>
+                  <p className="leading-relaxed">{note.noteUz}</p>
+                  <p className="text-muted-foreground/70 text-xs">{note.magnitude}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
       {runs.length > 1 ? (
         <Section title="Past runs">

@@ -3,9 +3,10 @@ import { BrandLogo, type SocialKey } from "@/components/tv/brand-logo";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
-import { load } from "@/app/load";
+import { currentRole, load } from "@/app/load";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
-import { socialTrends } from "@/lib/db/queries";
+import { latestNotes, socialTrends } from "@/lib/db/queries";
+import { SOCIAL_PLATFORM_KEYS, visibleKeys } from "@/lib/metric-keys";
 import { delta, formatNumber, timeAgo, NO_VALUE } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -31,19 +32,23 @@ const LABELS: Record<SocialKey, string> = {
 };
 
 export default async function AudiencePage() {
-  const result = await load(
-    // Chained so the counts reflect any reading the refresh just took, the
-    // same way the overview and the platform pages do it.
-    () => refreshAudienceIfStale().then(() => socialTrends()),
-    "/audience",
-  );
+  const result = await load(async () => {
+    const role = await currentRole();
+    const [trends, notes] = await Promise.all([
+      // Chained so the counts reflect any reading the refresh just took, the
+      // same way the overview and the platform pages do it.
+      refreshAudienceIfStale().then(() => socialTrends()),
+      latestNotes(visibleKeys(role)),
+    ]);
+    return { trends, notes };
+  }, "/audience");
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const trends = result.data;
+  const { trends, notes } = result.data;
 
   return (
     <div className="space-y-8">
@@ -79,6 +84,7 @@ export default async function AudiencePage() {
               // Only when the reading is behind schedule. A platform read
               // minutes ago does not need to say so on a directory page.
               asOf={trend.isStale ? `last read ${timeAgo(trend.checkedAt)}` : undefined}
+              note={notes.get(SOCIAL_PLATFORM_KEYS[platform])}
             />
           );
         })}

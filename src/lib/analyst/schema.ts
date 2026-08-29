@@ -116,3 +116,47 @@ function stripUnsupported(node: unknown): unknown {
 export function analystJsonSchema(): Record<string, unknown> {
   return stripUnsupported(z.toJSONSchema(analystReportSchema)) as Record<string, unknown>;
 }
+
+/**
+ * One note about one metric that moved.
+ *
+ * The interesting field is the last one. A model asked why a number moved will
+ * always produce a reason, because producing text is what it does, and a
+ * confident invented cause is worse than silence: it gets repeated in a meeting
+ * and acted on. Giving "nothing here explains it" a field of its own makes that
+ * a first-class answer rather than a failure to be talked out of.
+ *
+ * Evidence is required and separate from the note for the same reason the
+ * analyst's pack is stored: a claim nobody can trace back to a number is a
+ * claim nobody can check.
+ */
+export const metricNoteSchema = z.object({
+  note_uz: z
+    .string()
+    .describe(
+      "2-3 jumla, o'zbek tilida, lotin yozuvida. Nima o'zgargani va nima " +
+        "sababdan bo'lishi mumkinligi. Ehtiyotkor ohangda: 'ehtimol', " +
+        "'ko'rinishidan'. Faqat dashborddagi raqamlarga tayan.",
+    ),
+  evidence: z
+    .array(
+      z.object({
+        source: z.string().describe("Which tool the fact came from."),
+        fact: z.string().describe("The specific number or change, cited."),
+      }),
+    )
+    .describe("What you actually read. Empty only when you found nothing."),
+  no_clear_driver: z
+    .boolean()
+    .describe(
+      "True when nothing in the data plausibly explains the movement. This is " +
+        "an expected and useful answer, not a failure. Do not invent a cause " +
+        "to avoid setting it.",
+    ),
+});
+
+export type MetricNote = z.infer<typeof metricNoteSchema>;
+
+export function metricNoteJsonSchema(): Record<string, unknown> {
+  return stripUnsupported(z.toJSONSchema(metricNoteSchema)) as Record<string, unknown>;
+}

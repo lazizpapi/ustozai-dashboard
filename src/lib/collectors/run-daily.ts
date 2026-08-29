@@ -6,13 +6,33 @@ import { fetchAppleHints, fetchAppleTrending, fetchPlaySuggest } from "./suggest
 import { step, values, outcomes, skipped, type StepResult } from "./run-step";
 import { KEYWORDS, EDUCATION_GENRE, PLAY_EDUCATION_CATEGORY } from "./config";
 import {
+  ACTIVE_SLUMP_SHARE,
+  ACTIVE_SURGE_SHARE,
+  REVENUE_SLUMP_SHARE,
+  REVENUE_SURGE_SHARE,
   checkDownloadSlump,
+  checkDownloadSurge,
+  checkFollowerMove,
   checkRankDrop,
+  checkRankImprovement,
   checkRatingDrop,
+  checkRatingRise,
+  checkSeriesMove,
+  completeDays,
   notifyMetricAnomalies,
-  type MetricAlert,
+  type Movement,
 } from "./metric-alerts";
-import { iosDailyDownloads, rankHistory, snapshotHistory } from "@/lib/db/queries";
+import {
+  dauSeries,
+  followerDayEnds,
+  iosDailyDownloads,
+  rankHistory,
+  revenueSummary,
+  snapshotHistory,
+} from "@/lib/db/queries";
+import { explainMovements, movementKey } from "@/lib/analyst/explain";
+import { METRIC_LABELS, SOCIAL_PLATFORM_KEYS } from "@/lib/metric-keys";
+import { localDate } from "@/lib/growth";
 import {
   fetchInstagramDemographics,
   fetchInstagramPosts,
@@ -313,7 +333,7 @@ export async function runDaily(): Promise<DailySummary> {
 }
 
 /**
- * Did any headline figure move badly enough to be worth a message?
+ * Did any headline figure move enough to be worth a message?
  *
  * Reads rather than collects, which is why it sits at the end of the run and
  * outside the step machinery: a rule failing to evaluate is not a collector
@@ -321,23 +341,33 @@ export async function runDaily(): Promise<DailySummary> {
  * wrong here is swallowed, because a daily collection must not fail on account
  * of an alert it was only trying to send as a courtesy.
  *
- * Every window here is one day, because every rule compares today against
- * yesterday. Both queries return each reading in the window oldest first, so
- * the ends of the array are the two readings a rule wants.
+ * The day-over-day windows are one day, because those rules compare today
+ * against yesterday, and each query returns its window oldest first, so the
+ * ends of the array are the two readings a rule wants. The median rules take
+ * three weeks, which is a fortnight of history plus the day being judged.
  *
  * Ratings come from snapshotHistory rather than ratingTrend for that reason:
  * ratingTrend compares against roughly a week ago, which would keep finding
  * the same drop every day for the six days after it happened.
+ *
+ * The order the movements are listed in is their priority, because the
+ * explainer only writes about the first few. Chart position leads: it is the
+ * figure that moves for reasons somebody can act on. Followers come last,
+ * being the slowest to move and the least surprising when they do.
  */
 async function checkMetrics(): Promise<void> {
   try {
-    const [appleRanks, playRanks, downloads, iosRatings, androidRatings] = await Promise.all([
-      rankHistory("topfree", "uz", EDUCATION_GENRE, 1, "ios"),
-      rankHistory("topfree", "uz", PLAY_EDUCATION_CATEGORY, 1, "android"),
-      iosDailyDownloads(21),
-      snapshotHistory("ios", "uz", 1),
-      snapshotHistory("android", "uz", 1),
-    ]);
+    const [appleRanks, playRanks, downloads, iosRatings, androidRatings, revenue, dau, social] =
+      await Promise.all([
+        rankHistory("topfree", "uz", EDUCATION_GENRE, 1, "ios"),
+        rankHistory("topfree", "uz", PLAY_EDUCATION_CATEGORY, 1, "android"),
+        iosDailyDownloads(21),
+        snapshotHistory("ios", "uz", 1),
+        snapshotHistory("android", "uz", 1),
+        revenueSummary(21),
+        dauSeries(21),
+        followerDayEnds(3),
+      ]);
 
     const ends = <T,>(rows: T[]): [T | null, T | null] => [
       rows[0] ?? null,
@@ -349,32 +379,91 @@ async function checkMetrics(): Promise<void> {
     const [iosThen, iosNow] = ends(iosRatings);
     const [androidThen, androidNow] = ends(androidRatings);
 
-    const alerts = [
-      checkRankDrop(
-        "Education, App Store",
-        appleNow?.rank ?? null,
-        appleThen?.rank ?? null,
-        appleNow?.feedSize ?? null,
-      ),
-      checkRankDrop(
-        "Education, Google Play",
-        playNow?.rank ?? null,
-        playThen?.rank ?? null,
-        playNow?.feedSize ?? null,
-      ),
-      checkDownloadSlump(
-        "App Store downloads",
-        downloads.map((day) => ({ date: day.date, downloads: day.downloads })),
-      ),
-      checkRatingDrop("App Store rating", iosNow?.rating ?? null, iosThen?.rating ?? null),
-      checkRatingDrop(
-        "Google Play rating",
-        androidNow?.rating ?? null,
-        androidThen?.rating ?? null,
-      ),
-    ].filter((alert): alert is MetricAlert => alert !== null);
+    // The day these readings describe. The series rules date themselves from
+    // their own newest row, which may be older when a feed is behind.
+    const today = localDate(new Date().toISOString());
 
-    await notifyMetricAnomalies(alerts);
+    const APPLE = { key: "education_rank_ios", label: "Education, App Store" } as const;
+    const PLAY = { key: "education_rank_android", label: "Education, Google Play" } as const;
+    const IOS_DOWNLOADS = { key: "ios_downloads", label: "App Store downloads" } as const;
+    const IOS_RATING = { key: "ios_rating", label: "App Store rating" } as const;
+    const PLAY_RATING = { key: "android_rating", label: "Google Play rating" } as const;
+    const REVENUE = { key: "revenue", label: "Takings" } as const;
+    const ACTIVE = { key: "active_users", label: "Daily active" } as const;
+
+    /*
+     * Today is excluded from every series. It is still being counted, and a
+     * part-day measured against a fortnight of whole ones reports a collapse
+     * every morning. See completeDays.
+     */
+    const downloadDays = completeDays(
+      downloads.map((day) => ({ date: day.date, downloads: day.downloads })),
+      today,
+    );
+    const revenueDays = completeDays(
+      revenue.daily.map((day) => ({ date: day.date, value: day.amount })),
+      today,
+    );
+    const activeDays = completeDays(dau, today);
+
+    const movements = [
+      checkRankDrop(APPLE, today, appleNow?.rank ?? null, appleThen?.rank ?? null, appleNow?.feedSize ?? null),
+      checkRankImprovement(APPLE, today, appleNow?.rank ?? null, appleThen?.rank ?? null, appleNow?.feedSize ?? null),
+      checkRankDrop(PLAY, today, playNow?.rank ?? null, playThen?.rank ?? null, playNow?.feedSize ?? null),
+      checkRankImprovement(PLAY, today, playNow?.rank ?? null, playThen?.rank ?? null, playNow?.feedSize ?? null),
+
+      checkDownloadSlump(IOS_DOWNLOADS, downloadDays),
+      checkDownloadSurge(IOS_DOWNLOADS, downloadDays),
+
+      checkSeriesMove(REVENUE, revenueDays, {
+        slumpShare: REVENUE_SLUMP_SHARE,
+        surgeShare: REVENUE_SURGE_SHARE,
+        unit: "UZS",
+      }),
+      checkSeriesMove(ACTIVE, activeDays, {
+        slumpShare: ACTIVE_SLUMP_SHARE,
+        surgeShare: ACTIVE_SURGE_SHARE,
+      }),
+
+      checkRatingDrop(IOS_RATING, today, iosNow?.rating ?? null, iosThen?.rating ?? null),
+      checkRatingRise(IOS_RATING, today, iosNow?.rating ?? null, iosThen?.rating ?? null),
+      checkRatingDrop(PLAY_RATING, today, androidNow?.rating ?? null, androidThen?.rating ?? null),
+      checkRatingRise(PLAY_RATING, today, androidNow?.rating ?? null, androidThen?.rating ?? null),
+
+      ...Object.entries(SOCIAL_PLATFORM_KEYS).map(([platform, key]) => {
+        // The last two days we have readings for, which are not necessarily
+        // yesterday and today: a platform that stopped answering leaves gaps,
+        // and comparing across one is better than inventing a zero for it.
+        const days = social.get(platform) ?? [];
+        const now = days[days.length - 1];
+        const before = days[days.length - 2];
+
+        return checkFollowerMove(
+          { key, label: METRIC_LABELS[key] },
+          now?.date ?? today,
+          now?.followers ?? null,
+          before?.followers ?? null,
+        );
+      }),
+    ].filter((movement): movement is Movement => movement !== null);
+
+    /*
+     * Explained before the alert rather than after it, so the message can carry
+     * the note. The cost is that a quiet Telegram waits on a model call; the
+     * alternative is two messages for one piece of news, and the second one
+     * arriving without the first one's context.
+     *
+     * Never throws and returns whatever it managed, so a model outage costs the
+     * explanations and not the alert.
+     */
+    const notes = await explainMovements(movements);
+
+    await notifyMetricAnomalies(
+      movements.map((movement) => ({
+        ...movement,
+        noteUz: notes.get(movementKey(movement)),
+      })),
+    );
   } catch (error) {
     console.error("could not check metric anomalies:", error);
   }

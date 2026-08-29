@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 
 import { GROWTH_SERIES, type GrowthSeriesKey } from "@/lib/db/queries";
+import { METRIC_KEYS, isMetricKey } from "@/lib/metric-keys";
 import { PERIODS, type Period } from "@/lib/growth";
 
 /**
@@ -216,6 +217,32 @@ export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
     parameters: daysSchema("How many days of Instagram history to return."),
   },
   {
+    name: "get_metric_notes",
+    description:
+      "Notes already written about metrics that moved notably, each with the " +
+      "day, the direction, the movement itself and a short explanation in " +
+      "Uzbek. Written on the day of the movement from the data as it stood " +
+      "then, so this is the best answer to 'why did we grow', 'nega o'sdik' " +
+      "or any question about the history of notable movements. A note flagged " +
+      "no_clear_driver means the data showed no cause; report that as the " +
+      "finding rather than inventing one.",
+    type: "function",
+    strict: false,
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        days: { type: "number", description: "How far back to look, in days." },
+        metric: {
+          type: "string",
+          enum: [...METRIC_KEYS],
+          description: "One metric only. Omit for every metric.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "get_collector_health",
     description:
       "Status of every data collector and when each last ran. Use to check " +
@@ -257,6 +284,15 @@ export function clampArgs(tool: string, raw: unknown): Record<string, unknown> {
       if (typeof args.max_rating === "number") {
         clamped.maxRating = Math.min(5, Math.max(1, Math.round(args.max_rating)));
       }
+      return clamped;
+    }
+
+    case "get_metric_notes": {
+      const clamped: Record<string, unknown> = { days: clampNumber(args.days, DAYS) };
+      // Dropped rather than defaulted when unrecognised: a made-up metric name
+      // should widen the answer to every metric, not silently redirect it to
+      // one the model did not ask about.
+      if (isMetricKey(args.metric)) clamped.metric = args.metric;
       return clamped;
     }
 

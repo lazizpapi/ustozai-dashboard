@@ -4,7 +4,13 @@ import { PageHeader, Section } from "@/components/dashboard/page-header";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
-import { activeUsersTrend, engagementSummary, revenueSummary } from "@/lib/db/queries";
+import {
+  activeUsersTrend,
+  engagementSummary,
+  latestNotes,
+  revenueSummary,
+} from "@/lib/db/queries";
+import { visibleKeys } from "@/lib/metric-keys";
 import { ustozApiProblem } from "@/lib/env";
 import { delta, formatDay, formatNumber, NO_VALUE} from "@/lib/format";
 
@@ -26,7 +32,14 @@ export const dynamic = "force-dynamic";
 
 export default async function BusinessPage() {
   const result = await load(
-    () => Promise.all([revenueSummary(60), engagementSummary(60), activeUsersTrend()]),
+    () =>
+      Promise.all([
+        revenueSummary(60),
+        engagementSummary(60),
+        activeUsersTrend(),
+        // This page is CEO-only by canSee, so the takings key belongs here.
+        latestNotes(visibleKeys("ceo")),
+      ]),
     "/business",
   );
 
@@ -35,7 +48,7 @@ export default async function BusinessPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const [revenue, engagement, active] = result.data;
+  const [revenue, engagement, active, notes] = result.data;
   const configProblem = ustozApiProblem();
 
   if (revenue.daily.length === 0) {
@@ -73,6 +86,7 @@ export default async function BusinessPage() {
           }
           change={delta(revenue.latest?.amount ?? null, revenue.previous, revenue.spanDays)}
           asOf={revenue.latest ? `on ${formatDay(revenue.latest.date)}` : undefined}
+          note={notes.get("revenue")}
         />
         <Metric
           label={`Takings, ${days} days`}
@@ -84,6 +98,7 @@ export default async function BusinessPage() {
           label="Daily active"
           value={active?.dau == null ? NO_VALUE : formatNumber(active.dau)}
           detail={active ? `to ${formatDay(active.date)}` : undefined}
+          note={notes.get("active_users")}
         />
         <Metric
           label="Average session"

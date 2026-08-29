@@ -3,15 +3,17 @@ import { DownloadsChart } from "@/components/dashboard/downloads-chart";
 import { APP_STORE_MARK, GOOGLE_PLAY_MARK } from "@/components/tv/brand-logo";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
-import { load } from "@/app/load";
+import { currentRole, load } from "@/app/load";
 import {
   androidDailyInstalls,
   iosDailyDownloads,
   iosDiscoveryFunnel,
   iosProceeds,
+  latestNotes,
   ownReleases,
   snapshotHistory,
 } from "@/lib/db/queries";
+import { visibleKeys } from "@/lib/metric-keys";
 import { delta, formatDay, formatNumber, formatPercent, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -22,15 +24,20 @@ function sum(values: number[]): number {
 
 export default async function DownloadsPage() {
   const result = await load(async () => {
-    const [ios, android, androidSnapshots, funnel, proceeds, releases] = await Promise.all([
-      iosDailyDownloads(60),
-      androidDailyInstalls(60),
-      snapshotHistory("android", "uz", 60),
-      iosDiscoveryFunnel(30),
-      iosProceeds(30),
-      ownReleases(60),
-    ]);
-    return { ios, android, androidSnapshots, funnel, proceeds, releases };
+    const role = await currentRole();
+    const [ios, android, androidSnapshots, funnel, proceeds, releases, notes] =
+      await Promise.all([
+        iosDailyDownloads(60),
+        androidDailyInstalls(60),
+        snapshotHistory("android", "uz", 60),
+        iosDiscoveryFunnel(30),
+        iosProceeds(30),
+        ownReleases(60),
+        // Product and marketing both reach this page, so the keys are filtered
+        // by whoever is actually reading it rather than assumed.
+        latestNotes(visibleKeys(role)),
+      ]);
+    return { ios, android, androidSnapshots, funnel, proceeds, releases, notes };
   }, "/downloads");
 
   if (result.kind === "unconfigured") {
@@ -38,7 +45,8 @@ export default async function DownloadsPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { ios, android, androidSnapshots, funnel, proceeds, releases } = result.data;
+  const { ios, android, androidSnapshots, funnel, proceeds, releases, notes } =
+    result.data;
 
   const iosLast7 = sum(ios.slice(-7).map((row) => row.downloads));
   const iosPrior7 = sum(ios.slice(-14, -7).map((row) => row.downloads));
@@ -61,6 +69,7 @@ export default async function DownloadsPage() {
           value={ios.length ? formatNumber(iosLast7) : NO_VALUE}
           detail={ios.length ? undefined : "App Store Connect not connected"}
           change={ios.length >= 14 ? delta(iosLast7, iosPrior7) : undefined}
+          note={notes.get("ios_downloads")}
         />
         <Metric
           icon={GOOGLE_PLAY_MARK}

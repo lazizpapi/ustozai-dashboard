@@ -708,3 +708,19 @@ export async function saveRevenue(
   if (error) throw new Error(`saveRevenue: ${error.message}`);
   return rows.length;
 }
+
+/**
+ * One note about one movement.
+ *
+ * ignoreDuplicates rather than a merge on purpose. The unique key is
+ * (metric_key, movement_date), so a clash means somebody has already written
+ * about this movement, and the first opinion is the one formed while the
+ * surrounding data still said what it said. A second daily run should read that
+ * note, not overwrite it with a fresh model call.
+ */
+export async function saveMetricNote(row: Record<string, unknown>): Promise<void> {
+  const { error } = await serviceClient()
+    .from("metric_notes")
+    .upsert([row], { onConflict: "metric_key,movement_date", ignoreDuplicates: true });
+  if (error) throw new Error(`saveMetricNote: ${error.message}`);
+}

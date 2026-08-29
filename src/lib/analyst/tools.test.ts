@@ -107,3 +107,31 @@ describe("the tools that reach past the stores", () => {
     expect(instagram?.description).toMatch(/does not add up|never sum/i);
   });
 });
+
+describe("get_metric_notes", () => {
+  it("is declared, and says what it is for in the words somebody would ask in", () => {
+    const tool = (ASK_TOOLS as { name: string; description?: string }[]).find(
+      (t) => t.name === "get_metric_notes",
+    );
+
+    expect(tool).toBeDefined();
+    // The Uzbek phrasing is in the description on purpose: the Telegram bot is
+    // asked "nega o'sdik" far more often than "why did downloads rise".
+    expect(tool?.description).toMatch(/nega o'sdik/i);
+  });
+
+  it("clamps the window and drops a metric it does not recognise", () => {
+    expect(clampArgs("get_metric_notes", { days: 99_999 })).toEqual({ days: 365 });
+    expect(clampArgs("get_metric_notes", {})).toEqual({ days: 30 });
+
+    // Dropped rather than defaulted: widening to every metric is honest, and
+    // silently answering about a different one is not.
+    expect(clampArgs("get_metric_notes", { days: 7, metric: "downloads" })).toEqual({
+      days: 7,
+    });
+    expect(clampArgs("get_metric_notes", { days: 7, metric: "ios_downloads" })).toEqual({
+      days: 7,
+      metric: "ios_downloads",
+    });
+  });
+});
