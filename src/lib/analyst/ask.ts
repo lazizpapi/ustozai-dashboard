@@ -2,9 +2,11 @@ import "server-only";
 
 import OpenAI from "openai";
 
-import { ASK_TOOLS, clampArgs } from "./tools";
-import { pageName } from "./page-context";
+import { CHAT_TOOLS, clampArgs } from "./tools";
+import { pagePrompt } from "./page-context";
+import { formatFactsBlock } from "./memory";
 import { runTool } from "./run-tool";
+import { activeFacts } from "@/lib/db/queries";
 import { analystModel, openaiKey } from "@/lib/env";
 
 /**
@@ -33,6 +35,10 @@ Read the caveats in each tool's description; they describe real measurement limi
 
 If the data cannot answer the question, say so plainly and say what would be needed. Do not fill the gap with an estimate or an industry rule of thumb. "We don't collect that" is a complete and useful answer.
 
+Answer in the language the question was asked in. An Uzbek question gets an Uzbek answer in Latin script, a Russian question gets Russian, an English question gets English. Do not switch languages unless you are asked to.
+
+You have a long-term memory of facts the team has taught you. When the user explicitly asks you to remember something, call remember_fact. When they tell you something durable that nobody asked you to save - a promotion they ran, a change in how they work, a season that matters to them - you may ask whether to remember it, and call remember_fact only if they say yes. Never save anything silently, and always say in your answer what you saved.
+
 Answer in prose, briefly, leading with the answer. Give the numbers you used. Skip preamble and do not restate the question. Use short markdown only where it genuinely helps: a bullet list for several parallel figures, bold for a single key number. No headers.`;
 
 export interface AskStep {
@@ -58,10 +64,18 @@ export async function ask(
 
   // Where the question was asked from, when we recognise the page. Enough for
   // the model to read "how are we doing?" as being about what is on screen.
-  const from = page ? pageName(page) : null;
-  const instructions = from
-    ? `${SYSTEM_PROMPT}\n\nThe user is currently looking at the ${from} page of the dashboard. Read an unqualified question as being about what that page shows, unless they say otherwise.`
-    : SYSTEM_PROMPT;
+  const where = page ? pagePrompt(page) : null;
+
+  /*
+   * Fetched here rather than by each caller, so both surfaces get the memory
+   * for free. Allowed to fail: a database hiccup should cost the assistant its
+   * notes, not its answer.
+   */
+  const facts = await activeFacts().catch(() => []);
+
+  const instructions = [SYSTEM_PROMPT, where, formatFactsBlock(facts)]
+    .filter(Boolean)
+    .join("\n\n");
 
   const client = new OpenAI({ apiKey: key });
   const input: OpenAI.Responses.ResponseInput = [
@@ -78,7 +92,7 @@ export async function ask(
       model: analystModel(),
       max_output_tokens: 8_000,
       instructions,
-      tools: ASK_TOOLS,
+      tools: CHAT_TOOLS,
       input,
     });
 
@@ -135,7 +149,9 @@ export async function ask(
       steps.push({ tool: call.name, args });
 
       try {
-        const data = await runTool(call.name, args);
+        const data = await runTool(call.name, args, {
+          surface: page === "/telegram" ? "telegram" : "chat",
+        });
         input.push({
           type: "function_call_output",
           call_id: call.call_id,

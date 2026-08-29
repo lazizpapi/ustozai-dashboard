@@ -36,6 +36,19 @@ export interface PackInput {
     iosRating: number | null;
   }[];
   keywords: { keyword: string; position: number | null; previous: number | null }[];
+  /**
+   * What the team has taught the assistant, and what it was told last time.
+   *
+   * Both live in the pack rather than being appended to the prompt, because
+   * the pack is stored with the report and is meant to be the whole of what
+   * the model saw. A report shaped by a taught fact has to show that fact in
+   * its own audit trail, or a wrong conclusion months later is untraceable.
+   */
+  teamFacts: string[];
+  previousRecommendations: {
+    date: string;
+    items: { action: string; expectedImpact: string }[];
+  } | null;
   newSuggestions: { store: string; seed: string; term: string }[];
   listingChanges: {
     appName: string;
@@ -56,6 +69,15 @@ export interface PackInput {
 
 /** Trimmed to keep a single bad review from eating the briefing. */
 const REVIEW_BODY_CHARS = 300;
+
+/** A taught fact is a sentence; the caps keep one from crowding the numbers. */
+const FACT_CHARS = 300;
+const MAX_FACTS = 30;
+
+/** Last time's advice, trimmed to what is needed to judge whether it happened. */
+const ACTION_CHARS = 200;
+const IMPACT_CHARS = 160;
+const MAX_PREVIOUS_RECOMMENDATIONS = 5;
 
 /**
  * Collectors whose failure invalidates the analysis.
@@ -89,6 +111,8 @@ export interface AnalystPack {
   reviews: PackInput["reviews"];
   audience: PackInput["audience"];
   chartTop: NonNullable<PackInput["chartTop"]>;
+  teamFacts: string[];
+  previousRecommendations: PackInput["previousRecommendations"];
   pipeline: { failing: { source: string; error?: string | null }[] };
 }
 
@@ -130,6 +154,20 @@ export function buildPack(input: PackInput): AnalystPack {
       : null,
     audience: input.audience,
     chartTop: input.chartTop ?? [],
+    // Clipped, because a taught fact is meant to be a sentence and one long
+    // one should not be able to crowd out the numbers it is context for.
+    teamFacts: input.teamFacts.map((fact) => clip(fact, FACT_CHARS)!).slice(0, MAX_FACTS),
+    previousRecommendations: input.previousRecommendations
+      ? {
+          date: input.previousRecommendations.date,
+          items: input.previousRecommendations.items
+            .slice(0, MAX_PREVIOUS_RECOMMENDATIONS)
+            .map((item) => ({
+              action: clip(item.action, ACTION_CHARS)!,
+              expectedImpact: clip(item.expectedImpact, IMPACT_CHARS)!,
+            })),
+        }
+      : null,
     pipeline: { failing },
   };
 
@@ -154,6 +192,20 @@ function trimToCap(pack: AnalystPack): AnalystPack {
     (p) => {
       if (p.reviews) p.reviews.worst = p.reviews.worst.slice(0, 1);
     },
+    /*
+     * Last, and in this order, because these two are the point of the day's
+     * report rather than background for it: the facts are what the model
+     * cannot otherwise know, and the previous advice is the only thing that
+     * makes a recommendation into a loop instead of a fresh opinion every
+     * morning. A briefing this large has bigger problems than either.
+     */
+    (p) => {
+      if (p.previousRecommendations) {
+        p.previousRecommendations.items = p.previousRecommendations.items.slice(0, 2);
+      }
+    },
+    (p) => (p.teamFacts = p.teamFacts.slice(0, 10)),
+    (p) => (p.previousRecommendations = null),
   ];
 
   for (const shrink of shrinks) {

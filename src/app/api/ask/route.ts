@@ -1,4 +1,11 @@
 import { ask, type AskTurn } from "@/lib/analyst/ask";
+import {
+  formatFactsList,
+  parseMemoryCommand,
+  type MemoryCommand,
+} from "@/lib/analyst/memory";
+import { activeFacts } from "@/lib/db/queries";
+import { deactivateAgentFact, saveAgentFact } from "@/lib/db/persist";
 import { currentRole } from "@/app/load";
 import { openaiKey } from "@/lib/env";
 
@@ -66,6 +73,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "That question is too long." }, { status: 400 });
   }
 
+  /*
+   * Memory commands never reach the model.
+   *
+   * Same contract as Telegram: "remember: ..." stores that sentence exactly,
+   * and a model asked to do the storing would be a model deciding what the
+   * sentence meant. Shaped like an ordinary answer with an empty trace, so the
+   * dock renders it without knowing this path exists.
+   */
+  const memory = parseMemoryCommand(question);
+  if (memory) {
+    const answer = await runMemoryCommand(memory);
+    return Response.json({ answer, steps: [], usage: { input: 0, output: 0 } });
+  }
+
   // Trimmed to the recent turns: an unbounded history posted from the browser
   // is both a cost and a request-size problem, and the older turns rarely
   // change the answer to the current question.
@@ -98,5 +119,39 @@ export async function POST(request: Request) {
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * A memory command, carried out and reported in plain words.
+ *
+ * Returns the sentence the dock will show rather than a status, because every
+ * one of these is something a person is waiting to be told: what was saved,
+ * what is remembered, what was dropped. A command that quietly did nothing is
+ * the failure worth avoiding here.
+ */
+async function runMemoryCommand(memory: MemoryCommand): Promise<string> {
+  try {
+    if (memory.kind === "remember") {
+      await saveAgentFact(memory.fact, "chat");
+      return `Saved: ${memory.fact}`;
+    }
+
+    const facts = await activeFacts();
+
+    if (memory.kind === "facts") return formatFactsList(facts);
+
+    // Shows the list rather than guessing which one was meant. Deleting the
+    // wrong fact is not something the next command can undo.
+    if (memory.index === null || memory.index > facts.length) {
+      return formatFactsList(facts);
+    }
+
+    const target = facts[memory.index - 1];
+    await deactivateAgentFact(target.id);
+    return `Forgotten: ${target.fact}`;
+  } catch (error) {
+    console.error("could not handle a memory command:", error);
+    return "I could not reach my memory just now. Try again in a moment.";
   }
 }

@@ -22,16 +22,23 @@ import {
   socialTrends,
   type GrowthSeriesKey,
 } from "@/lib/db/queries";
+import { saveAgentFact } from "@/lib/db/persist";
 import { isMetricKey, visibleKeys } from "@/lib/metric-keys";
 import type { Period } from "@/lib/growth";
 
 /**
- * Run one tool. The only place a tool name becomes a query.
+ * Run one tool. The only place a tool name becomes a query, and the only place
+ * one becomes a write.
  *
  * Lives apart from the chat loop because there are now two loops: the chat, and
  * the explainer that writes a note about a movement. Both give the model the
  * same tools and both have to reach the same data, and a second copy of this
  * switch would drift within a month of the first tool being added to it.
+ *
+ * Exactly one tool writes: remember_fact, which stores something the user has
+ * asked to be remembered. It is reachable only when the caller passed it in
+ * its tool list, and only the chat does that. The explainer runs unattended
+ * over ASK_TOOLS and can never arrive here with that name.
  *
  * Unknown names return an error string rather than throwing: the model
  * occasionally hallucinates a plausible-sounding tool, and telling it so lets
@@ -40,6 +47,7 @@ import type { Period } from "@/lib/growth";
 export async function runTool(
   name: string,
   args: Record<string, unknown>,
+  context: { surface?: "telegram" | "chat" } = {},
 ): Promise<unknown> {
   switch (name) {
     case "get_downloads": {
@@ -152,6 +160,17 @@ export async function runTool(
         days: args.days as number,
         metricKey: isMetricKey(metric) ? metric : undefined,
       });
+    }
+
+    case "remember_fact": {
+      const fact = typeof args.fact === "string" ? args.fact.trim() : "";
+      // Reported back rather than thrown. The model needs to know the save did
+      // not happen so it can say so, instead of confirming something that is
+      // not there.
+      if (fact.length === 0) return { saved: false, error: "nothing to remember" };
+
+      await saveAgentFact(fact, context.surface ?? "chat");
+      return { saved: true, fact };
     }
 
     case "get_collector_health":

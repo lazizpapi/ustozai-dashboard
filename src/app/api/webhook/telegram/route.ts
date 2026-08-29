@@ -3,7 +3,10 @@ import { after } from "next/server";
 import { safeEqual } from "@/lib/cron-auth";
 import { ask } from "@/lib/analyst/ask";
 import { escapeHtml } from "@/lib/collectors/alerts";
-import { sendTelegramMessage } from "@/lib/digest/telegram";
+import { sendTelegramMessage, sendTelegramTyping } from "@/lib/digest/telegram";
+import { formatFactsList } from "@/lib/analyst/memory";
+import { activeFacts, recentTelegramTurns } from "@/lib/db/queries";
+import { deactivateAgentFact, saveAgentFact, saveTelegramTurns } from "@/lib/db/persist";
 import { openaiKey, socialEnv, telegramEnv, telegramWebhookSecret } from "@/lib/env";
 import { fetchTelegramMembers } from "@/lib/collectors/social";
 import { isDue } from "@/lib/collectors/freshen";
@@ -105,8 +108,22 @@ export async function POST(request: Request) {
      * webhook that does not answer promptly is retried: the same question
      * would be asked again, and again, each retry costing another answer.
      */
-    after(() => answer(verdict.text));
+    after(() => answer(verdict.text, verdict.chatId, verdict.messageId));
     return ok({ asked: true });
+  }
+
+  /*
+   * Memory commands are awaited, unlike answers.
+   *
+   * Each is one small query and one send, the same weight as the membership
+   * path, and the person typing "remember: ..." is waiting to be told it
+   * landed. Deferring that to after() would buy nothing and delay the one
+   * reply where promptness is the whole reassurance.
+   */
+  if (verdict.kind === "remember" || verdict.kind === "forget" || verdict.kind === "facts") {
+    const reply = await handleMemory(verdict);
+    await sendTelegramMessage(reply, { replyTo: verdict.messageId });
+    return ok({ replied: verdict.kind });
   }
 
   const lastChecked = await latestPlatformCheck("telegram").catch(() => null);
@@ -140,14 +157,34 @@ export async function POST(request: Request) {
 }
 
 const HELP =
-  "Ask about the numbers and I will read them before answering.\n\n" +
+  "Ask about the numbers and I will read them before answering, in whatever " +
+  "language you ask in.\n\n" +
   "In here: <b>/ask how were downloads last week?</b>\n" +
   "In a direct message: just write the question.\n\n" +
-  "I can reach downloads, chart position, competitors, keywords, reviews, " +
-  "audience, takings, active users and the daily report.";
+  "I can reach downloads, chart position, competitors, the conversion " +
+  "funnel, keywords, reviews, listing changes, audience, Instagram, " +
+  "takings, active users, growth over time, collector health, the daily " +
+  "report and the notes explaining why a metric moved.\n\n" +
+  "I remember what you teach me:\n" +
+  "<b>remember: we ran a promo on the 12th</b> / <b>eslab qol: ...</b>\n" +
+  "<b>facts</b> / <b>faktlar</b> to see them\n" +
+  "<b>forget: 2</b> / <b>unut: 2</b> to drop one";
 
 /** Telegram rejects anything longer, and a long answer is a worse answer. */
 const MAX_REPLY_CHARS = 3_500;
+
+/**
+ * How much of a conversation is still the same conversation.
+ *
+ * A Telegram exchange is a sitting rather than a day. Forty-five minutes
+ * covers a working back-and-forth and stops this morning's "and revenue?"
+ * from being answered in the context of last night's unrelated thread, which
+ * would be worse than having no memory at all.
+ */
+const TURN_WINDOW_MS = 45 * 60 * 1_000;
+
+/** Six exchanges. Answers run long, and the whole history is resent each time. */
+const MAX_TELEGRAM_TURNS = 12;
 
 /**
  * The analyst's answer, made safe for Telegram.
@@ -179,14 +216,90 @@ function toTelegramHtml(answer: string): string {
  * A failure still speaks: a question that gets no reply at all is
  * indistinguishable from a bot that is broken.
  */
-async function answer(question: string): Promise<void> {
+async function answer(
+  question: string,
+  chatId: string,
+  messageId?: number,
+): Promise<void> {
+  // Not awaited: a receipt, not a step. The answer should not wait on it and
+  // must not fail because of it.
+  void sendTelegramTyping();
+
   try {
-    const result = await ask(question, [], "/telegram");
-    await sendTelegramMessage(toTelegramHtml(result.answer));
+    /*
+     * The recent exchange, so a follow-up question means what it looks like.
+     * Windowed as well as capped: "and the week before?" typed a minute later
+     * continues a thought, and typed the next morning continues nothing.
+     *
+     * Allowed to fail into an empty history. Losing the thread costs a
+     * follow-up its context; losing the answer costs the whole question.
+     */
+    const history = await recentTelegramTurns(
+      chatId,
+      MAX_TELEGRAM_TURNS,
+      new Date(Date.now() - TURN_WINDOW_MS).toISOString(),
+    ).catch(() => []);
+
+    const result = await ask(question, history, "/telegram");
+    await sendTelegramMessage(toTelegramHtml(result.answer), { replyTo: messageId });
+
+    /*
+     * Written only once the answer is out, and never allowed to break it. A
+     * failed answer stores nothing on purpose: the fallback sentence is
+     * boilerplate, and remembering it would teach the next question that this
+     * is how the assistant talks.
+     */
+    await saveTelegramTurns([
+      { chatId, role: "user", content: question },
+      {
+        chatId,
+        role: "assistant",
+        content: result.answer,
+        inputTokens: result.usage.input,
+        outputTokens: result.usage.output,
+      },
+    ]).catch((error: unknown) =>
+      console.error("could not store the Telegram turns:", error),
+    );
   } catch (error) {
     console.error("could not answer a Telegram question:", error);
-    await sendTelegramMessage("I could not answer that one. Try asking it more narrowly.").catch(
-      () => undefined,
-    );
+    await sendTelegramMessage("I could not answer that one. Try asking it more narrowly.", {
+      replyTo: messageId,
+    }).catch(() => undefined);
+  }
+}
+
+/**
+ * The memory commands, answered without a model.
+ *
+ * Every branch reports what actually happened, including the ones that did
+ * nothing. "Forget number 4" when there are three facts has to say so: silence
+ * would leave somebody believing they had deleted something.
+ */
+async function handleMemory(
+  verdict: { kind: "remember"; fact: string } | { kind: "forget"; index: number | null } | { kind: "facts" },
+): Promise<string> {
+  try {
+    if (verdict.kind === "remember") {
+      await saveAgentFact(verdict.fact, "telegram");
+      return `Eslab qoldim: ${escapeHtml(verdict.fact)}`;
+    }
+
+    const facts = await activeFacts();
+
+    if (verdict.kind === "facts") return escapeHtml(formatFactsList(facts));
+
+    // A missing or unreadable number shows the list rather than guessing at
+    // which fact was meant. Deleting the wrong one is unrecoverable.
+    if (verdict.index === null || verdict.index > facts.length) {
+      return escapeHtml(formatFactsList(facts));
+    }
+
+    const target = facts[verdict.index - 1];
+    await deactivateAgentFact(target.id);
+    return `Unutdim: ${escapeHtml(target.fact)}`;
+  } catch (error) {
+    console.error("could not handle a memory command:", error);
+    return "I could not reach my memory just now. Try again in a moment.";
   }
 }

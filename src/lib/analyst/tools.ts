@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 
 import { GROWTH_SERIES, type GrowthSeriesKey } from "@/lib/db/queries";
+import { FACT_MAX_CHARS } from "./memory";
 import { METRIC_KEYS, isMetricKey } from "@/lib/metric-keys";
 import { PERIODS, type Period } from "@/lib/growth";
 
@@ -18,6 +19,11 @@ import { PERIODS, type Period } from "@/lib/growth";
  * Every argument is clamped to a range the database can actually serve. A
  * model asking for a hundred thousand days is a plausible mistake, and it
  * should cost a bounded query rather than a timed-out page.
+ *
+ * ASK_TOOLS reads and never writes, and that has to stay true because the
+ * explainer runs unattended over this same list. The one tool that writes
+ * lives in CHAT_TOOLS at the bottom of this file, which only the chat uses:
+ * a person is present there to have consented to it.
  *
  * `strict: false` throughout, deliberately. Strict mode requires every
  * property to be required, which would force the model to pass a day count on
@@ -254,6 +260,50 @@ export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
   },
 ];
 
+/**
+ * The one tool that writes: a fact the user asked to be remembered.
+ *
+ * Kept out of ASK_TOOLS rather than added to it, because ASK_TOOLS is also
+ * what the explainer runs with, and the explainer runs at six in the morning
+ * with nobody watching. A write tool in that list would mean an unattended
+ * model deciding what the company believes.
+ *
+ * The description carries the consent rule because the description is what
+ * the model actually reads. The system prompt says it too; saying it twice is
+ * cheap next to a memory that fills itself with things nobody agreed to.
+ */
+const REMEMBER_FACT_TOOL: AskFunctionTool = {
+  name: "remember_fact",
+  description:
+    "Save one durable fact to your long-term memory, where you will see it in " +
+    "every future conversation. ONLY call this when the user has explicitly " +
+    "asked you to remember something, or has said yes to your offer to " +
+    "remember it. Never call it silently, and always say in your answer what " +
+    "you saved.",
+  type: "function",
+  strict: false,
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      fact: {
+        type: "string",
+        description:
+          "The fact, in the user's own words where possible. One sentence.",
+      },
+    },
+    required: ["fact"],
+  },
+};
+
+/**
+ * What the chat may call: everything readable, plus the one consented write.
+ *
+ * Only ask() uses this. Every other caller takes ASK_TOOLS and stays
+ * read-only.
+ */
+export const CHAT_TOOLS: OpenAI.Responses.Tool[] = [...ASK_TOOLS, REMEMBER_FACT_TOOL];
+
 /** Responses.Tool is a union across tool kinds; ours are all functions. */
 export type AskFunctionTool = Extract<OpenAI.Responses.Tool, { type: "function" }>;
 
@@ -285,6 +335,14 @@ export function clampArgs(tool: string, raw: unknown): Record<string, unknown> {
         clamped.maxRating = Math.min(5, Math.max(1, Math.round(args.max_rating)));
       }
       return clamped;
+    }
+
+    case "remember_fact": {
+      // Trimmed and capped rather than rejected: a model that rambles into
+      // the fact field should cost the tail of a sentence, not the save the
+      // user just agreed to.
+      const fact = typeof args.fact === "string" ? args.fact.trim() : "";
+      return { fact: fact.slice(0, FACT_MAX_CHARS) };
     }
 
     case "get_metric_notes": {

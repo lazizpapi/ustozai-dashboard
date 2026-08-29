@@ -9,9 +9,14 @@ import { z } from "zod";
  * malformed report is caught here rather than three layers later when a page
  * tries to render it.
  *
- * Every field is required. An optional field in a model-facing schema is an
- * invitation to omit it, and a report missing its recommendations is not a
- * shorter report, it is a failed one.
+ * Every field is required when generating. An optional field in a model-facing
+ * schema is an invitation to omit it, and a report missing its recommendations
+ * is not a shorter report, it is a failed one. Strict mode enforces the same
+ * thing from the other side: it has no concept of an optional property at all.
+ *
+ * Reading is the looser half, and deliberately so. Reports written before a
+ * field existed are still in the table and are still good reports, so
+ * storedAnalystReportSchema below is what the exported type comes from.
  */
 
 export const RECOMMENDATION_LIMIT = 5;
@@ -41,6 +46,23 @@ const Recommendation = z.object({
   effort: z.enum(["low", "medium", "high"]),
 });
 
+/**
+ * What became of a recommendation from last time.
+ *
+ * The whole reason the reports stopped being a stream of unrelated opinions.
+ * Advice nobody ever revisits is decoration: it costs the reader attention
+ * every morning and never has to be right.
+ */
+const FollowUp = z.object({
+  action: z.string().describe("A recommendation from the previous report, shortened."),
+  outcome: z
+    .string()
+    .describe(
+      "What today's briefing says happened since. Cite figures. " +
+        "'The data cannot tell' is a valid and expected outcome.",
+    ),
+});
+
 const CompetitorNote = z.object({
   app: z.string(),
   note: z.string().describe("What they did or where they moved, with numbers."),
@@ -64,6 +86,12 @@ export const analystReportSchema = z.object({
     .array(Recommendation)
     .max(RECOMMENDATION_LIMIT)
     .describe("Ordered by expected value. Fewer, better ones beat five weak ones."),
+  followUp: z
+    .array(FollowUp)
+    .describe(
+      "One entry per previous recommendation worth revisiting. Empty when the " +
+        "briefing carried none.",
+    ),
   competitorWatch: z.array(CompetitorNote),
   dataGaps: z
     .array(z.string())
@@ -73,7 +101,23 @@ export const analystReportSchema = z.object({
     ),
 });
 
-export type AnalystReport = z.infer<typeof analystReportSchema>;
+/**
+ * The same report as it comes back out of the database.
+ *
+ * followUp is required when generating, because the API's strict mode has no
+ * concept of an optional property and would reject the whole request for one.
+ * It cannot be required when reading: every report written before this field
+ * existed is still in the table, and those rows are perfectly good reports.
+ *
+ * The exported type comes from this one deliberately, so every consumer is
+ * made to handle a report that predates the field rather than discovering it
+ * at runtime on the one page that renders history.
+ */
+export const storedAnalystReportSchema = analystReportSchema.extend({
+  followUp: analystReportSchema.shape.followUp.optional(),
+});
+
+export type AnalystReport = z.infer<typeof storedAnalystReportSchema>;
 
 /**
  * Recursively drop keywords OpenAI's strict mode does not accept.

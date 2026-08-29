@@ -1,3 +1,5 @@
+import { parseMemoryCommand } from "@/lib/analyst/memory";
+
 /**
  * Deciding what a Telegram webhook call means.
  *
@@ -25,9 +27,26 @@
  */
 export const WEBHOOK_REFRESH_FLOOR_MS = 10_000;
 
+/**
+ * Where a message came from, carried on every verdict that produces a reply.
+ *
+ * The chat id is what the conversation is remembered against; the message id
+ * is what the answer is threaded to. Both were being thrown away, which is why
+ * an answer in a busy group arrived with no visible connection to the question
+ * that caused it.
+ */
+interface MessageOrigin {
+  chatId: string;
+  /** Absent when Telegram sends no id, which it may. Threading is optional. */
+  messageId?: number;
+}
+
 export type UpdateVerdict =
   | { kind: "refresh" }
-  | { kind: "question"; text: string }
+  | ({ kind: "question"; text: string } & MessageOrigin)
+  | ({ kind: "remember"; fact: string } & MessageOrigin)
+  | ({ kind: "forget"; index: number | null } & MessageOrigin)
+  | ({ kind: "facts" } & MessageOrigin)
   | { kind: "help" }
   | { kind: "ignore"; reason: string };
 
@@ -37,6 +56,7 @@ interface ChatMemberUpdate {
   };
   message?: {
     text?: unknown;
+    message_id?: unknown;
     chat?: { id?: unknown; type?: unknown };
     from?: { is_bot?: unknown };
   };
@@ -146,6 +166,23 @@ function classifyMessage(
   const text = typeof message.text === "string" ? message.text.trim() : "";
   if (text.length === 0) return { kind: "ignore", reason: "message has no text" };
 
+  const messageId = typeof message.message_id === "number" ? message.message_id : undefined;
+  const origin = { chatId: String(chatId), messageId };
+
+  /*
+   * Memory commands are recognised here, before anything reaches a model.
+   * "remember: we ran a promo on the 12th" has to save that sentence exactly,
+   * whatever a model would have made of it: the record of what we told the
+   * assistant cannot depend on how well it understood us that day.
+   */
+  const asMemory = (candidate: string): UpdateVerdict | null => {
+    const memory = parseMemoryCommand(candidate);
+    if (!memory) return null;
+    if (memory.kind === "remember") return { kind: "remember", fact: memory.fact, ...origin };
+    if (memory.kind === "forget") return { kind: "forget", index: memory.index, ...origin };
+    return { kind: "facts", ...origin };
+  };
+
   const command = asCommand(text);
   if (command) {
     if (command.command === "start" || command.command === "help") return { kind: "help" };
@@ -153,7 +190,13 @@ function classifyMessage(
       return { kind: "ignore", reason: `unknown command: ${command.command}` };
     }
     if (command.rest.length === 0) return { kind: "help" };
-    return { kind: "question", text: command.rest.slice(0, MAX_QUESTION_CHARS) };
+    return (
+      asMemory(command.rest) ?? {
+        kind: "question",
+        text: command.rest.slice(0, MAX_QUESTION_CHARS),
+        ...origin,
+      }
+    );
   }
 
   // Bare text, which counts only where it cannot be ambient chatter.
@@ -161,5 +204,7 @@ function classifyMessage(
     return { kind: "ignore", reason: "not addressed to the bot" };
   }
 
-  return { kind: "question", text: text.slice(0, MAX_QUESTION_CHARS) };
+  return (
+    asMemory(text) ?? { kind: "question", text: text.slice(0, MAX_QUESTION_CHARS), ...origin }
+  );
 }

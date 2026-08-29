@@ -27,6 +27,8 @@ function input(overrides: Partial<PackInput> = {}): PackInput {
     reviews: { total: 12, averageRating: 4.6, worst: [] },
     audience: [],
     health: [],
+    teamFacts: [],
+    previousRecommendations: null,
     ...overrides,
   };
 }
@@ -110,5 +112,58 @@ describe("pipelineBroken", () => {
 
   it("is false on a healthy pipeline", () => {
     expect(pipelineBroken(buildPack(input()))).toBe(false);
+  });
+});
+
+describe("taught facts and last time's advice", () => {
+  it("carries both into the briefing", () => {
+    const pack = buildPack(
+      input({
+        teamFacts: ["exam season starts in May"],
+        previousRecommendations: {
+          date: "2026-08-14",
+          items: [{ action: "reply to the one-star reviews", expectedImpact: "rating up" }],
+        },
+      }),
+    );
+
+    expect(pack.teamFacts).toEqual(["exam season starts in May"]);
+    expect(pack.previousRecommendations?.items[0].action).toBe(
+      "reply to the one-star reviews",
+    );
+  });
+
+  it("clips a fact somebody wrote an essay into", () => {
+    const pack = buildPack(input({ teamFacts: ["u".repeat(900)] }));
+
+    expect(pack.teamFacts[0].length).toBeLessThan(400);
+  });
+
+  it("gives up what it was taught last of all", () => {
+    /*
+     * The shrink order is the judgement here. A briefing that has to lose
+     * something should lose keyword rows long before it loses what the team
+     * taught it or what it advised yesterday, because those two are the only
+     * things in the pack it could not have worked out for itself.
+     */
+    const pack = buildPack(
+      input({
+        teamFacts: ["a taught fact"],
+        previousRecommendations: {
+          date: "2026-08-14",
+          items: [{ action: "do the thing", expectedImpact: "number goes up" }],
+        },
+        keywords: Array.from({ length: 2_000 }, (_, i) => ({
+          keyword: `keyword number ${i}`,
+          position: i,
+          previous: i + 1,
+        })),
+      }),
+    );
+
+    expect(JSON.stringify(pack).length).toBeLessThanOrEqual(PACK_MAX_BYTES);
+    expect(pack.keywords).toHaveLength(10);
+    expect(pack.teamFacts).toEqual(["a taught fact"]);
+    expect(pack.previousRecommendations).not.toBeNull();
   });
 });

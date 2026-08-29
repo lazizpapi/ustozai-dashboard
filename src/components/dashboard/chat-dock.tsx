@@ -18,11 +18,16 @@ import { cn } from "@/lib/utils";
  * survives navigating between pages.
  *
  * Two things carried over deliberately from the page it replaces. The
- * conversation is component state posted back each turn, so questions about
- * the company's numbers never reach the database and there is no history to
- * leak or expire. And every answer shows which data it read, because an agent
- * that can reach the whole database has to be auditable from the surface it
- * speaks through.
+ * conversation is posted back each turn rather than held on the server, so
+ * questions about the company's numbers never reach the database. And every
+ * answer shows which data it read, because an agent that can reach the whole
+ * database has to be auditable from the surface it speaks through.
+ *
+ * The transcript is kept in this browser's localStorage, which is the smallest
+ * place that survives a reload. Losing a conversation to a refresh made the
+ * dock feel disposable, and the questions worth asking twice are exactly the
+ * ones somebody wanted to re-read. It is still never in the database, it never
+ * leaves this machine, and Clear empties it.
  */
 
 interface Turn {
@@ -49,10 +54,43 @@ const TOOL_LABEL: Record<string, string> = {
   get_active_users: "active users",
   get_instagram: "Instagram",
   get_metric_notes: "metric notes",
+  remember_fact: "saved a note",
 };
 
 /** How long the orb holds its "done" face before settling back to idle. */
 const SETTLE_MS = 1600;
+
+/**
+ * Where the transcript lives between visits, and how much of it.
+ *
+ * A little above the twenty turns the server will accept back, so the reader
+ * can scroll further up than the model is told about.
+ */
+const STORAGE_KEY = "analyst-chat-v1";
+const STORED_TURNS_MAX = 30;
+
+/** Shape-checked rather than trusted: this is user-writable storage. */
+function readStoredTurns(): Turn[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.filter(
+      (turn): turn is Turn =>
+        !!turn &&
+        typeof turn === "object" &&
+        typeof (turn as Turn).content === "string" &&
+        ((turn as Turn).role === "user" || (turn as Turn).role === "assistant"),
+    );
+  } catch {
+    // Corrupt JSON, or storage blocked entirely in a private window. Either
+    // way the dock works; it just starts empty.
+    return [];
+  }
+}
 
 /**
  * The narrowest possible markdown: bold, inline code, and bullets. The system
@@ -114,6 +152,37 @@ export function ChatDock() {
   const state: AIState = busy
     ? "thinking"
     : (settling ?? (draft.trim().length > 0 ? "listening" : "idle"));
+
+  /*
+   * Loaded after mount rather than in the state initializer. This component is
+   * server-rendered, and reading the browser's storage during the first render
+   * would make the server and client disagree about what is on screen.
+   */
+  useEffect(() => {
+    const stored = readStoredTurns();
+    if (stored.length > 0) setTurns(stored);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(turns.slice(-STORED_TURNS_MAX)),
+      );
+    } catch {
+      // Out of quota, or storage refused. The conversation still works for as
+      // long as the tab is open, which is what it did before it was saved.
+    }
+  }, [turns]);
+
+  const clear = useCallback(() => {
+    setTurns([]);
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Nothing to clear if it was never stored.
+    }
+  }, []);
 
   useEffect(() => {
     if (!settling) return;
@@ -244,14 +313,27 @@ export function ChatDock() {
               Reads the same data this dashboard shows
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label="Close"
-            className="text-muted-foreground hover:text-foreground ml-auto transition-colors"
-          >
-            <X className="size-4" aria-hidden />
-          </button>
+          <div className="ml-auto flex items-center gap-3">
+            {/* Only when there is something to clear, so the header stays
+                quiet on a fresh conversation. */}
+            {turns.length > 0 ? (
+              <button
+                type="button"
+                onClick={clear}
+                className="text-muted-foreground hover:text-foreground text-xs transition-colors"
+              >
+                Clear
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-5">

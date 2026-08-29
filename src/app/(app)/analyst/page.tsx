@@ -1,5 +1,9 @@
-import { ArrowDown, ArrowUp, Minus } from "lucide-react";
-
+import {
+  AnalystReportBody,
+  Direction,
+  HEALTH_LABEL,
+  HealthDot,
+} from "@/components/dashboard/analyst-report";
 import { Empty, PageHeader, Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { currentRole, load } from "@/app/load";
@@ -7,7 +11,6 @@ import {
   latestAnalystReport,
   noteHistory,
   recentAnalystRuns,
-  type AnalystRow,
 } from "@/lib/db/queries";
 import { METRIC_LABELS_UZ, visibleKeys } from "@/lib/metric-keys";
 import { formatDay, timeAgo } from "@/lib/format";
@@ -23,32 +26,6 @@ export const dynamic = "force-dynamic";
  * gaps section is given the same weight as the recommendations. A reader
  * should be able to disagree with it from the page itself.
  */
-
-const HEALTH_LABEL = {
-  green: "Growing",
-  yellow: "Worth watching",
-  red: "Needs attention",
-} as const;
-
-/** A dot, not a coloured card. Colour is the only signal it needs to carry. */
-function HealthDot({ health }: { health: NonNullable<AnalystRow["health"]> }) {
-  return (
-    <span
-      className={cn(
-        "inline-block size-2 rounded-full",
-        health === "green" && "bg-status-ok",
-        health === "yellow" && "bg-status-warn",
-        health === "red" && "bg-status-critical",
-      )}
-      aria-hidden
-    />
-  );
-}
-
-function Direction({ direction }: { direction: "up" | "down" | "flat" }) {
-  const Icon = direction === "up" ? ArrowUp : direction === "down" ? ArrowDown : Minus;
-  return <Icon className="text-muted-foreground mt-1 size-3.5 shrink-0" aria-hidden />;
-}
 
 export default async function AnalystPage() {
   const result = await load(async () => {
@@ -123,89 +100,8 @@ export default async function AnalystPage() {
             </p>
           ) : null}
 
-          {report.changes.length > 0 ? (
-            <Section title="What moved">
-              <ul className="space-y-2.5 text-sm">
-                {report.changes.map((change, index) => (
-                  <li key={index} className="flex gap-2.5">
-                    <Direction direction={change.direction} />
-                    <span>
-                      <span className="font-medium">{change.metric}</span>{" "}
-                      <span className="text-muted-foreground">{change.detail}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          ) : null}
+          <AnalystReportBody report={report} />
 
-          {report.causes.length > 0 ? (
-            <Section title="Why" note="each with the evidence behind it">
-              <ul className="space-y-3 text-sm">
-                {report.causes.map((cause, index) => (
-                  <li key={index}>
-                    <div className="flex items-baseline gap-2">
-                      <span>{cause.claim}</span>
-                      <span className="text-muted-foreground/70 text-xs whitespace-nowrap">
-                        {cause.confidence} confidence
-                      </span>
-                    </div>
-                    <p className="text-muted-foreground mt-0.5 text-xs">{cause.evidence}</p>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          ) : null}
-
-          {report.recommendations.length > 0 ? (
-            <Section title="Do next" note="ordered by expected value">
-              <ol className="space-y-4 text-sm">
-                {report.recommendations.map((recommendation, index) => (
-                  <li key={index} className="grid grid-cols-[1.5rem_1fr] gap-x-2">
-                    <span className="text-muted-foreground tnum">{index + 1}.</span>
-                    <div>
-                      <p className="font-medium">{recommendation.action}</p>
-                      <p className="text-muted-foreground mt-0.5 text-xs">
-                        {recommendation.why}
-                      </p>
-                      <p className="text-muted-foreground/70 mt-1 text-xs">
-                        {recommendation.expectedImpact} · {recommendation.effort} effort
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </Section>
-          ) : null}
-
-          {report.competitorWatch.length > 0 ? (
-            <Section title="Competitors">
-              <ul className="space-y-2 text-sm">
-                {report.competitorWatch.map((note, index) => (
-                  <li key={index}>
-                    <span className="font-medium">{note.app}</span>{" "}
-                    <span className="text-muted-foreground">{note.note}</span>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          ) : null}
-
-          {/*
-            Given the same weight as the recommendations, deliberately. What
-            the analyst could not answer is the standing list of what this
-            dashboard should measure next, and burying it would make the
-            report look more complete than it is.
-          */}
-          {report.dataGaps.length > 0 ? (
-            <Section title="What this cannot answer" note="the case for the next data source">
-              <ul className="text-muted-foreground space-y-1.5 text-sm">
-                {report.dataGaps.map((gap, index) => (
-                  <li key={index}>{gap}</li>
-                ))}
-              </ul>
-            </Section>
-          ) : null}
         </>
       )}
 
@@ -246,23 +142,57 @@ export default async function AnalystPage() {
         )}
       </Section>
 
+      {/*
+        Every past report in full, one click away. The whole report jsonb is
+        already fetched by recentAnalystRuns, so it was being thrown away to
+        render a headline; expanding costs no extra query.
+
+        Native <details> rather than a client component: this page is server
+        rendered, and a disclosure does not need JavaScript shipped to the
+        browser to open.
+      */}
       {runs.length > 1 ? (
-        <Section title="Past runs">
+        <Section title="Past runs" note="open one to read it in full">
           <ul className="divide-y text-sm">
-            {runs.map((run) => (
-              <li key={run.id} className="flex items-baseline gap-3 py-2">
-                <span className="text-muted-foreground w-24 shrink-0 text-xs">
-                  {timeAgo(run.createdAt)}
-                </span>
-                {run.health ? <HealthDot health={run.health} /> : null}
-                <span className={cn(run.status !== "ok" && "text-muted-foreground")}>
-                  {run.headline ??
-                    (run.status === "stale-data"
-                      ? "Skipped: collectors were failing"
-                      : `Failed: ${run.error ?? "unknown error"}`)}
-                </span>
-              </li>
-            ))}
+            {runs.map((run) => {
+              const line = (
+                <>
+                  <span className="text-muted-foreground w-24 shrink-0 text-xs">
+                    {timeAgo(run.createdAt)}
+                  </span>
+                  {run.health ? <HealthDot health={run.health} /> : null}
+                  <span className={cn(run.status !== "ok" && "text-muted-foreground")}>
+                    {run.headline ??
+                      (run.status === "stale-data"
+                        ? "Skipped: collectors were failing"
+                        : `Failed: ${run.error ?? "unknown error"}`)}
+                  </span>
+                </>
+              );
+
+              // A run that produced no report has nothing to open, so it stays
+              // a flat row rather than an empty disclosure.
+              if (run.status !== "ok" || !run.report) {
+                return (
+                  <li key={run.id} className="flex items-baseline gap-3 py-2">
+                    {line}
+                  </li>
+                );
+              }
+
+              return (
+                <li key={run.id}>
+                  <details className="py-2">
+                    <summary className="flex cursor-pointer list-none items-baseline gap-3 marker:content-none hover:opacity-80">
+                      {line}
+                    </summary>
+                    <div className="mt-4 space-y-8 border-l pt-1 pb-2 pl-5">
+                      <AnalystReportBody report={run.report} />
+                    </div>
+                  </details>
+                </li>
+              );
+            })}
           </ul>
         </Section>
       ) : null}

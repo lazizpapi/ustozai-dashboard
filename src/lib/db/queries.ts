@@ -2472,3 +2472,74 @@ export async function followerDayEnds(days = 3): Promise<Map<string, FollowerDay
     ]),
   );
 }
+
+// ---------------------------------------------------------------------------
+// Agent memory: taught facts, and the Telegram conversation
+// ---------------------------------------------------------------------------
+
+export interface AgentFact {
+  id: string;
+  createdAt: string;
+  fact: string;
+}
+
+/**
+ * Everything the team has taught the assistant and not since forgotten.
+ *
+ * Oldest first, which is the order the numbered list is built from. That
+ * ordering is load-bearing: a new fact appends to the end, so the number
+ * somebody just read still points at the same fact when they act on it.
+ */
+export async function activeFacts(): Promise<AgentFact[]> {
+  const { data, error } = await serviceClient()
+    .from("agent_facts")
+    .select("id, created_at, fact")
+    .eq("active", true)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`activeFacts: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    createdAt: row.created_at as string,
+    fact: row.fact as string,
+  }));
+}
+
+export interface TelegramTurnRow {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * The recent back-and-forth in one chat, oldest first.
+ *
+ * Windowed by time as well as count. A conversation is a sitting: "and the
+ * week before?" typed a minute after a question about downloads means one
+ * thing, and typed the next morning means nothing at all. Without the window
+ * the assistant would keep answering this morning's question in the context of
+ * last night's, which is worse than having no memory.
+ *
+ * Fetched newest-first because that is what the index serves, then reversed,
+ * because the model needs them in the order they were said.
+ */
+export async function recentTelegramTurns(
+  chatId: string,
+  limit: number,
+  sinceIso: string,
+): Promise<TelegramTurnRow[]> {
+  const { data, error } = await serviceClient()
+    .from("telegram_turns")
+    .select("role, content")
+    .eq("chat_id", chatId)
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`recentTelegramTurns: ${error.message}`);
+
+  return (data ?? [])
+    .map((row) => ({
+      role: row.role as "user" | "assistant",
+      content: row.content as string,
+    }))
+    .reverse();
+}

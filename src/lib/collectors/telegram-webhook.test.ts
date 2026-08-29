@@ -117,6 +117,7 @@ describe("messages to the bot", () => {
   const message = (over: Record<string, unknown> = {}) => ({
     message: {
       text: "/ask how were downloads?",
+      message_id: 4242,
       chat: { id: CHAT, type: "group" },
       from: { is_bot: false },
       ...over,
@@ -127,6 +128,8 @@ describe("messages to the bot", () => {
     expect(classifyUpdate(message(), "ustozai", CHAT)).toEqual({
       kind: "question",
       text: "how were downloads?",
+      chatId: CHAT,
+      messageId: 4242,
     });
   });
 
@@ -170,7 +173,12 @@ describe("messages to the bot", () => {
       CHAT,
     );
 
-    expect(verdict).toEqual({ kind: "question", text: "how were downloads?" });
+    expect(verdict).toEqual({
+      kind: "question",
+      text: "how were downloads?",
+      chatId: CHAT,
+      messageId: 4242,
+    });
   });
 
   it("understands the @botname form Telegram rewrites commands into", () => {
@@ -180,7 +188,12 @@ describe("messages to the bot", () => {
       CHAT,
     );
 
-    expect(verdict).toEqual({ kind: "question", text: "what is our rank?" });
+    expect(verdict).toEqual({
+      kind: "question",
+      text: "what is our rank?",
+      chatId: CHAT,
+      messageId: 4242,
+    });
   });
 
   it("offers help for /start, /help and a bare /ask", () => {
@@ -231,5 +244,92 @@ describe("messages to the bot", () => {
     );
 
     expect(verdict).toEqual({ kind: "refresh" });
+  });
+});
+
+describe("memory commands over Telegram", () => {
+  const CHAT = "-1001234567890";
+
+  const message = (over: Record<string, unknown> = {}) => ({
+    message: {
+      text: "/ask remember: we ran a promo on the 12th",
+      message_id: 77,
+      chat: { id: CHAT, type: "group" },
+      from: { is_bot: false },
+      ...over,
+    },
+  });
+
+  it("saves a fact asked for with /ask in the group", () => {
+    expect(classifyUpdate(message(), "ustozai", CHAT)).toEqual({
+      kind: "remember",
+      fact: "we ran a promo on the 12th",
+      chatId: CHAT,
+      messageId: 77,
+    });
+  });
+
+  it("takes the Uzbek command bare in a direct message", () => {
+    const verdict = classifyUpdate(
+      message({ text: "eslab qol: imtihon mavsumi mayda", chat: { id: CHAT, type: "private" } }),
+      "ustozai",
+      CHAT,
+    );
+
+    expect(verdict).toEqual({
+      kind: "remember",
+      fact: "imtihon mavsumi mayda",
+      chatId: CHAT,
+      messageId: 77,
+    });
+  });
+
+  it("still ignores a bare command in the group", () => {
+    /*
+     * The prefix rule is about who the message is addressed to, and a memory
+     * command is no more addressed to the bot than a question is. Somebody
+     * typing "facts" in conversation is not talking to it.
+     */
+    const verdict = classifyUpdate(message({ text: "remember: something" }), "ustozai", CHAT);
+
+    expect(verdict.kind).toBe("ignore");
+  });
+
+  it("reads a forget number, and asks when there is not one", () => {
+    expect(classifyUpdate(message({ text: "/ask forget: 2" }), "ustozai", CHAT)).toMatchObject({
+      kind: "forget",
+      index: 2,
+    });
+    expect(
+      classifyUpdate(message({ text: "/ask unut: soon" }), "ustozai", CHAT),
+    ).toMatchObject({ kind: "forget", index: null });
+  });
+
+  it("lists on request", () => {
+    expect(classifyUpdate(message({ text: "/ask faktlar" }), "ustozai", CHAT)).toMatchObject({
+      kind: "facts",
+    });
+  });
+
+  it("stays silent for a stranger teaching it things", () => {
+    // The allowlist runs first. Someone else's "facts" must not be a way in.
+    const verdict = classifyUpdate(
+      message({ chat: { id: "-100999", type: "private" } }),
+      "ustozai",
+      CHAT,
+    );
+
+    expect(verdict.kind).toBe("ignore");
+  });
+
+  it("omits the message id when Telegram did not send one", () => {
+    const verdict = classifyUpdate(message({ message_id: undefined }), "ustozai", CHAT);
+
+    expect(verdict).toEqual({
+      kind: "remember",
+      fact: "we ran a promo on the 12th",
+      chatId: CHAT,
+      messageId: undefined,
+    });
   });
 });

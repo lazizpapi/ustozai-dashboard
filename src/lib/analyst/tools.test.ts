@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ASK_TOOLS, clampArgs, toolNames, type AskFunctionTool } from "./tools";
+import { ASK_TOOLS, CHAT_TOOLS, clampArgs, toolNames, type AskFunctionTool } from "./tools";
 
 /**
  * The tool surface the chat agent is allowed to reach.
@@ -133,5 +133,33 @@ describe("get_metric_notes", () => {
       days: 7,
       metric: "ios_downloads",
     });
+  });
+});
+
+describe("the write tool", () => {
+  it("is offered to the chat", () => {
+    const names = (CHAT_TOOLS as { name: string }[]).map((tool) => tool.name);
+
+    expect(names).toContain("remember_fact");
+    expect(names).toHaveLength(ASK_TOOLS.length + 1);
+  });
+
+  it("is kept out of the read-only list", () => {
+    /*
+     * The fence, pinned. ASK_TOOLS is what the explainer runs with, and the
+     * explainer runs at six in the morning with nobody watching. A write tool
+     * reaching that list would mean an unattended model deciding what the
+     * company believes, and nothing else in the codebase would complain.
+     */
+    const names = (ASK_TOOLS as { name: string }[]).map((tool) => tool.name);
+
+    expect(names).not.toContain("remember_fact");
+  });
+
+  it("trims and caps the fact, and survives a model sending nothing", () => {
+    expect(clampArgs("remember_fact", { fact: "  a fact  " })).toEqual({ fact: "a fact" });
+    expect(clampArgs("remember_fact", { fact: "u".repeat(900) }).fact).toHaveLength(500);
+    expect(clampArgs("remember_fact", {})).toEqual({ fact: "" });
+    expect(clampArgs("remember_fact", { fact: 42 })).toEqual({ fact: "" });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PAGE_CONTEXT, pageName, pageSuggestions } from "./page-context";
+import { PAGE_CONTEXT, pageName, pagePrompt, pageSuggestions } from "./page-context";
 
 /**
  * What the chat knows about where it was opened from.
@@ -113,5 +113,29 @@ describe("the pages that had no context at all", () => {
         expect(suggestion).not.toMatch(/[—–]/);
       }
     }
+  });
+});
+
+describe("pagePrompt", () => {
+  it("describes a dashboard page as somewhere the reader is looking", () => {
+    expect(pagePrompt("/market")).toContain("looking at the Market (competitors) page");
+  });
+
+  it("says nothing at all about a path it does not know", () => {
+    expect(pagePrompt("/nowhere")).toBeNull();
+  });
+
+  it("lets Telegram replace the sentence entirely", () => {
+    /*
+     * Telegram is not somewhere you look, it is somewhere you type. The
+     * templated sentence would tell the model the reader is looking at a
+     * dashboard page they cannot see, and then ask it to write for a screen
+     * that is actually a phone in a chat app.
+     */
+    const prompt = pagePrompt("/telegram")!;
+
+    expect(prompt).not.toContain("looking at");
+    expect(prompt).toContain("Telegram");
+    expect(prompt).toContain("no tables");
   });
 });

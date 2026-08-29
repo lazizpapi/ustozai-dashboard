@@ -1,13 +1,16 @@
 import "server-only";
 
 import type { PackInput } from "./pack";
+import { localDate } from "@/lib/growth";
 import {
+  activeFacts,
   androidDailyInstalls,
   collectorHealth,
   educationChartTop,
   iosDailyDownloads,
   iosDiscoveryFunnel,
   keywordSuggestionSets,
+  latestAnalystReport,
   latestKeywordRanks,
   marketOverview,
   recentListingChanges,
@@ -40,6 +43,8 @@ export async function gatherPack(): Promise<PackInput> {
     audience,
     health,
     chart,
+    facts,
+    previous,
   ] = await Promise.all([
     iosDailyDownloads(21),
     androidDailyInstalls(21),
@@ -52,6 +57,10 @@ export async function gatherPack(): Promise<PackInput> {
     socialTrends(),
     collectorHealth(),
     educationChartTop(),
+    activeFacts(),
+    // What we told them last time, so today's report can say whether it
+    // happened rather than starting the argument again from nothing.
+    latestAnalystReport(),
   ]);
 
   const ratings = reviews.map((review) => review.rating);
@@ -122,5 +131,16 @@ export async function gatherPack(): Promise<PackInput> {
       name: mover.name,
       vsWeek: mover.vsWeek,
     })),
+    teamFacts: facts.map((entry) => entry.fact),
+    previousRecommendations:
+      previous?.report && previous.report.recommendations.length > 0
+        ? {
+            date: localDate(previous.createdAt),
+            items: previous.report.recommendations.map((item) => ({
+              action: item.action,
+              expectedImpact: item.expectedImpact,
+            })),
+          }
+        : null,
   };
 }

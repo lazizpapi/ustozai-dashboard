@@ -724,3 +724,70 @@ export async function saveMetricNote(row: Record<string, unknown>): Promise<void
     .upsert([row], { onConflict: "metric_key,movement_date", ignoreDuplicates: true });
   if (error) throw new Error(`saveMetricNote: ${error.message}`);
 }
+
+/**
+ * One thing the team has taught the assistant.
+ *
+ * A plain insert rather than an upsert: the same fact taught twice is two
+ * moments worth recording, and deduplicating on the text would silently
+ * swallow the second attempt when somebody, reasonably, repeats themselves
+ * because they were not sure the first one landed.
+ */
+export async function saveAgentFact(
+  fact: string,
+  taughtVia: "telegram" | "chat",
+): Promise<void> {
+  const { error } = await serviceClient()
+    .from("agent_facts")
+    .insert([{ fact, taught_via: taughtVia }]);
+  if (error) throw new Error(`saveAgentFact: ${error.message}`);
+}
+
+/** Forgetting, which is a flag rather than a delete. See migration 0020. */
+export async function deactivateAgentFact(id: string): Promise<void> {
+  const { error } = await serviceClient()
+    .from("agent_facts")
+    .update({ active: false })
+    .eq("id", id);
+  if (error) throw new Error(`deactivateAgentFact: ${error.message}`);
+}
+
+/**
+ * A question and its answer, written together.
+ *
+ * One call for both so a crash between them cannot leave a question in the
+ * history with no answer after it, which would teach the next conversation
+ * that the assistant ignores people.
+ *
+ * The timestamps are set here rather than left to the column default, and that
+ * is not a detail. Rows inserted in one statement all take the same now(), so
+ * ordering by created_at put them in an arbitrary order and the pair came back
+ * answer-first: the model would then be reading a conversation in which it
+ * replied before being asked. The array order is the order they were said, so
+ * it is what gets written down.
+ */
+export async function saveTelegramTurns(
+  turns: {
+    chatId: string;
+    role: "user" | "assistant";
+    content: string;
+    inputTokens?: number;
+    outputTokens?: number;
+  }[],
+): Promise<void> {
+  if (turns.length === 0) return;
+
+  const startedAt = Date.now();
+
+  const { error } = await serviceClient().from("telegram_turns").insert(
+    turns.map((turn, index) => ({
+      chat_id: turn.chatId,
+      role: turn.role,
+      content: turn.content,
+      created_at: new Date(startedAt + index).toISOString(),
+      input_tokens: turn.inputTokens ?? null,
+      output_tokens: turn.outputTokens ?? null,
+    })),
+  );
+  if (error) throw new Error(`saveTelegramTurns: ${error.message}`);
+}

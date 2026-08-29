@@ -4,10 +4,11 @@ import OpenAI from "openai";
 
 import { ASK_TOOLS, clampArgs } from "./tools";
 import { runTool } from "./run-tool";
+import { formatFactsBlock } from "./memory";
 import { metricNoteJsonSchema, metricNoteSchema, type MetricNote } from "./schema";
 import { analystModel, openaiKey } from "@/lib/env";
 import { saveMetricNote } from "@/lib/db/persist";
-import { notedMovements } from "@/lib/db/queries";
+import { activeFacts, notedMovements } from "@/lib/db/queries";
 import type { Movement } from "@/lib/collectors/metric-alerts";
 
 /**
@@ -148,6 +149,7 @@ async function explainOne(
   client: OpenAI,
   model: string,
   movement: Movement,
+  instructions: string,
 ): Promise<{ note: MetricNote; usage: { input: number; output: number } }> {
   const input: OpenAI.Responses.ResponseInput = [
     { role: "user", content: explainPrompt(movement) },
@@ -162,7 +164,7 @@ async function explainOne(
     const response = await client.responses.create({
       model,
       max_output_tokens: 2_000,
-      instructions: SYSTEM_PROMPT,
+      instructions,
       /*
        * The tools are withheld on the final step so the loop cannot run out
        * mid-investigation with nothing to show. Given no way to ask for more,
@@ -267,6 +269,16 @@ export async function explainMovements(
     const model = analystModel();
     const client = new OpenAI({ apiKey: key });
 
+    /*
+     * The team's taught facts, which is exactly the material this loop is
+     * short of. A promotion nobody collected is invisible in every table here,
+     * and it is the most likely honest answer to why a number moved.
+     */
+    const facts = await activeFacts().catch(() => []);
+    const instructions = [SYSTEM_PROMPT, formatFactsBlock(facts)]
+      .filter(Boolean)
+      .join("\n\n");
+
     for (const movement of todo) {
       if (Date.now() >= deadline) {
         console.warn(`out of time before explaining ${movement.metricKey}`);
@@ -274,7 +286,7 @@ export async function explainMovements(
       }
 
       try {
-        const { note, usage } = await explainOne(client, model, movement);
+        const { note, usage } = await explainOne(client, model, movement, instructions);
         await saveMetricNote({
           metric_key: movement.metricKey,
           movement_date: movement.date,

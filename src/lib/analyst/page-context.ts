@@ -14,6 +14,15 @@ export interface PageContext {
   name: string;
   /** Starter questions offered when the conversation is empty. */
   suggestions: string[];
+  /**
+   * Replaces the whole "you are looking at X" sentence.
+   *
+   * For the surfaces that are not a dashboard page at all. Telegram is not
+   * somewhere you look, it is somewhere you type, and the templated sentence
+   * would tell the model the user is looking at the Telegram page of a
+   * dashboard they cannot see.
+   */
+  prompt?: string;
 }
 
 /** Offered when the path is unknown, and on pages with no special angle. */
@@ -24,6 +33,21 @@ const GENERAL: string[] = [
 ];
 
 export const PAGE_CONTEXT: Record<string, PageContext> = {
+  /*
+   * Not a page. The Telegram route passes this so the model knows where its
+   * answer is going to be read, which changes how it should be written: a
+   * markdown table renders as gibberish in a chat app, and the reader is on a
+   * phone rather than in front of the dashboard being described.
+   */
+  "/telegram": {
+    name: "Telegram",
+    suggestions: [],
+    prompt:
+      "You are answering in the team's Telegram group, not on the dashboard. " +
+      "The reader is on a phone and cannot see any page. Keep it short and " +
+      "plain: no headers, no tables, at most a few short lines. Bold with " +
+      "**double asterisks** works; nothing else does.",
+  },
   "/": {
     name: "Overview",
     suggestions: [
@@ -161,6 +185,29 @@ export function pageName(pathname: string): string | null {
   return resolve(pathname)?.name ?? null;
 }
 
+/**
+ * The sentence appended to the system prompt, or null for an unknown path.
+ *
+ * Most entries take the template, because most of them really are pages
+ * somebody is looking at. An entry may override it entirely when that framing
+ * would be a lie.
+ */
+export function pagePrompt(pathname: string): string | null {
+  const context = resolve(pathname);
+  if (!context) return null;
+  if (context.prompt) return context.prompt;
+
+  return (
+    `The user is currently looking at the ${context.name} page of the dashboard. ` +
+    "Read an unqualified question as being about what that page shows, unless " +
+    "they say otherwise."
+  );
+}
+
 export function pageSuggestions(pathname: string): string[] {
-  return resolve(pathname)?.suggestions ?? GENERAL;
+  // An entry may carry no chips of its own -- the surfaces that are not pages
+  // have nowhere to show them. The general set still stands behind it, so the
+  // empty panel always has an affordance whatever the path.
+  const own = resolve(pathname)?.suggestions;
+  return own && own.length > 0 ? own : GENERAL;
 }
