@@ -54,9 +54,13 @@ export function normaliseEvent(raw: string): string {
  * The alternatives are kept alongside the confirmed names: Apple varies its
  * labels between report variants, and matching a superset costs nothing.
  */
-export const IMPRESSION_EVENTS = ["impression", "impressions", "impressions_unique"];
-export const TAP_EVENTS = ["tap", "taps"];
-export const PAGE_VIEW_EVENTS = ["page_view", "page_views", "product_page_view", "product_page_views"];
+/*
+ * The stage each event name belongs to now lives in lib/funnel.ts, which is
+ * the module that classifies them and has no server dependencies. Re-exported
+ * here so the reader of this file still finds them beside the parser that
+ * produces the rows they describe.
+ */
+export { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/funnel";
 
 export function parseDiscoveryTsv(tsv: string): DiscoveryRow[] {
   const lines = tsv.split("\n").filter((line) => line.trim().length > 0);

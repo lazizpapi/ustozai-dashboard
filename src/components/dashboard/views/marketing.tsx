@@ -8,10 +8,12 @@ import { load } from "@/app/load";
 import { refreshAudienceIfStale } from "@/lib/collectors/freshen";
 import {
   iosDiscoveryFunnel,
+  iosFunnelBySource,
   latestKeywordRanks,
   recentListingChanges,
   socialTrends,
 } from "@/lib/db/queries";
+import { sourceLabel } from "@/lib/funnel";
 import {
   apostropheNote,
   delta,
@@ -55,6 +57,7 @@ export async function MarketingView() {
     Promise.all([
       refreshAudienceIfStale().then(() => socialTrends()),
       iosDiscoveryFunnel(30),
+      iosFunnelBySource(30),
       latestKeywordRanks("uz"),
       recentListingChanges(12),
     ]),
@@ -65,7 +68,22 @@ export async function MarketingView() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const [social, funnel, keywords, listingChanges] = result.data;
+  const [social, funnel, bySource, keywords, listingChanges] = result.data;
+
+  /*
+   * The one line the source breakdown is worth on this page.
+   *
+   * Marketing does not reach the downloads page, so without this the split is
+   * invisible to the people it is most useful to. The leading source rather
+   * than the whole table: if search is bringing nearly everyone, that is the
+   * fact worth carrying, and the table behind it belongs on a page that has
+   * room for it.
+   */
+  const leadingSource = bySource?.sources[0] ?? null;
+  const sourceTotal = (bySource?.sources ?? []).reduce(
+    (total, row) => total + row.firstTimeDownloads,
+    0,
+  );
 
   const ranked = keywords.filter((row) => row.position !== null);
   // Best positions first; unranked keywords are the work, so they come last
@@ -142,6 +160,15 @@ export async function MarketingView() {
                   </div>
                 ))}
               </dl>
+              {leadingSource && sourceTotal > 0 ? (
+                <p className="shrink-0 text-xs leading-relaxed">
+                  <span className="font-medium">
+                    {formatPercent(leadingSource.firstTimeDownloads, sourceTotal)}
+                  </span>{" "}
+                  of first-time downloads came from{" "}
+                  {sourceLabel(leadingSource.source).toLowerCase()}.
+                </p>
+              ) : null}
               <p className="text-muted-foreground shrink-0 text-xs leading-relaxed">
                 Rates are against impressions, except downloads, which are
                 against page views: the share of people who looked at the

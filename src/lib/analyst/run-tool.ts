@@ -7,6 +7,7 @@ import {
   growthSeries,
   iosDailyDownloads,
   iosDiscoveryFunnel,
+  iosFunnelBySource,
   keywordSuggestionSets,
   latestAnalystReport,
   latestKeywordRanks,
@@ -72,8 +73,19 @@ export async function runTool(
       return educationChartTop();
 
     case "get_conversion_funnel": {
-      const funnel = await iosDiscoveryFunnel(args.days as number);
-      return funnel ?? { available: false, reason: "no discovery report data yet" };
+      const [funnel, bySource] = await Promise.all([
+        iosDiscoveryFunnel(args.days as number),
+        iosFunnelBySource(args.days as number),
+      ]);
+      if (!funnel) return { available: false, reason: "no discovery report data yet" };
+
+      /*
+       * The split comes with the aggregate rather than as a tool of its own.
+       * Downloads moving is the question that sends the model here, and the
+       * mix is the first thing that explains it: a fall in search downloads
+       * and a fall in referrals are different events with the same total.
+       */
+      return { ...funnel, bySource: bySource?.sources ?? [] };
     }
 
     case "get_keywords": {

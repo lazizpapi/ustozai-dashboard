@@ -195,6 +195,41 @@ export function dailyRankSeries(readings: RankReading[]): RankSeriesPoint[] {
     .map(([date, ranks]) => ({ date, ...Object.fromEntries(ranks) }));
 }
 
+export interface DailyPoint {
+  /** Tashkent calendar day, YYYY-MM-DD. */
+  date: string;
+  value: number;
+}
+
+/**
+ * Hourly readings of a slow-moving figure, reduced to one point per day.
+ *
+ * The single-series counterpart to dailyRankSeries, and it makes the same two
+ * choices for the same reasons. The last reading of a day wins, matching how
+ * every other page treats a day's standing. And the day is the Tashkent one,
+ * because a reading taken at eight in the evening UTC already belongs to
+ * tomorrow here, and filing it by the UTC date would land it on the wrong
+ * side of the chart for a fifth of every day's readings.
+ *
+ * Where it differs: a null is dropped rather than preserved. A store that
+ * answered without a rating has told us nothing, which is not the same as a
+ * rank of null meaning "polled, and outside the chart".
+ */
+export function dailyLast(readings: { capturedAt: string; value: number | null }[]): DailyPoint[] {
+  const byDay = new Map<string, number>();
+
+  for (const reading of [...readings].sort((a, b) =>
+    a.capturedAt.localeCompare(b.capturedAt),
+  )) {
+    if (reading.value === null) continue;
+    byDay.set(tashkentDay(reading.capturedAt), reading.value);
+  }
+
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, value]) => ({ date, value }));
+}
+
 export interface VelocityPoint {
   /** Tashkent day the window ends on. */
   date: string;

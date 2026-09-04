@@ -5,11 +5,13 @@ import { APP_STORE_MARK, GOOGLE_PLAY_MARK } from "@/components/tv/brand-logo";
 import { Metric, MetricStrip } from "@/components/dashboard/metric";
 import { PageHeader, Section } from "@/components/dashboard/page-header";
 import { RankChart } from "@/components/dashboard/rank-chart";
+import { RatingChart } from "@/components/dashboard/rating-chart";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { VelocityChart } from "@/components/dashboard/velocity-chart";
 import { load } from "@/app/load";
 import { competitorProfile } from "@/lib/db/queries";
 import { COMPETITORS } from "@/lib/collectors/config";
+import { releaseNoteExcerpt, RELEASE_NOTE_CHARS } from "@/lib/market";
 import { formatDay, formatNumber, formatRating, formatSigned, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -202,6 +204,15 @@ export default async function CompetitorPage({
         </p>
       </Section>
 
+      {app.iosRatingHistory.length > 0 || app.playRatingHistory.length > 0 ? (
+        <Section
+          title="Rating over time"
+          note="90 days of readings, both stores on one scale"
+        >
+          <RatingChart ios={app.iosRatingHistory} android={app.playRatingHistory} />
+        </Section>
+      ) : null}
+
       {app.rankHistory.length > 0 ? (
         <Section title="Chart position" note="Education, top free, iPhone, Uzbekistan">
           <RankChart points={app.rankHistory} />
@@ -226,6 +237,14 @@ export default async function CompetitorPage({
                   {change.platform === "ios" ? "App Store" : "Google Play"}
                 </span>
                 <span>changed {change.changedFields.map(fieldLabel).join(", ")}</span>
+                {change.version ? (
+                  <span className="tnum text-xs font-medium">{change.version}</span>
+                ) : null}
+                {releaseNoteExcerpt(change.releaseNotes, RELEASE_NOTE_CHARS) ? (
+                  <p className="text-muted-foreground w-full max-w-2xl pt-0.5 text-xs leading-relaxed">
+                    {releaseNoteExcerpt(change.releaseNotes, RELEASE_NOTE_CHARS)}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   counterVelocity,
+  dailyLast,
   dailyRankSeries,
   dayTicks,
   priorWithinWindow,
@@ -381,5 +382,49 @@ describe("velocitySeries", () => {
         7,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("dailyLast", () => {
+  it("keeps the last reading of each day", () => {
+    const points = dailyLast([
+      { capturedAt: "2026-08-10T06:00:00Z", value: 4.6 },
+      { capturedAt: "2026-08-10T14:00:00Z", value: 4.7 },
+      { capturedAt: "2026-08-11T09:00:00Z", value: 4.68 },
+    ]);
+
+    expect(points).toEqual([
+      { date: "2026-08-10", value: 4.7 },
+      { date: "2026-08-11", value: 4.68 },
+    ]);
+  });
+
+  it("files a reading by its Tashkent day, not its UTC day", () => {
+    // Tashkent is UTC+5, so an evening UTC reading is already tomorrow there.
+    // Filing it under the UTC day would put it on the wrong side of a chart.
+    expect(dailyLast([{ capturedAt: "2026-08-10T20:30:00Z", value: 4.5 }])).toEqual([
+      { date: "2026-08-11", value: 4.5 },
+    ]);
+  });
+
+  it("drops readings with no value", () => {
+    // A store that answered without a rating is not a rating of zero.
+    const points = dailyLast([
+      { capturedAt: "2026-08-10T06:00:00Z", value: 4.6 },
+      { capturedAt: "2026-08-10T14:00:00Z", value: null },
+    ]);
+    expect(points).toEqual([{ date: "2026-08-10", value: 4.6 }]);
+  });
+
+  it("returns oldest first regardless of input order", () => {
+    const points = dailyLast([
+      { capturedAt: "2026-08-12T06:00:00Z", value: 2 },
+      { capturedAt: "2026-08-10T06:00:00Z", value: 1 },
+    ]);
+    expect(points.map((point) => point.date)).toEqual(["2026-08-10", "2026-08-12"]);
+  });
+
+  it("has nothing to draw from nothing", () => {
+    expect(dailyLast([])).toEqual([]);
   });
 });

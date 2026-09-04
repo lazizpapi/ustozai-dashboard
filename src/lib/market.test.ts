@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   chartMovers,
   listingDiffs,
+  releaseNoteExcerpt,
   type ChartAppRow,
   type ListingVersionRow,
 } from "./market";
@@ -111,5 +112,73 @@ describe("listingDiffs", () => {
       version("app", "2026-08-11T00:00:00Z", { title: "A" }),
     ];
     expect(listingDiffs(rows)).toEqual([]);
+  });
+
+  it("carries the new version and release notes when those fields changed", () => {
+    // The field names alone say "changed version, release notes", which is
+    // true and useless. What shipped is the part somebody wants to read.
+    const rows = [
+      version("app", "2026-08-10T00:00:00Z", { version: "2.2.7", releaseNotes: "old" }),
+      version("app", "2026-08-17T00:00:00Z", { version: "2.2.8", releaseNotes: "new" }),
+    ];
+
+    const change = listingDiffs(rows)[0];
+    expect(change.version).toBe("2.2.8");
+    expect(change.releaseNotes).toBe("new");
+  });
+
+  it("carries only what actually changed", () => {
+    // A screenshot swap is not a release. Reporting the unchanged version
+    // beside it would read as one, which is the mistake worth avoiding.
+    const rows = [
+      version("app", "2026-08-10T00:00:00Z", { version: "2.2.8", screenshots: ["s1"] }),
+      version("app", "2026-08-12T00:00:00Z", { version: "2.2.8", screenshots: ["s2"] }),
+    ];
+
+    const change = listingDiffs(rows)[0];
+    expect(change.version).toBeNull();
+    expect(change.releaseNotes).toBeNull();
+  });
+
+  it("reports a version change on a store that publishes no notes", () => {
+    // Play's parser reads title, description and version only, so an Android
+    // release arrives with a version and nothing to quote.
+    const rows = [
+      version("app", "2026-08-10T00:00:00Z", { version: "2.2.7" }),
+      version("app", "2026-08-16T00:00:00Z", { version: "2.2.8" }),
+    ];
+
+    const change = listingDiffs(rows)[0];
+    expect(change.version).toBe("2.2.8");
+    expect(change.releaseNotes).toBeNull();
+  });
+});
+
+describe("releaseNoteExcerpt", () => {
+  it("returns short notes unchanged", () => {
+    expect(releaseNoteExcerpt("Kichik xatoliklar tuzatildi", 240)).toBe(
+      "Kichik xatoliklar tuzatildi",
+    );
+  });
+
+  it("cuts at a word boundary and marks the cut", () => {
+    const notes = "one two three four five six seven eight nine ten";
+    const excerpt = releaseNoteExcerpt(notes, 20);
+    expect(excerpt).toBe("one two three four\u2026");
+    // The point of the cap is a row that stays a row.
+    expect(excerpt?.length).toBeLessThanOrEqual(21);
+  });
+
+  it("collapses the blank lines release notes are full of", () => {
+    // Apple's notes arrive as a list separated by blank lines. Rendered raw in
+    // a one-line row that is a column of gaps, so they become a sentence.
+    expect(releaseNoteExcerpt("Tezlik yaxshilandi\n\nDizayn optimizatsiya", 240)).toBe(
+      "Tezlik yaxshilandi Dizayn optimizatsiya",
+    );
+  });
+
+  it("has nothing to say about nothing", () => {
+    expect(releaseNoteExcerpt(null, 240)).toBeNull();
+    expect(releaseNoteExcerpt("   ", 240)).toBeNull();
   });
 });

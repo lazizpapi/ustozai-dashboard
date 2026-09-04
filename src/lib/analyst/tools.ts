@@ -96,8 +96,11 @@ export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
       "Apple's discovery funnel for the App Store listing: impressions, taps, " +
       "product page views and first-time downloads, with the date range. This " +
       "is the top of the funnel and the only place to see how many people saw " +
-      "the listing versus installed. App Store only; Google publishes no " +
-      "equivalent.",
+      "the listing versus installed. Also returns bySource, the same stages " +
+      "broken down by where people arrived from: App Store search, browse and " +
+      "charts, links in other apps, web links. When downloads move, the mix is " +
+      "usually the explanation, so read bySource before concluding anything " +
+      "about the total. App Store only; Google publishes no equivalent.",
     type: "function",
     strict: false,
     parameters: daysSchema("How many days of funnel data to aggregate."),

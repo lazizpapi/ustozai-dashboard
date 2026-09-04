@@ -8,12 +8,14 @@ import {
   androidDailyInstalls,
   iosDailyDownloads,
   iosDiscoveryFunnel,
+  iosFunnelBySource,
   iosProceeds,
   latestNotes,
   ownReleases,
   snapshotHistory,
 } from "@/lib/db/queries";
 import { visibleKeys } from "@/lib/metric-keys";
+import { sourceLabel } from "@/lib/funnel";
 import { delta, formatDay, formatNumber, formatPercent, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -25,19 +27,21 @@ function sum(values: number[]): number {
 export default async function DownloadsPage() {
   const result = await load(async () => {
     const role = await currentRole();
-    const [ios, android, androidSnapshots, funnel, proceeds, releases, notes] =
+    const [ios, android, androidSnapshots, funnel, bySource, proceeds, releases, notes] =
       await Promise.all([
         iosDailyDownloads(60),
         androidDailyInstalls(60),
         snapshotHistory("android", "uz", 60),
         iosDiscoveryFunnel(30),
+        iosFunnelBySource(30),
         iosProceeds(30),
         ownReleases(60),
-        // Product and marketing both reach this page, so the keys are filtered
-        // by whoever is actually reading it rather than assumed.
+        // Only the CEO and Product reach this page, but the note keys are
+        // filtered by whoever is actually reading it rather than assumed:
+        // the gate around takings should not depend on a page remembering it.
         latestNotes(visibleKeys(role)),
       ]);
-    return { ios, android, androidSnapshots, funnel, proceeds, releases, notes };
+    return { ios, android, androidSnapshots, funnel, bySource, proceeds, releases, notes };
   }, "/downloads");
 
   if (result.kind === "unconfigured") {
@@ -45,8 +49,15 @@ export default async function DownloadsPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { ios, android, androidSnapshots, funnel, proceeds, releases, notes } =
+  const { ios, android, androidSnapshots, funnel, bySource, proceeds, releases, notes } =
     result.data;
+
+  // The denominator for the share column is what these rows add up to, never
+  // the tile above: that one counts re-downloads too, and dividing by it would
+  // make every share read low and the column fail to reach a hundred.
+  const sourceDownloads = sum(
+    (bySource?.sources ?? []).map((row) => row.firstTimeDownloads),
+  );
 
   const iosLast7 = sum(ios.slice(-7).map((row) => row.downloads));
   const iosPrior7 = sum(ios.slice(-14, -7).map((row) => row.downloads));
@@ -148,6 +159,76 @@ export default async function DownloadsPage() {
               detail={`${formatPercent(funnel.firstTimeDownloads, funnel.pageViews)} of page views`}
             />
           </MetricStrip>
+        </Section>
+      ) : null}
+
+      {/*
+        The same funnel again, split by where people came from.
+
+        Directly under the aggregate because it is the aggregate's explanation:
+        the blended rates above belong to no single source, and a shift in the
+        mix moves them without any one source changing. Present on the same
+        terms as everything else on this page, which is to say only once Apple
+        has produced rows carrying a source.
+      */}
+      {bySource && bySource.sources.length > 0 ? (
+        <Section
+          title="Where they come from"
+          note={`${formatDay(bySource.from)} to ${formatDay(bySource.to)}, App Store only`}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[780px] border-collapse text-sm">
+              <thead>
+                <tr className="text-muted-foreground border-b text-xs">
+                  <th className="px-3 py-2 text-left font-medium">Source</th>
+                  <th className="px-3 py-2 text-right font-medium">Impressions</th>
+                  {/*
+                    Taps is here because the funnel has four stages and the
+                    panel above shows all four. Without it a source Apple
+                    recorded taps for but declined to attribute an impression
+                    to renders as a line of zeroes, which is not what the row
+                    says.
+                  */}
+                  <th className="px-3 py-2 text-right font-medium">Taps</th>
+                  <th className="px-3 py-2 text-right font-medium">Page views</th>
+                  <th className="px-3 py-2 text-right font-medium">First-time downloads</th>
+                  <th className="px-3 py-2 text-right font-medium">Share</th>
+                  <th className="px-3 py-2 text-right font-medium">Page view to download</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bySource.sources.map((row) => (
+                  <tr key={row.source} className="border-b last:border-b-0">
+                    <td className="px-3 py-2">{sourceLabel(row.source)}</td>
+                    <td className="tnum px-3 py-2 text-right">
+                      {formatNumber(row.impressions)}
+                    </td>
+                    <td className="tnum px-3 py-2 text-right">{formatNumber(row.taps)}</td>
+                    <td className="tnum px-3 py-2 text-right">
+                      {formatNumber(row.pageViews)}
+                    </td>
+                    <td className="tnum px-3 py-2 text-right">
+                      {formatNumber(row.firstTimeDownloads)}
+                    </td>
+                    <td className="tnum px-3 py-2 text-right">
+                      {formatPercent(row.firstTimeDownloads, sourceDownloads)}
+                    </td>
+                    <td className="tnum px-3 py-2 text-right">
+                      {formatPercent(row.firstTimeDownloads, row.pageViews)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-muted-foreground mt-4 max-w-2xl text-xs leading-relaxed">
+            These are Apple&rsquo;s analytics rows, which count first-time
+            downloads only, so the total here sits below the App Store tile
+            above: that figure comes from the sales report and includes
+            re-downloads and restores. A row marked not attributed is one Apple
+            declined to place, not one we failed to collect.
+          </p>
         </Section>
       ) : null}
 

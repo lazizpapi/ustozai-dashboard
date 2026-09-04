@@ -7,14 +7,23 @@ import {
   EDUCATION_GENRE,
   IOS_APP_ID,
 } from "@/lib/collectors/config";
-import { IMPRESSION_EVENTS, PAGE_VIEW_EVENTS, TAP_EVENTS } from "@/lib/asc/discovery";
+import {
+  funnelBySource,
+  IMPRESSION_EVENTS,
+  PAGE_VIEW_EVENTS,
+  TAP_EVENTS,
+  type SourceFunnel,
+} from "@/lib/funnel";
 import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
 import {
   counterVelocity,
+  dailyLast,
   dailyRankSeries,
   priorWithinWindow,
   velocitySeries,
+  type DailyPoint,
 } from "@/lib/compare";
+import { versionBreakdown, type VersionRow } from "@/lib/reviews";
 import { stickiness } from "@/lib/active-users";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import type { AnalystReport } from "@/lib/analyst/schema";
@@ -592,6 +601,55 @@ export async function recentReviews(limit = 25, since?: string): Promise<ReviewR
   }));
 }
 
+/**
+ * Every own-app review of the last few months, grouped by the build it names.
+ *
+ * A wider window than the page's review list on purpose: the list is "what did
+ * people just say", this is "how has each release landed", and the second one
+ * needs enough history to hold more than one release.
+ *
+ * Paged, because both stores together produce well past a thousand reviews in
+ * four months. Rated-only rows are all of them; the reviews table stores no
+ * review without a rating.
+ */
+export async function reviewsByVersion(days = 120): Promise<VersionRow[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const data = await fetchAllPages<{
+    rating: number;
+    version: string | null;
+    submitted_at: string | null;
+    // PostgREST types an embedded row as an array; narrowed at the use site
+    // the same way recentReviews and recentListingChanges do.
+    apps: unknown;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("reviews")
+        .select("rating, version, submitted_at, apps!inner(platform, role)")
+        // Same guard as recentReviews: competitor reviews are not collected,
+        // and if they ever are, they must not land in our own breakdown.
+        .eq("apps.role", "own")
+        .gte("submitted_at", since)
+        .order("submitted_at", { ascending: false })
+        .range(from, to),
+    "reviewsByVersion",
+  );
+
+  return versionBreakdown(
+    data
+      // A review with no date cannot be placed in a release's window, and the
+      // reduction sorts on it. Rare, and dropped rather than dated to now.
+      .filter((row) => row.submitted_at !== null)
+      .map((row) => ({
+        platform: (row.apps as unknown as { platform: string }).platform,
+        version: row.version,
+        rating: row.rating,
+        submittedAt: row.submitted_at as string,
+      })),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Audience
 // ---------------------------------------------------------------------------
@@ -1124,6 +1182,16 @@ export interface CompetitorProfile {
   playVelocity: ReturnType<typeof velocitySeries>;
   /** Growth in App Store ratings per day. A demand proxy, not downloads. */
   iosRatingVelocity: ReturnType<typeof velocitySeries>;
+  /**
+   * The rating itself, one point per day, per store.
+   *
+   * The tiles above already say what an app is rated today. This is the
+   * different and more useful question: whether that number is being pulled
+   * up or dragged down, which a single figure can never show. Derived from
+   * readings the profile already fetched, so it costs no query.
+   */
+  iosRatingHistory: DailyPoint[];
+  playRatingHistory: DailyPoint[];
   rankHistory: RankPoint[];
   iosRating: number | null;
   iosRatingCount: number | null;
@@ -1266,6 +1334,8 @@ export async function competitorProfile(slug: string): Promise<CompetitorProfile
     })),
     playVelocity: velocitySeries(readings(androidSnaps, (row) => row.install_count)),
     iosRatingVelocity: velocitySeries(readings(iosSnaps, (row) => row.rating_count)),
+    iosRatingHistory: dailyLast(readings(iosSnaps, (row) => row.rating)),
+    playRatingHistory: dailyLast(readings(androidSnaps, (row) => row.rating)),
     rankHistory: ranks.map((row) => ({
       capturedAt: row.captured_at,
       rank: row.rank,
@@ -1589,6 +1659,74 @@ export async function iosDiscoveryFunnel(days = 30): Promise<DiscoveryFunnel | n
     from,
     to,
   };
+}
+
+
+export interface SourceFunnelWindow {
+  from: string;
+  to: string;
+  sources: SourceFunnel[];
+}
+
+/**
+ * The same funnel, split by the surface people arrived from.
+ *
+ * A separate query rather than a wider iosDiscoveryFunnel, because the two
+ * answer different questions and the aggregate one is on the page for
+ * departments that should not have to read a table to learn the headline.
+ *
+ * The window is derived from the discovery rows exactly as the aggregate is,
+ * so the two panels on the page always describe the same days. Downloads come
+ * from the analytics rows rather than the sales ones for the same reason as
+ * well: only those carry a source, and only those share Apple's analytics
+ * processing schedule.
+ */
+export async function iosFunnelBySource(days = 30): Promise<SourceFunnelWindow | null> {
+  const id = await appId("ios");
+  if (!id) return null;
+
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const discovery = await fetchAllPages<{
+    date: string;
+    event: string;
+    source_type: string | null;
+    units: number;
+  }>(
+    (from, to) =>
+      serviceClient()
+        .from("ios_discovery_daily")
+        .select("date, event, source_type, units")
+        .eq("app_id", id)
+        .gte("date", since)
+        .order("date", { ascending: true })
+        .range(from, to),
+    "iosFunnelBySource",
+  );
+
+  if (discovery.length === 0) return null;
+
+  const dates = discovery.map((row) => row.date).sort();
+  const from = dates[0];
+  const to = dates[dates.length - 1];
+
+  const downloads = await fetchAllPages<{ source_type: string | null; units: number }>(
+    (rangeFrom, rangeTo) =>
+      serviceClient()
+        .from("ios_downloads_daily")
+        .select("source_type, units")
+        .eq("app_id", id)
+        .eq("source", "analytics")
+        .eq("download_type", "first_time")
+        .gte("date", from)
+        .lte("date", to)
+        .range(rangeFrom, rangeTo),
+    "iosFunnelBySource downloads",
+  );
+
+  return { from, to, sources: funnelBySource(discovery, downloads) };
 }
 
 export interface FollowerPoint {

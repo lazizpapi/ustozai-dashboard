@@ -6,6 +6,7 @@ import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { latestInstallRate } from "@/lib/installs";
+import { releaseNoteExcerpt } from "@/lib/market";
 import {
   androidDailyInstalls,
   iosDailyDownloads,
@@ -45,6 +46,12 @@ const FIELD_LABELS: Record<string, string> = {
   screenshots: "screenshots",
   icon: "icon",
 };
+
+/**
+ * Shorter than the market page's cap, because this list lives in a narrow
+ * column beside the reviews. Enough to see what the release claimed to do.
+ */
+const SHIPPED_NOTE_CHARS = 140;
 
 export async function ProductView() {
   const result = await load(() =>
@@ -196,6 +203,14 @@ export async function ProductView() {
                       .map((field) => FIELD_LABELS[field] ?? field)
                       .join(", ")}
                   </span>
+                  {release.version ? (
+                    <span className="tnum font-medium"> {release.version}</span>
+                  ) : null}
+                  {releaseNoteExcerpt(release.releaseNotes, SHIPPED_NOTE_CHARS) ? (
+                    <p className="text-muted-foreground/80 pt-0.5 leading-relaxed">
+                      {releaseNoteExcerpt(release.releaseNotes, SHIPPED_NOTE_CHARS)}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>
