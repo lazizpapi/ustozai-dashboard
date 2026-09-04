@@ -46,3 +46,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .gstack/
+
+# Data exports. Company metrics, 6.7MB, regenerate with scripts/export-sql.mjs
+*.sql
+!supabase/migrations/*.sql
