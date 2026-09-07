@@ -1,0 +1,53 @@
+import { clampArgs, toolNames } from "@/lib/analyst/tools";
+import { isAuthorizedBearer, unauthorized } from "@/lib/cron-auth";
+import { argsFromBody, handleJarvis } from "@/lib/jarvis/handle";
+import { runTool } from "@/lib/analyst/run-tool";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Where Jarvis reads the company's numbers.
+ *
+ * Jarvis is a voice assistant on one laptop with no session cookie and no
+ * route to Supabase, so it needs a machine-authenticated way in. This is it:
+ * one tool per request, the same runTool the dashboard chat uses, JSON out.
+ *
+ * Transport only. Which tools exist, what their arguments may be and what
+ * happens when one fails all live in src/lib/jarvis/handle.ts, which is where
+ * the tests are, because they can run there without a database.
+ *
+ * ASK_TOOLS, deliberately, not CHAT_TOOLS: the chat's one writing tool
+ * (remember_fact) is not reachable from here.
+ */
+
+function toolList(): string[] {
+  return toolNames();
+}
+
+async function respond(request: Request, tool: string, args: Record<string, unknown>) {
+  if (!isAuthorizedBearer(request, process.env.JARVIS_SECRET)) return unauthorized();
+
+  const { status, body } = await handleJarvis(
+    { tool, method: request.method, args },
+    { readToolNames: toolList, clampArgs, runTool },
+  );
+  return Response.json(body, { status });
+}
+
+export async function GET(request: Request, context: { params: Promise<{ tool: string }> }) {
+  const { tool } = await context.params;
+  // Every value arrives as a string here; handleJarvis puts the numbers back.
+  const args = Object.fromEntries(new URL(request.url).searchParams.entries());
+  return respond(request, tool, args);
+}
+
+export async function POST(request: Request, context: { params: Promise<{ tool: string }> }) {
+  const { tool } = await context.params;
+
+  // The body is the argument object itself; there is no envelope. An empty
+  // body means no arguments, which most tools take.
+  const parsed = argsFromBody(await request.text());
+  if (!parsed.ok) return Response.json({ ok: false, error: parsed.error }, { status: 400 });
+
+  return respond(request, tool, parsed.args);
+}

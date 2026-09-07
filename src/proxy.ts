@@ -19,8 +19,8 @@ export function proxy(request: NextRequest) {
   /*
    * Machine callers authenticate with their own secret and have no cookie, so
    * they must never be redirected to a login page. Cron sends a bearer token,
-   * the Telegram webhook sends a secret header, and the ingest routes take a
-   * bearer token from the app backend.
+   * the Telegram webhook sends a secret header, the ingest routes take a
+   * bearer token from the app backend, and Jarvis takes one of its own.
    *
    * Missing the webhook here is a silent failure rather than a loud one:
    * Telegram would receive a 307 to /login, read any non-2xx as delivery
@@ -32,7 +32,8 @@ export function proxy(request: NextRequest) {
   if (
     path.startsWith("/api/cron") ||
     path.startsWith("/api/webhook") ||
-    path.startsWith("/api/ingest")
+    path.startsWith("/api/ingest") ||
+    path.startsWith("/api/jarvis")
   ) {
     return NextResponse.next();
   }

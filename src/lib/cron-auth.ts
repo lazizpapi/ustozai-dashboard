@@ -22,13 +22,28 @@ export function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export function isAuthorizedCron(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
+/**
+ * The bearer check itself, against a secret the caller names.
+ *
+ * Pulled out because there are now three machine callers with three separate
+ * secrets — cron, the ingest routes and Jarvis — and they were converging on
+ * three copies of these five lines. Separate secrets are the point: the key
+ * Jarvis holds only reads, the key the app backend holds only writes counts,
+ * and neither should be able to do the other's job.
+ *
+ * An unset secret returns false rather than skipping the check, so a deploy
+ * that forgets the variable closes the endpoint instead of opening it.
+ */
+export function isAuthorizedBearer(request: Request, secret: string | undefined): boolean {
   if (!secret) return false;
 
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   return token.length > 0 && safeEqual(token, secret);
+}
+
+export function isAuthorizedCron(request: Request): boolean {
+  return isAuthorizedBearer(request, process.env.CRON_SECRET);
 }
 
 export function unauthorized(): Response {
