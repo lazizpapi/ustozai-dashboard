@@ -104,6 +104,25 @@ const ustozApiSchema = z.object({
   USTOZ_API_TOKEN: z.string().min(10).optional(),
 });
 
+/**
+ * The YouTube comment bot's read-only activity endpoint.
+ *
+ * The bot keeps its own Supabase project deliberately: its service role key must
+ * not be able to reach this dashboard's user data. So the dashboard never gets
+ * that database, only a narrow HTTP view of the audit log.
+ *
+ * The token here is read-only by design. The bot's CRON_SECRET, which triggers a
+ * poll and therefore publishes replies to YouTube, must never be put in this
+ * variable: a screen that only reads should not be able to cause a post.
+ */
+const commentBotSchema = z.object({
+  COMMENT_BOT_BASE_URL: z
+    .string()
+    .url("must be a full URL, for example https://ustozai-comment-bot.vercel.app")
+    .transform((value) => value.replace(/\/+$/, "")),
+  COMMENT_BOT_TOKEN: z.string().min(10),
+});
+
 const telegramSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(20),
   TELEGRAM_CHAT_ID: z.string().min(1),
@@ -190,6 +209,30 @@ export function ustozApiEnv(): UstozApiConfig | null {
 /** Why the UstozAI panels are dormant, for the setup notice. */
 export function ustozApiProblem(): string | null {
   const parsed = ustozApiSchema.safeParse(process.env);
+  if (parsed.success) return null;
+  return parsed.error.issues
+    .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+    .join("; ");
+}
+
+export interface CommentBotConfig {
+  baseUrl: string;
+  token: string;
+}
+
+/** Null when unconfigured, so the comments page shows a setup notice. */
+export function commentBotEnv(): CommentBotConfig | null {
+  const parsed = commentBotSchema.safeParse(process.env);
+  if (!parsed.success) return null;
+  return {
+    baseUrl: parsed.data.COMMENT_BOT_BASE_URL,
+    token: parsed.data.COMMENT_BOT_TOKEN,
+  };
+}
+
+/** Why the comments page is dormant, for the setup notice. */
+export function commentBotProblem(): string | null {
+  const parsed = commentBotSchema.safeParse(process.env);
   if (parsed.success) return null;
   return parsed.error.issues
     .map((issue) => `${issue.path.join(".")}: ${issue.message}`)

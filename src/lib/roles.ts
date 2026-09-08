@@ -53,6 +53,7 @@ const SECTIONS: Record<Exclude<Role, "ceo">, NavItem[]> = {
     { href: "/rankings", label: "Rankings" },
     { href: "/market", label: "Market" },
     { href: "/keywords", label: "Keywords" },
+    { href: "/comments", label: "Comments" },
   ],
   product: [
     { href: "/downloads", label: "Downloads" },
@@ -73,6 +74,7 @@ const ALL: NavItem[] = [
   { href: "/downloads", label: "Downloads" },
   { href: "/keywords", label: "Keywords" },
   { href: "/reviews", label: "Reviews" },
+  { href: "/comments", label: "Comments" },
 ];
 
 /**

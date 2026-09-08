@@ -78,6 +78,15 @@ describe("canSee", () => {
     }
   });
 
+  it("gives marketing the comment bot page, and nobody else but the CEO", () => {
+    // The bot writes public replies in the brand's voice, so marketing owns it.
+    // Product and IT get no view: a page nobody granted must stay closed.
+    expect(canSee("ceo", "/comments")).toBe(true);
+    expect(canSee("marketing", "/comments")).toBe(true);
+    expect(canSee("product", "/comments")).toBe(false);
+    expect(canSee("it", "/comments")).toBe(false);
+  });
+
   it("denies an unknown page to everyone except the CEO", () => {
     // Fails closed: a page added later is invisible until it is granted.
     expect(canSee("marketing", "/payroll")).toBe(false);
