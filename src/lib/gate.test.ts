@@ -223,3 +223,15 @@ describe("department passwords", () => {
     }
   });
 });
+
+describe("a shorter session", () => {
+  it("lasts only as long as it was issued for", () => {
+    // Jarvis's browser gets thirty minutes, not the thirty days a person does.
+    withPassword("correct-horse-battery");
+    const issuedAt = Date.parse("2026-01-01T00:00:00Z");
+    const token = issueSessionToken("ceo", issuedAt, 1800);
+
+    expect(isValidSessionToken(token, issuedAt + 1799_000)).toBe(true);
+    expect(isValidSessionToken(token, issuedAt + 1801_000)).toBe(false);
+  });
+});

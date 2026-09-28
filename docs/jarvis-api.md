@@ -28,10 +28,13 @@ Generate one:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 ```
 
-It is a separate secret from `CRON_SECRET` and `INGEST_SECRET` on purpose: this
-key only reads, and unlike the others it lives on a laptop. Unset closes the
-endpoint rather than opening it, so a deploy that forgets the variable is shut,
-not public.
+It is a separate secret from `CRON_SECRET` and `INGEST_SECRET` on purpose: unlike
+the others it lives on a laptop. On its own it only reads. Two switches, both
+off unless set to `true`, widen it: `JARVIS_SESSIONS_ENABLED` lets it mint a
+thirty-minute CEO session for Jarvis's browser, and `JARVIS_ACTIONS_ENABLED`
+lets it post to the team's Telegram chat. Treat the key as worth whatever the
+switches allow. Unset closes the endpoint rather than opening it, so a deploy
+that forgets the variable is shut, not public.
 
 `/api/jarvis` is listed in the proxy's machine-caller bypass. Without that, an
 unauthenticated request would receive a 307 to `/login`, and a client following
@@ -73,6 +76,27 @@ seven days rather than falling back to the default of thirty.
 `POST /api/jarvis/<tool>` with a JSON object body — the same thing, when a
 query string is awkward. The body *is* the argument object; there is no
 envelope.
+
+## Sessions for Jarvis's browser
+
+`POST /api/jarvis/session` returns a signed-in session so Jarvis can show
+dashboard pages in its own browser:
+
+```json
+{ "ok": true, "cookie": { "name": "ustozai_session", "value": "...", "path": "/", "expiresAt": 1790000000000 } }
+```
+
+- **Off by default.** `501` until `JARVIS_SESSIONS_ENABLED=true`.
+- **CEO, thirty minutes.** Signed by `issueSessionToken` exactly as the login
+  page signs, so changing `DASHBOARD_PASSWORD` ends Jarvis's sessions too.
+  Jarvis re-mints a few minutes before `expiresAt`.
+- **Never seen by the model.** Jarvis's Python puts the cookie into the
+  browser; the value never enters a tool result or the transcript.
+- **Refused on `/ask`.** Jarvis's browser will not open the chat page, whose
+  `remember_fact` tool writes. That rule lives on the Jarvis side.
+- `503` when no CEO password is configured. `GET` answers `405`.
+- A static route, so it wins over `/api/jarvis/[tool]`. No analyst tool may be
+  called `session`, and `handle.test.ts` checks that.
 
 ## Responses
 
@@ -134,4 +158,6 @@ compares the tool names it knows about against the catalogue.
 | `src/lib/jarvis/handle.test.ts` | The tests, which run without a database. |
 | `src/app/api/jarvis/[tool]/route.ts` | Transport: a header, a query string, a status code. |
 | `src/app/api/jarvis/route.ts` | The catalogue and health check. |
+| `src/lib/jarvis/session.ts` | The session decision, signer injected. |
+| `src/app/api/jarvis/session/route.ts` | Transport for the session. |
 | `src/lib/cron-auth.ts` | `isAuthorizedBearer`, shared with cron and ingest. |

@@ -101,14 +101,20 @@ export function passwordMatches(input: string): boolean {
   return safeEqual(input, actual);
 }
 
+/**
+ * A signed session for a role. People get the full thirty days; Jarvis's
+ * browser asks for thirty minutes and re-mints as it goes, so a token lifted
+ * from the laptop is worth little for long.
+ */
 export function issueSessionToken(
   role: Role = "ceo",
   now: number = Date.now(),
+  maxAgeSeconds: number = SESSION_MAX_AGE_SECONDS,
 ): string | null {
   const password = passwordFor(role);
   if (!password) return null;
 
-  const expiresAt = String(now + SESSION_MAX_AGE_SECONDS * 1000);
+  const expiresAt = String(now + maxAgeSeconds * 1000);
   // The role is part of the signed payload, not a separate field, so it
   // cannot be edited without breaking the signature.
   const payload = `${expiresAt}.${role}`;
