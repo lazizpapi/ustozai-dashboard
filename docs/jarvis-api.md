@@ -92,8 +92,10 @@ dashboard pages in its own browser:
   Jarvis re-mints a few minutes before `expiresAt`.
 - **Never seen by the model.** Jarvis's Python puts the cookie into the
   browser; the value never enters a tool result or the transcript.
-- **Refused on `/ask`.** Jarvis's browser will not open the chat page, whose
-  `remember_fact` tool writes. That rule lives on the Jarvis side.
+- **No chat.** The session is marked as Jarvis's inside its signature, and
+  `/api/ask` refuses it with 403 (`mayUseChat` in `gate.ts`), because the chat's
+  `remember_fact` tool writes. Jarvis's browser also blocks `/ask` and
+  `/api/ask` on its own side, but the dashboard does not rely on that.
 - `503` when no CEO password is configured. `GET` answers `405`.
 - A static route, so it wins over `/api/jarvis/[tool]`. No analyst tool may be
   called `session`, and `handle.test.ts` checks that.

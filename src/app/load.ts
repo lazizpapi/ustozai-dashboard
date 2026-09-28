@@ -4,7 +4,13 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { hasAnyData } from "@/lib/db/queries";
-import { SESSION_COOKIE, isValidSessionToken, roleFromToken } from "@/lib/gate";
+import {
+  SESSION_COOKIE,
+  isValidSessionToken,
+  roleFromToken,
+  scopeFromToken,
+  type SessionScope,
+} from "@/lib/gate";
 import { canSee, type Role } from "@/lib/roles";
 
 /**
@@ -30,6 +36,12 @@ export async function isSignedIn(): Promise<boolean> {
 export async function currentRole(): Promise<Role | null> {
   const store = await cookies();
   return roleFromToken(store.get(SESSION_COOKIE)?.value);
+}
+
+/** Whose session this request carries: a person's, Jarvis's, or none. */
+export async function currentScope(): Promise<SessionScope | null> {
+  const store = await cookies();
+  return scopeFromToken(store.get(SESSION_COOKIE)?.value);
 }
 
 export async function requireSession(): Promise<Role> {

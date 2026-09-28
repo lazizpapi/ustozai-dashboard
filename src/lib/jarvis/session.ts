@@ -1,6 +1,6 @@
 import "server-only";
 
-import { SESSION_COOKIE } from "@/lib/gate";
+import { SESSION_COOKIE, type SessionScope } from "@/lib/gate";
 import type { Role } from "@/lib/roles";
 
 import type { JarvisResponse } from "./handle";
@@ -16,7 +16,9 @@ import type { JarvisResponse } from "./handle";
  * by default, so the laptop's key signs nobody in until the owner says so. The
  * session lasts thirty minutes rather than a person's thirty days. And it is
  * signed under the CEO password like any other CEO session, so changing that
- * password ends Jarvis's sessions along with everyone else's.
+ * password ends Jarvis's sessions along with everyone else's. It is marked as
+ * Jarvis's inside the signature, so the dashboard's chat refuses it: see
+ * mayUseChat in gate.ts.
  *
  * Pure, with the signer injected, so the tests need neither the environment
  * nor a clock.
@@ -31,7 +33,7 @@ export type JarvisSessionBody = {
 
 export type JarvisSessionDeps = {
   enabled: boolean;
-  issue: (role: Role, now: number, maxAgeSeconds: number) => string | null;
+  issue: (role: Role, now: number, maxAgeSeconds: number, scope: SessionScope) => string | null;
   now: number;
 };
 
@@ -43,7 +45,7 @@ export function mintJarvisSession({ enabled, issue, now }: JarvisSessionDeps): J
     };
   }
 
-  const token = issue("ceo", now, JARVIS_SESSION_SECONDS);
+  const token = issue("ceo", now, JARVIS_SESSION_SECONDS, "jarvis");
   if (!token) {
     return {
       status: 503,

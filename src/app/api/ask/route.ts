@@ -6,7 +6,8 @@ import {
 } from "@/lib/analyst/memory";
 import { activeFacts } from "@/lib/db/queries";
 import { deactivateAgentFact, saveAgentFact } from "@/lib/db/persist";
-import { currentRole } from "@/app/load";
+import { currentRole, currentScope } from "@/app/load";
+import { mayUseChat } from "@/lib/gate";
 import { openaiKey } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -41,8 +42,12 @@ export async function POST(request: Request) {
    * Ahead of the key check on purpose. Which roles may ask is a property of
    * the deployment, and answering "the analyst needs a key" to a caller who
    * may not ask at all would confirm the endpoint exists and works.
+   *
+   * The CEO in person only: a session minted for Jarvis's browser is a CEO
+   * session too, but the chat's remember_fact writes, and Jarvis's key must
+   * not be able to write whatever the Jarvis side promises.
    */
-  if ((await currentRole()) !== "ceo") {
+  if (!mayUseChat(await currentRole(), await currentScope())) {
     return Response.json({ error: "Not available for this account." }, { status: 403 });
   }
 

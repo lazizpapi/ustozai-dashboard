@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { isValidSessionToken, issueSessionToken, roleFromToken, SESSION_COOKIE } from "@/lib/gate";
+import {
+  isValidSessionToken,
+  issueSessionToken,
+  mayUseChat,
+  roleFromToken,
+  scopeFromToken,
+  SESSION_COOKIE,
+} from "@/lib/gate";
 
 import { JARVIS_SESSION_SECONDS, mintJarvisSession, type JarvisSessionBody } from "./session";
 
@@ -39,7 +46,7 @@ describe("a session for Jarvis's browser", () => {
     });
 
     expect(result.status).toBe(200);
-    expect(calls).toEqual([["ceo", NOW, JARVIS_SESSION_SECONDS]]);
+    expect(calls).toEqual([["ceo", NOW, JARVIS_SESSION_SECONDS, "jarvis"]]);
     expect(result.body).toEqual({
       ok: true,
       cookie: {
@@ -67,6 +74,8 @@ describe("a session for Jarvis's browser", () => {
     const { value } = (result.body as JarvisSessionBody).cookie;
 
     expect(roleFromToken(value, NOW + 60_000)).toBe("ceo");
+    expect(scopeFromToken(value, NOW + 60_000)).toBe("jarvis");
+    expect(mayUseChat(roleFromToken(value, NOW + 60_000), scopeFromToken(value, NOW + 60_000))).toBe(false);
     expect(isValidSessionToken(value, NOW + JARVIS_SESSION_SECONDS * 1000 + 1000)).toBe(false);
   });
 });

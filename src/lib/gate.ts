@@ -102,41 +102,65 @@ export function passwordMatches(input: string): boolean {
 }
 
 /**
+ * Whose session it is. A person signs in at /login; Jarvis's browser gets a
+ * session minted from its laptop key. Jarvis's may read every page its role
+ * can, but not use the chat, whose remember_fact tool writes: see mayUseChat.
+ */
+export type SessionScope = "person" | "jarvis";
+
+/**
  * A signed session for a role. People get the full thirty days; Jarvis's
  * browser asks for thirty minutes and re-mints as it goes, so a token lifted
  * from the laptop is worth little for long.
+ *
+ * A Jarvis session carries a fourth part, "jarvis", inside the signed
+ * payload, so cutting it out to pass as a person breaks the signature. A
+ * person's token keeps the three-part shape, so nobody is signed out.
  */
 export function issueSessionToken(
   role: Role = "ceo",
   now: number = Date.now(),
   maxAgeSeconds: number = SESSION_MAX_AGE_SECONDS,
+  scope: SessionScope = "person",
 ): string | null {
   const password = passwordFor(role);
   if (!password) return null;
 
   const expiresAt = String(now + maxAgeSeconds * 1000);
-  // The role is part of the signed payload, not a separate field, so it
-  // cannot be edited without breaking the signature.
-  const payload = `${expiresAt}.${role}`;
+  // The role and the scope are part of the signed payload, not separate
+  // fields, so neither can be edited without breaking the signature.
+  const payload = scope === "jarvis" ? `${expiresAt}.${role}.jarvis` : `${expiresAt}.${role}`;
   return `${payload}.${sign(payload, password)}`;
 }
 
-/** Splits a token without trusting any of it. */
-function parse(token: string): { payload: string; role: Role; expiresAt: number; signature: string } | null {
-  const parts = token.split(".");
-  // Exactly three parts. The old two-part shape carried no role and is
-  // rejected outright, which costs everyone one sign-in and beats guessing
-  // that a legacy cookie meant full access.
-  if (parts.length !== 3) return null;
+type ParsedToken = {
+  payload: string;
+  role: Role;
+  scope: SessionScope;
+  expiresAt: number;
+  signature: string;
+};
 
-  const [expiry, role, signature] = parts;
+/** Splits a token without trusting any of it. */
+function parse(token: string): ParsedToken | null {
+  const parts = token.split(".");
+  // Three parts for a person, four for Jarvis, where the third must say so.
+  // The old two-part shape carried no role and is rejected outright, which
+  // costs everyone one sign-in and beats guessing that a legacy cookie meant
+  // full access.
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  if (parts.length === 4 && parts[2] !== "jarvis") return null;
+
+  const [expiry, role] = parts;
+  const signature = parts[parts.length - 1];
   if (!expiry || !role || !signature) return null;
   if (!isRole(role)) return null;
 
   const expiresAt = Number(expiry);
   if (!Number.isFinite(expiresAt)) return null;
 
-  return { payload: `${expiry}.${role}`, role, expiresAt, signature };
+  const scope: SessionScope = parts.length === 4 ? "jarvis" : "person";
+  return { payload: parts.slice(0, -1).join("."), role, scope, expiresAt, signature };
 }
 
 export function isValidSessionToken(
@@ -164,4 +188,22 @@ export function roleFromToken(
 ): Role | null {
   if (!isValidSessionToken(token, now)) return null;
   return parse(token as string)?.role ?? null;
+}
+
+/** Whose a valid token is, a person's or Jarvis's, or null if it is not valid. */
+export function scopeFromToken(
+  token: string | undefined | null,
+  now: number = Date.now(),
+): SessionScope | null {
+  if (!isValidSessionToken(token, now)) return null;
+  return parse(token as string)?.scope ?? null;
+}
+
+/**
+ * The chat is for the CEO in person. Its remember_fact tool writes to the
+ * analyst's memory, and a session minted from Jarvis's laptop key must not be
+ * able to do that, whatever the Jarvis side promises.
+ */
+export function mayUseChat(role: Role | null, scope: SessionScope | null): boolean {
+  return role === "ceo" && scope === "person";
 }

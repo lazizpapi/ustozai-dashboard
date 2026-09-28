@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   isValidSessionToken,
   issueSessionToken,
+  mayUseChat,
   passwordMatches,
   roleForPassword,
   roleFromToken,
+  scopeFromToken,
   SESSION_MAX_AGE_SECONDS,
 } from "./gate";
 
@@ -233,5 +235,46 @@ describe("a shorter session", () => {
 
     expect(isValidSessionToken(token, issuedAt + 1799_000)).toBe(true);
     expect(isValidSessionToken(token, issuedAt + 1801_000)).toBe(false);
+  });
+});
+
+describe("a session minted for Jarvis", () => {
+  // Jarvis's key lives on a laptop and is weaker than the CEO password, so a
+  // session it mints must not be able to do what only a person should: use
+  // the chat, whose remember_fact tool writes to the analyst's memory.
+  it("says it is Jarvis's, while a login says it is a person's", () => {
+    withPassword("correct-horse-battery");
+    expect(scopeFromToken(issueSessionToken("ceo", Date.now(), 1800, "jarvis"))).toBe("jarvis");
+    expect(scopeFromToken(issueSessionToken())).toBe("person");
+  });
+
+  it("is still a valid CEO session for reading pages", () => {
+    withPassword("correct-horse-battery");
+    const token = issueSessionToken("ceo", Date.now(), 1800, "jarvis");
+    expect(roleFromToken(token)).toBe("ceo");
+  });
+
+  it("cannot be passed off as a person's by cutting the mark out", () => {
+    withPassword("correct-horse-battery");
+    const token = issueSessionToken("ceo", Date.now(), 1800, "jarvis")!;
+    const [expiry, role, , signature] = token.split(".");
+    const forged = `${expiry}.${role}.${signature}`;
+    expect(isValidSessionToken(forged)).toBe(false);
+    expect(scopeFromToken(forged)).toBeNull();
+  });
+
+  it("rejects an unknown mark", () => {
+    withPassword("correct-horse-battery");
+    const token = issueSessionToken("ceo", Date.now(), 1800, "jarvis")!;
+    expect(isValidSessionToken(token.replace(".jarvis.", ".admin."))).toBe(false);
+  });
+});
+
+describe("who may use the chat", () => {
+  it("is the CEO in person, and nobody else", () => {
+    expect(mayUseChat("ceo", "person")).toBe(true);
+    expect(mayUseChat("ceo", "jarvis")).toBe(false);
+    expect(mayUseChat("marketing", "person")).toBe(false);
+    expect(mayUseChat(null, null)).toBe(false);
   });
 });
