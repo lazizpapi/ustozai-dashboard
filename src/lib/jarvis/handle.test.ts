@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { toolNames } from "@/lib/analyst/tools";
+import { ASK_TOOLS, toolNames, type AskFunctionTool } from "@/lib/analyst/tools";
 import {
   ACTION_TOOLS,
   argsFromBody,
+  flagEnabled,
   handleJarvis,
-  jarvisIndex,
+  jarvisCatalogue,
+  type JarvisCatalogue,
   type JarvisDeps,
 } from "./handle";
 
@@ -176,14 +178,84 @@ describe("a POST body", () => {
   });
 });
 
-describe("the index", () => {
-  it("lists the readable tools and says actions are off", () => {
-    const result = jarvisIndex(deps());
+describe("the catalogue", () => {
+  const readTools = ASK_TOOLS as AskFunctionTool[];
+
+  function catalogue(actionsEnabled = false): JarvisCatalogue {
+    const result = jarvisCatalogue(readTools, { actionsEnabled });
     expect(result.status).toBe(200);
-    expect(result.body).toMatchObject({
-      ok: true,
-      tools: ["get_revenue", "get_reviews", "get_growth"],
-      actions: { enabled: false },
-    });
+    return result.body as JarvisCatalogue;
+  }
+
+  /** Every enum anywhere in a schema, however deeply nested. */
+  function enumsIn(schema: unknown): unknown[][] {
+    if (schema === null || typeof schema !== "object") return [];
+    const node = schema as Record<string, unknown>;
+    const own = Array.isArray(node.enum) ? [node.enum] : [];
+    return [...own, ...Object.values(node).flatMap((value) => enumsIn(value))];
+  }
+
+  it("describes every read tool, in order, with its parameters", () => {
+    const body = catalogue();
+    expect(body.ok).toBe(true);
+    expect(body.tools.map((tool) => tool.name)).toEqual(toolNames());
+    for (const tool of body.tools) {
+      expect(tool.description.length).toBeGreaterThan(0);
+      expect(tool.parameters).toMatchObject({ type: "object" });
+    }
+  });
+
+  it("hands over plain JSON schema, not OpenAI's function wrapper", () => {
+    // Jarvis turns each entry into a Gemini function declaration, whose schema
+    // type forbids unknown keys. `strict` and `type: "function"` belong to the
+    // OpenAI envelope and would end the voice session at connect.
+    for (const tool of catalogue().tools) {
+      expect(Object.keys(tool).sort()).toEqual(["description", "name", "parameters"]);
+      expect(tool.parameters).not.toHaveProperty("strict");
+    }
+  });
+
+  it("gives a tool without parameters an empty object schema rather than nothing", () => {
+    const bare = {
+      type: "function",
+      name: "get_nothing",
+      description: "Takes no arguments.",
+      parameters: null,
+      strict: false,
+    } as AskFunctionTool;
+    const body = jarvisCatalogue([bare], { actionsEnabled: false }).body as JarvisCatalogue;
+    expect(body.tools[0].parameters).toEqual({ type: "object", properties: {} });
+  });
+
+  it("uses only text enums, which is all a Gemini schema accepts", () => {
+    for (const tool of catalogue().tools) {
+      for (const values of enumsIn(tool.parameters)) {
+        for (const value of values) expect(typeof value).toBe("string");
+      }
+    }
+  });
+
+  it("never names a tool 'session', because that path is the session route", () => {
+    expect(catalogue().tools.map((tool) => tool.name)).not.toContain("session");
+  });
+
+  it("says actions are off unless the flag turns them on", () => {
+    expect(catalogue(false).actions).toEqual({ enabled: false, tools: [...ACTION_TOOLS] });
+    expect(catalogue(true).actions).toEqual({ enabled: true, tools: [...ACTION_TOOLS] });
+  });
+});
+
+describe("a feature switch", () => {
+  it("is on only when set to true", () => {
+    expect(flagEnabled("true")).toBe(true);
+    expect(flagEnabled(" TRUE ")).toBe(true);
+  });
+
+  it("stays off when unset, empty, false or anything else", () => {
+    // Off by default is the point: a deploy that forgets the variable must not
+    // quietly hand Jarvis the power to post or to sign in.
+    for (const value of [undefined, "", "false", "0", "yes", "on"]) {
+      expect(flagEnabled(value)).toBe(false);
+    }
   });
 });

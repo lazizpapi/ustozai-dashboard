@@ -39,9 +39,32 @@ the redirect would read a 200 with an HTML login page as success.
 
 ## Requests
 
-`GET /api/jarvis` — the catalogue. Returns every readable tool with its
-description, and the action tools with `enabled: false`. Use it as a health
-check: it proves the secret and the deployment without running a query.
+`GET /api/jarvis` — the catalogue. Returns every readable tool with its name,
+description and `parameters`, and the action tools with `enabled` set by
+`JARVIS_ACTIONS_ENABLED`. Use it as a health check too: it proves the secret and
+the deployment without running a query.
+
+Jarvis builds its tools from this list when a call starts, so a tool added to
+the dashboard chat reaches Jarvis on its next start with no change on that side.
+`parameters` is plain JSON schema, never OpenAI's envelope: `type: "function"`
+and `strict` are stripped, and a tool without arguments gets
+`{"type": "object", "properties": {}}`. Gemini's schema type rejects unknown
+keys, and one rejected declaration ends the whole voice session at connect, so
+`handle.test.ts` pins both rules, plus text-only enums.
+
+```json
+{
+  "ok": true,
+  "tools": [
+    {
+      "name": "get_revenue",
+      "description": "Money taken through the app, in som: ...",
+      "parameters": { "type": "object", "properties": { "days": { "type": "number" } } }
+    }
+  ],
+  "actions": { "enabled": false, "tools": ["send_telegram", "send_report"] }
+}
+```
 
 `GET /api/jarvis/<tool>?days=7` — run one tool. Query values arrive as strings
 and are converted back to numbers before clamping, so `?days=7` really means

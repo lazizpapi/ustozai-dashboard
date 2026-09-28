@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { AskFunctionTool } from "@/lib/analyst/tools";
+
 /**
  * What Jarvis is allowed to ask for, and what it gets back.
  *
@@ -158,14 +160,55 @@ export async function handleJarvis(
   }
 }
 
-/** GET /api/jarvis — what exists, for a health check and for setup. */
-export function jarvisIndex(deps: JarvisDeps): JarvisResponse {
-  return {
-    status: 200,
-    body: {
-      ok: true,
-      tools: deps.readToolNames(),
-      actions: { enabled: false, tools: [...ACTION_TOOLS] },
-    },
+/** One entry of the catalogue: what Jarvis turns into a Gemini function. */
+export type JarvisToolEntry = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+};
+
+export type JarvisCatalogue = {
+  ok: true;
+  tools: JarvisToolEntry[];
+  actions: { enabled: boolean; tools: string[] };
+};
+
+/**
+ * GET /api/jarvis — the health check, and the catalogue Jarvis builds its
+ * tools from.
+ *
+ * Each entry carries its parameters, not just a name, so Jarvis can declare
+ * the tool to its model exactly as the dashboard chat declares it. A tool added
+ * to the chat reaches Jarvis on its next start with no change on that side.
+ *
+ * Only the plain JSON schema goes out. `type: "function"` and `strict` are the
+ * OpenAI envelope; Gemini's schema type rejects unknown keys, and one rejected
+ * declaration ends the whole voice session at connect. A tool with no
+ * parameters gets an empty object schema, because the other end requires one.
+ */
+export function jarvisCatalogue(
+  tools: readonly AskFunctionTool[],
+  flags: { actionsEnabled: boolean },
+): JarvisResponse {
+  const body: JarvisCatalogue = {
+    ok: true,
+    tools: tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description ?? "",
+      parameters: tool.parameters ? { ...tool.parameters } : { type: "object", properties: {} },
+    })),
+    actions: { enabled: flags.actionsEnabled, tools: [...ACTION_TOOLS] },
   };
+  return { status: 200, body };
+}
+
+/**
+ * Read a feature switch from the environment.
+ *
+ * Only the word "true" turns one on. Anything else, including unset, leaves it
+ * off, so a deploy that forgets a variable cannot quietly hand Jarvis the power
+ * to sign in or to post.
+ */
+export function flagEnabled(value: string | undefined): boolean {
+  return value?.trim().toLowerCase() === "true";
 }
