@@ -115,6 +115,51 @@ export function priorWithinWindow(
 }
 
 /**
+ * The days that are over, which are the only ones worth comparing.
+ *
+ * Takings and active users both accumulate through the day, and the admin API
+ * answers for today as readily as for any other. Today's row therefore always
+ * holds part of a day: six hours of one when the daily run fires at six in the
+ * morning, and still only most of one at five in the afternoon.
+ *
+ * Measured against complete days, that part-day reads as a collapse. The alert
+ * rules found one every morning, and the headline tiles showed 5,440 daily
+ * actives against 7,801 for the same weekday before, a 30% fall that never
+ * happened. Both now read finished days only.
+ *
+ * Downloads are unaffected, Apple publishing a day behind regardless, but they
+ * are filtered too. A rule whose correctness depends on which feed it happens
+ * to be reading is one refactor away from being wrong.
+ */
+export function completeDays<T extends { date: string }>(days: T[], today: string): T[] {
+  return days.filter((day) => day.date < today);
+}
+
+/**
+ * A daily series' newest day against the same weekday a week before it.
+ *
+ * The cutoff hangs off the newest day rather than off the clock. Measured from
+ * now, yesterday's figure was compared with the day six days before it every
+ * afternoon, and labelled accordingly. Whole days deserve a whole week.
+ *
+ * Readings are anchored at midnight UTC and the cutoff is written in exactly
+ * the same form, because priorWithinWindow compares them as strings and
+ * "T00:00:00Z" sorts after "T00:00:00.000Z".
+ */
+export function priorDay(days: { date: string; value: number }[]): PriorReading | null {
+  if (days.length < 2) return null;
+
+  const newest = days.reduce((max, day) => (day.date > max ? day.date : max), days[0].date);
+  const cutoff = new Date(`${newest}T00:00:00Z`);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 7);
+
+  return priorWithinWindow(
+    days.map((day) => ({ capturedAt: `${day.date}T00:00:00Z`, value: day.value })),
+    `${cutoff.toISOString().slice(0, 10)}T00:00:00Z`,
+  );
+}
+
+/**
  * Tashkent's calendar date for a moment.
  *
  * en-CA formats as YYYY-MM-DD, which is both what the database stores and what

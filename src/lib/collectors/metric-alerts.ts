@@ -137,25 +137,15 @@ export const MIN_FOLLOWER_MOVE = 500;
 const MIN_DAYS_FOR_MEDIAN = 7;
 
 /**
- * The days that are over, which are the only ones worth comparing.
+ * Today is refused by every series rule here, and now by the headline tiles
+ * too, so the rule lives beside the other day comparisons in compare.ts.
  *
- * Takings and active users both accumulate through the day, and the daily run
- * fires at six in the morning Tashkent time. Today's row at that hour holds
- * about six hours of a day, so measuring it against a fortnight of complete
- * days finds a collapse every single morning, buys a model call to explain it,
- * and reports the sun coming up.
- *
- * Nor does the debounce save us: by the time the run fires, yesterday's row has
- * been restated and is complete, so it looks healthy and today looks new. The
- * false alarm would clear the crossing test every day forever.
- *
- * Downloads are unaffected, Apple publishing a day behind regardless, but they
- * are filtered too. A rule whose correctness depends on which feed it happens
- * to be reading is one refactor away from being wrong.
+ * The debounce is no substitute for it. By the time the daily run fires,
+ * yesterday's row has been restated and is complete, so it looks healthy and
+ * today's part-day looks new. The false alarm would clear the crossing test
+ * every morning forever.
  */
-export function completeDays<T extends { date: string }>(days: T[], today: string): T[] {
-  return days.filter((day) => day.date < today);
-}
+export { completeDays } from "@/lib/compare";
 
 function median(values: number[]): number | null {
   if (values.length === 0) return null;

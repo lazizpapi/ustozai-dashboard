@@ -16,9 +16,11 @@ import {
 } from "@/lib/funnel";
 import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
 import {
+  completeDays,
   counterVelocity,
   dailyLast,
   dailyRankSeries,
+  priorDay,
   priorWithinWindow,
   velocitySeries,
   type DailyPoint,
@@ -1819,8 +1821,22 @@ export interface ActiveUsers {
   mauSpanDays: number | null;
   /** When the push arrived, so a stalled sender is visible. */
   receivedAt: string;
-  /** Days between the newest row's date and today in Tashkent. */
+  /** Days between the newest finished day and today in Tashkent. One is healthy. */
   daysBehind: number;
+  /**
+   * Today's count so far, or null before the first poll of the day. Always
+   * part of a day, so it is never the headline and never compared.
+   */
+  todaySoFar: number | null;
+}
+
+/** A row of active_users_daily, as it comes back from the database. */
+export interface ActiveUserRow {
+  date: string;
+  dau: number;
+  wau: number;
+  mau: number;
+  received_at: string;
 }
 
 /**
@@ -1829,10 +1845,6 @@ export interface ActiveUsers {
  * Reads the combined 'all' rows only. Per-platform rows are optional extras
  * the backend may or may not send, and mixing them into the headline would
  * double-count the moment they arrive.
- *
- * daysBehind exists because this is the one series we do not collect: if their
- * job stops, the numbers simply stop moving, and a dashboard that shows a
- * three-day-old DAU as though it were today's is the failure mode to avoid.
  */
 export async function activeUsersTrend(days = 60): Promise<ActiveUsers | null> {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
@@ -1848,32 +1860,37 @@ export async function activeUsersTrend(days = 60): Promise<ActiveUsers | null> {
 
   if (error) throw new Error(`activeUsersTrend: ${error.message}`);
 
-  const rows = (data ?? []) as {
-    date: string;
-    dau: number;
-    wau: number;
-    mau: number;
-    received_at: string;
-  }[];
-  if (rows.length === 0) return null;
+  return summariseActiveUsers(
+    (data ?? []) as ActiveUserRow[],
+    localDate(new Date().toISOString()),
+  );
+}
 
-  const latest = rows[0];
+/**
+ * The newest finished day's active users, with movement.
+ *
+ * Finished, because the hourly poll also stores today, and today at five in the
+ * afternoon read as a 30% fall against the whole of the same weekday before.
+ * See completeDays. Today's count is kept, as todaySoFar, for the one place
+ * that says what it is.
+ *
+ * daysBehind exists because if the upstream job stops, the numbers simply
+ * stop moving, and a dashboard that shows a three-day-old DAU as though it were
+ * yesterday's is the failure mode to avoid.
+ *
+ * Kept apart from the fetch so it can be tested without a database.
+ */
+export function summariseActiveUsers(
+  rows: ActiveUserRow[],
+  today: string,
+): ActiveUsers | null {
+  const finished = completeDays(rows, today).sort((a, b) => a.date.localeCompare(b.date));
+  const latest = finished.at(-1);
+  if (!latest) return null;
 
-  // priorWithinWindow works on timestamps; these rows are whole days, so the
-  // date is anchored at midnight to compare on the same footing as everything
-  // else on the dashboard.
-  const asReadings = (pick: (row: typeof latest) => number) =>
-    rows.map((row) => ({ capturedAt: `${row.date}T00:00:00Z`, value: pick(row) }));
+  const dauPrior = priorDay(finished.map((row) => ({ date: row.date, value: row.dau })));
+  const mauPrior = priorDay(finished.map((row) => ({ date: row.date, value: row.mau })));
 
-  const dauPrior = priorWithinWindow(asReadings((row) => row.dau), weekAgoIso());
-  const mauPrior = priorWithinWindow(asReadings((row) => row.mau), weekAgoIso());
-
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tashkent",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
   const daysBehind = Math.max(
     0,
     Math.round(
@@ -1894,6 +1911,7 @@ export async function activeUsersTrend(days = 60): Promise<ActiveUsers | null> {
     mauSpanDays: mauPrior?.spanDays ?? null,
     receivedAt: latest.received_at,
     daysBehind,
+    todaySoFar: rows.find((row) => row.date === today)?.dau ?? null,
   };
 }
 
@@ -1908,9 +1926,9 @@ export interface RevenueDay {
 }
 
 export interface RevenueSummary {
-  /** The most recent day with any takings, and what they were. */
+  /** The most recent finished day with any takings, and what they were. */
   latest: RevenueDay | null;
-  /** Day totals oldest first, for the chart. */
+  /** Day totals oldest first, for the chart. Today included, still counting. */
   daily: RevenueDay[];
   /** Takings per provider over the window, largest first. */
   byProvider: { provider: string; amount: number; transactions: number }[];
@@ -1952,7 +1970,7 @@ export async function revenueSummary(days = 30): Promise<RevenueSummary> {
     .order("date", { ascending: true });
   if (error) throw new Error(`revenueSummary: ${error.message}`);
 
-  return summariseRevenue((data ?? []) as RevenueRow[], weekAgoIso());
+  return summariseRevenue((data ?? []) as RevenueRow[], localDate(new Date().toISOString()));
 }
 
 /** A row of revenue_daily, in tiyin, as it comes back from the database. */
@@ -1967,8 +1985,12 @@ export interface RevenueRow {
  * The tiyin-to-som arithmetic, kept separate from the fetch so it can be tested
  * without a database. This is where the hundredfold lives, and a hundredfold
  * error here is the most quotable number in the company being wrong.
+ *
+ * The headline day and its comparison are finished days only; see
+ * completeDays. The chart and the window total keep today, since money already
+ * taken is real even while the day is still open.
  */
-export function summariseRevenue(rows: RevenueRow[], weekAgo: string): RevenueSummary {
+export function summariseRevenue(rows: RevenueRow[], today: string): RevenueSummary {
   const dayRows = rows.filter((row) => row.provider === "ALL");
 
   const daily = dayRows.map((row) => ({
@@ -1987,13 +2009,11 @@ export function summariseRevenue(rows: RevenueRow[], weekAgo: string): RevenueSu
     providers.set(row.provider, entry);
   }
 
-  const prior = priorWithinWindow(
-    daily.map((day) => ({ capturedAt: `${day.date}T00:00:00Z`, value: day.amount })),
-    weekAgo,
-  );
+  const finished = completeDays(daily, today);
+  const prior = priorDay(finished.map((day) => ({ date: day.date, value: day.amount })));
 
   return {
-    latest: daily.at(-1) ?? null,
+    latest: finished.at(-1) ?? null,
     daily,
     byProvider: [...providers.entries()]
       .map(([provider, totals]) => ({ ...totals, provider, amount: toSom(totals.amount) }))
@@ -2034,27 +2054,51 @@ export async function engagementSummary(days = 30): Promise<EngagementSummary | 
     .order("date", { ascending: true });
   if (error) throw new Error(`engagementSummary: ${error.message}`);
 
-  const rows = (data ?? []) as {
-    date: string;
-    views: number | null;
-    total_logins: number | null;
-    average_minutes: string | number | null;
-  }[];
-  if (rows.length === 0) return null;
+  return summariseEngagement(
+    (data ?? []) as EngagementRow[],
+    localDate(new Date().toISOString()),
+  );
+}
 
-  const latest = rows[rows.length - 1];
+/** A row of app_engagement_daily, as it comes back from the database. */
+export interface EngagementRow {
+  date: string;
+  views: number | null;
+  total_logins: number | null;
+  /** Postgres numeric, which arrives as text. */
+  average_minutes: string | number | null;
+}
+
+/**
+ * The newest finished day's views and sessions, with movement.
+ *
+ * Finished for the same reason as active users: today's views are part of a
+ * day, and so are today's logins. See completeDays. The chart keeps today.
+ *
+ * Session length is written once per poll for whichever day was today, so a
+ * finished day's figure is the last poll before its midnight, covering all but
+ * its final hour. Near enough for an average; a login count reads a touch low.
+ *
+ * Kept apart from the fetch so it can be tested without a database.
+ */
+export function summariseEngagement(
+  rows: EngagementRow[],
+  today: string,
+): EngagementSummary | null {
+  const finished = completeDays(rows, today);
+  const latest = finished.at(-1);
+  if (!latest) return null;
+
   const daily = rows
     .filter((row) => row.views !== null)
     .map((row) => ({ date: row.date, views: row.views as number }));
 
-  const prior = priorWithinWindow(
-    daily.map((row) => ({ capturedAt: `${row.date}T00:00:00Z`, value: row.views })),
-    weekAgoIso(),
+  const prior = priorDay(
+    completeDays(daily, today).map((row) => ({ date: row.date, value: row.views })),
   );
 
-  // The most recent day that actually carries a session length, since the
-  // visit summary is attributed to the end of each collection window.
-  const withMinutes = [...rows].reverse().find((row) => row.average_minutes !== null);
+  // The most recent finished day that actually carries a session length.
+  const withMinutes = [...finished].reverse().find((row) => row.average_minutes !== null);
 
   return {
     date: latest.date,

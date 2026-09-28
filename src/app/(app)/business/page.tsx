@@ -97,7 +97,12 @@ export default async function BusinessPage() {
         <Metric
           label="Daily active"
           value={active?.dau == null ? NO_VALUE : formatNumber(active.dau)}
-          detail={active ? `to ${formatDay(active.date)}` : undefined}
+          detail={
+            active?.todaySoFar == null
+              ? undefined
+              : `${formatNumber(active.todaySoFar)} so far today`
+          }
+          asOf={active ? `on ${formatDay(active.date)}` : undefined}
           note={notes.get("active_users")}
         />
         <Metric

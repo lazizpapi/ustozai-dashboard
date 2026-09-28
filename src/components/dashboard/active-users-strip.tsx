@@ -60,8 +60,9 @@ export function ActiveUsersStrip({ active, revenue, engagement, notes }: Props) 
         <h2 className="text-sm font-medium">Product and revenue</h2>
         <span className="text-muted-foreground text-xs">
           {/*
-            Two days behind is normal for a job that runs after midnight;
-            more than that usually means it stopped, so the wording escalates
+            The figures are yesterday's by design, since today is still being
+            counted, so one day behind is healthy and two is one missed day.
+            Beyond that it has usually stopped, so the wording escalates
             rather than staying neutral.
           */}
           {active.daysBehind > 2
@@ -74,6 +75,13 @@ export function ActiveUsersStrip({ active, revenue, engagement, notes }: Props) 
         <Metric
           label="Daily active"
           value={formatNumber(active.dau)}
+          // Today's count, named as part of a day and never compared, so the
+          // question "how is today going" has an answer that cannot be misread.
+          detail={
+            active.todaySoFar === null
+              ? undefined
+              : `${formatNumber(active.todaySoFar)} so far today`
+          }
           change={delta(active.dau, active.dauPrevious, active.dauSpanDays)}
           note={notes?.get("active_users")}
         />

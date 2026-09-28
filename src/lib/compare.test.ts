@@ -5,6 +5,7 @@ import {
   dailyLast,
   dailyRankSeries,
   dayTicks,
+  priorDay,
   priorWithinWindow,
   velocitySeries,
 } from "./compare";
@@ -151,6 +152,40 @@ describe("priorWithinWindow", () => {
 
     expect(Number.isInteger(prior.spanDays)).toBe(true);
     expect(prior.spanDays).toBe(3);
+  });
+});
+
+describe("priorDay", () => {
+  const day = (date: string, value: number) => ({ date, value });
+  const week = [
+    day("2026-09-19", 7481),
+    day("2026-09-20", 5601),
+    day("2026-09-21", 7801),
+    day("2026-09-22", 9761),
+    day("2026-09-23", 8882),
+    day("2026-09-24", 6744),
+    day("2026-09-25", 6729),
+    day("2026-09-26", 5774),
+    day("2026-09-27", 5669),
+  ];
+
+  it("compares the newest day with the same weekday a week before it", () => {
+    // Anchored to the clock instead, a Sunday read on Monday afternoon was
+    // measured against the Monday before, and labelled "over 6 days".
+    expect(priorDay(week)).toEqual({ value: 5601, spanDays: 7 });
+  });
+
+  it("does not care what order the days arrive in", () => {
+    expect(priorDay([...week].reverse())).toEqual({ value: 5601, spanDays: 7 });
+  });
+
+  it("falls back to the oldest day when there is not a week of them", () => {
+    expect(priorDay(week.slice(-3))).toEqual({ value: 6729, spanDays: 2 });
+  });
+
+  it("returns null for a single day and for none", () => {
+    expect(priorDay(week.slice(-1))).toBeNull();
+    expect(priorDay([])).toBeNull();
   });
 });
 

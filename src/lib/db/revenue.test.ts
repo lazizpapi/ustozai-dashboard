@@ -13,7 +13,8 @@ import { describe, expect, it } from "vitest";
 
 import { summariseRevenue, type RevenueRow } from "./queries";
 
-const WEEK_AGO = "2026-08-15T00:00:00.000Z";
+// The day after every row here, so all of them are finished days.
+const TODAY = "2026-08-23";
 
 const row = (
   date: string,
@@ -26,7 +27,7 @@ describe("summariseRevenue", () => {
   it("divides the day total by a hundred", () => {
     // The figures the business page was showing unconverted: 89,232,000 tiyin
     // read as som made a single day look like the takings of a whole quarter.
-    const summary = summariseRevenue([row("2026-08-22", "ALL", 89_232_000, 11)], WEEK_AGO);
+    const summary = summariseRevenue([row("2026-08-22", "ALL", 89_232_000, 11)], TODAY);
 
     expect(summary.latest).toEqual({
       date: "2026-08-22",
@@ -36,7 +37,7 @@ describe("summariseRevenue", () => {
   });
 
   it("leaves the transaction count alone", () => {
-    const summary = summariseRevenue([row("2026-08-22", "ALL", 89_232_000, 11)], WEEK_AGO);
+    const summary = summariseRevenue([row("2026-08-22", "ALL", 89_232_000, 11)], TODAY);
 
     // Only the money is in tiyin. Scaling the count too would be a tempting
     // symmetry and would silently divide eleven payments into nought.
@@ -49,7 +50,7 @@ describe("summariseRevenue", () => {
     // trades in: these two rows come to 82619253.96000001 that way.
     const summary = summariseRevenue(
       [row("2026-08-21", "ALL", 5_272_956_892), row("2026-08-22", "ALL", 2_988_968_504)],
-      WEEK_AGO,
+      TODAY,
     );
 
     expect(summary.windowTotal).toBe(82_619_253.96);
@@ -62,7 +63,7 @@ describe("summariseRevenue", () => {
         row("2026-08-22", "PAYME", 30_000, 2),
         row("2026-08-22", "CLICK", 20_000, 2),
       ],
-      WEEK_AGO,
+      TODAY,
     );
 
     expect(summary.byProvider).toEqual([
@@ -79,14 +80,14 @@ describe("summariseRevenue", () => {
         row("2026-08-21", "PAYME", 5_272_956_892),
         row("2026-08-22", "PAYME", 2_988_968_504),
       ],
-      WEEK_AGO,
+      TODAY,
     );
 
     expect(summary.byProvider[0].amount).toBe(82_619_253.96);
   });
 
   it("reports nothing rather than zero when there are no takings", () => {
-    const summary = summariseRevenue([], WEEK_AGO);
+    const summary = summariseRevenue([], TODAY);
 
     expect(summary.latest).toBeNull();
     expect(summary.daily).toEqual([]);
