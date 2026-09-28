@@ -139,16 +139,57 @@ describe("the write boundary", () => {
     expect(d.calls).toEqual([]);
   });
 
-  it("answers every action with not-implemented, because none are built yet", async () => {
-    // The deployed route is read-only by construction: there is no branch here
-    // that reaches a send. This test is what makes that claim checkable rather
-    // than a comment.
+  it("answers every action with not-implemented while the switch is off", async () => {
+    // With JARVIS_ACTIONS_ENABLED unset the route is read-only by
+    // construction: no branch reaches a send. This test is what makes that
+    // claim checkable rather than a comment.
     for (const tool of ACTION_TOOLS) {
-      const d = deps();
+      const sent: unknown[][] = [];
+      const d = deps({ runAction: async (...args) => (sent.push(args), { status: 200, body: {} }) });
       const result = await handleJarvis({ tool, method: "POST", args: { text: "hi" } }, d);
       expect(result.status).toBe(501);
       expect(d.calls).toEqual([]);
+      expect(sent).toEqual([]);
     }
+  });
+
+  it("refuses to act on a GET even when the switch is on", async () => {
+    // A GET is what a prefetching proxy or a pasted link sends. Posting to the
+    // company chat must take a deliberate POST.
+    const sent: unknown[][] = [];
+    const d = deps({
+      actionsEnabled: true,
+      runAction: async (...args) => (sent.push(args), { status: 200, body: {} }),
+    });
+    const result = await handleJarvis({ tool: "send_report", method: "GET", args: {} }, d);
+    expect(result.status).toBe(405);
+    expect(sent).toEqual([]);
+  });
+
+  it("hands a POST to the action runner when the switch is on", async () => {
+    const sent: unknown[][] = [];
+    const d = deps({
+      actionsEnabled: true,
+      runAction: async (...args) => (sent.push(args), { status: 200, body: { ok: true, sent: true } }),
+    });
+    const result = await handleJarvis(
+      { tool: "send_telegram", method: "POST", args: { text: "hello" } },
+      d,
+    );
+    expect(result).toEqual({ status: 200, body: { ok: true, sent: true } });
+    expect(sent).toEqual([["send_telegram", { text: "hello" }]]);
+  });
+
+  it("reports an action that throws as a server error, not as sent", async () => {
+    const d = deps({
+      actionsEnabled: true,
+      runAction: async () => {
+        throw new Error("database is down");
+      },
+    });
+    const result = await handleJarvis({ tool: "send_report", method: "POST", args: {} }, d);
+    expect(result.status).toBe(500);
+    expect(result.body).toMatchObject({ ok: false, error: "database is down" });
   });
 });
 

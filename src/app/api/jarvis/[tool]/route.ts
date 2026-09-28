@@ -1,7 +1,10 @@
 import { clampArgs, toolNames } from "@/lib/analyst/tools";
 import { isAuthorizedBearer, unauthorized } from "@/lib/cron-auth";
-import { argsFromBody, handleJarvis } from "@/lib/jarvis/handle";
+import { argsFromBody, flagEnabled, handleJarvis } from "@/lib/jarvis/handle";
 import { runTool } from "@/lib/analyst/run-tool";
+import { latestAnalystReport } from "@/lib/db/queries";
+import { sendTelegramMessage } from "@/lib/digest/telegram";
+import { runJarvisAction } from "@/lib/jarvis/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +20,15 @@ export const dynamic = "force-dynamic";
  * the tests are, because they can run there without a database.
  *
  * ASK_TOOLS, deliberately, not CHAT_TOOLS: the chat's one writing tool
- * (remember_fact) is not reachable from here.
+ * (remember_fact) is not reachable from here. The two Telegram actions are,
+ * but only while JARVIS_ACTIONS_ENABLED is on and only on a POST.
  */
+
+/** Where the report links to, the same address the nightly analyst uses. */
+function reportUrl(): string | undefined {
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  return base ? `${base}/analyst` : undefined;
+}
 
 function toolList(): string[] {
   return toolNames();
@@ -29,7 +39,18 @@ async function respond(request: Request, tool: string, args: Record<string, unkn
 
   const { status, body } = await handleJarvis(
     { tool, method: request.method, args },
-    { readToolNames: toolList, clampArgs, runTool },
+    {
+      readToolNames: toolList,
+      clampArgs,
+      runTool,
+      actionsEnabled: flagEnabled(process.env.JARVIS_ACTIONS_ENABLED),
+      runAction: (action, actionArgs) =>
+        runJarvisAction(action, actionArgs, {
+          latestReport: latestAnalystReport,
+          send: (text) => sendTelegramMessage(text),
+          reportUrl: reportUrl(),
+        }),
+    },
   );
   return Response.json(body, { status });
 }

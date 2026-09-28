@@ -18,11 +18,12 @@ import type { AskFunctionTool } from "@/lib/analyst/tools";
  * passed in rather than imported so the tests can exercise dispatch without a
  * database, which is also what keeps them fast enough to run on every commit.
  *
- * This layer is read-only by construction. There is no branch below that
- * reaches a write: the one writing tool the chat has (remember_fact) is not in
- * the list Jarvis is handed, and the actions Jarvis will eventually take are
- * answered with 501 until they are actually built. That is a property a test
- * can check, which is the reason to spend a branch on it rather than a comment.
+ * Reads never write. The one writing tool the chat has (remember_fact) is not
+ * in the list Jarvis is handed. The two actions, posting the analyst report or
+ * a short message to the team's Telegram chat, sit behind their own switch:
+ * with JARVIS_ACTIONS_ENABLED off there is no branch below that reaches a send,
+ * and with it on they still take a POST. Both are properties a test checks,
+ * which is the reason to spend branches on them rather than comments.
  */
 
 export type JarvisRequest = {
@@ -41,6 +42,9 @@ export type JarvisDeps = {
   readToolNames: () => string[];
   clampArgs: (tool: string, raw: unknown) => Record<string, unknown>;
   runTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  /** JARVIS_ACTIONS_ENABLED. Off, or no runner, means every action is 501. */
+  actionsEnabled?: boolean;
+  runAction?: (tool: ActionTool, args: Record<string, unknown>) => Promise<JarvisResponse>;
 };
 
 /**
@@ -52,6 +56,8 @@ export type JarvisDeps = {
  * wanted is real but unavailable, which is what it should say out loud.
  */
 export const ACTION_TOOLS = ["send_telegram", "send_report"] as const;
+
+export type ActionTool = (typeof ACTION_TOOLS)[number];
 
 /**
  * Bring a query string back to the types the clamp expects.
@@ -109,6 +115,38 @@ export function argsFromBody(
   return { ok: true, args: parsed as Record<string, unknown> };
 }
 
+/**
+ * An action runs only with the switch on, and only on a POST.
+ *
+ * Off is today's read-only endpoint: 501, "real but unavailable", with no
+ * branch below it. On, a GET still answers 405, because a GET is what a
+ * prefetching proxy or a pasted link sends, and posting to the company chat
+ * must take a deliberate POST. A runner that throws is a 500, never a send.
+ */
+async function dispatchAction(
+  tool: ActionTool,
+  request: JarvisRequest,
+  deps: JarvisDeps,
+): Promise<JarvisResponse> {
+  if (!deps.actionsEnabled || !deps.runAction) {
+    return {
+      status: 501,
+      body: { ok: false, error: `${tool} is switched off (JARVIS_ACTIONS_ENABLED)` },
+    };
+  }
+  if (request.method !== "POST") {
+    return { status: 405, body: { ok: false, error: `${tool} takes a POST` } };
+  }
+  try {
+    return await deps.runAction(tool, request.args);
+  } catch (error) {
+    return {
+      status: 500,
+      body: { ok: false, tool, error: error instanceof Error ? error.message : String(error) },
+    };
+  }
+}
+
 export async function handleJarvis(
   request: JarvisRequest,
   deps: JarvisDeps,
@@ -116,13 +154,7 @@ export async function handleJarvis(
   const { tool } = request;
 
   if ((ACTION_TOOLS as readonly string[]).includes(tool)) {
-    return {
-      status: 501,
-      body: {
-        ok: false,
-        error: `${tool} is not enabled yet; this endpoint is read-only`,
-      },
-    };
+    return dispatchAction(tool as ActionTool, request, deps);
   }
 
   const readable = deps.readToolNames();

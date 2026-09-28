@@ -28,8 +28,9 @@ export function safeEqual(a: string, b: string): boolean {
  * Pulled out because there are now three machine callers with three separate
  * secrets — cron, the ingest routes and Jarvis — and they were converging on
  * three copies of these five lines. Separate secrets are the point: the key
- * Jarvis holds only reads, the key the app backend holds only writes counts,
- * and neither should be able to do the other's job.
+ * Jarvis holds reads, and can sign its browser in or post to the team chat
+ * only while those switches are on; the key the app backend holds only writes
+ * counts; and neither should be able to do the other's job.
  *
  * An unset secret returns false rather than skipping the check, so a deploy
  * that forgets the variable closes the endpoint instead of opening it.

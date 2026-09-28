@@ -113,8 +113,11 @@ after a clamp it needs to know the query really ran over 365 days.
 | 200 | Ran. `data` holds the tool's result. |
 | 400 | No such tool. The body lists the valid names. |
 | 401 | Missing, malformed or wrong bearer token — or `JARVIS_SECRET` is unset. |
-| 500 | The query threw. `error` carries the message. |
-| 501 | An action tool that is not built yet. |
+| 405 | An action asked for with GET, or a session asked for with GET. |
+| 422 | An action refused its input: no report yet, or message text empty or too long. |
+| 500 | The query or action threw. `error` carries the message. |
+| 501 | A switched-off feature: an action without `JARVIS_ACTIONS_ENABLED`, a session without `JARVIS_SESSIONS_ENABLED`. |
+| 502 | Telegram did not take the message. Never reported as sent. |
 
 A failing query answers 500 rather than 200 with an empty body, because Jarvis
 would read an empty body aloud as "revenue is nothing", which is a different
@@ -127,17 +130,24 @@ sentence from "I cannot reach the dashboard".
 something the user asked the chat to remember — is not in it, and a request for
 it comes back 400.
 
-**It cannot send anything.** `send_telegram` and `send_report` are named in
-`ACTION_TOOLS` so that asking for one returns 501 ("real but unavailable")
-rather than 400 ("no such thing"), which is the more useful thing for the
-assistant to say. There is no code path below that 501 — the read-only claim is
-a property of the file, not a promise in a comment, and `handle.test.ts` checks
-it.
+**It sends only when switched on, and only on POST.** `send_telegram` and
+`send_report` answer 501 ("real but unavailable") until
+`JARVIS_ACTIONS_ENABLED=true`, with no code path below that 501, and
+`handle.test.ts` checks it. Switched on, a GET still answers 405: a GET is what
+a prefetching proxy or a pasted link sends.
 
-When actions do arrive they will be POST-only, behind their own flag, and the
-confirmation will live on the Jarvis side: the model drafts, a person says
-"yes, send it", and Python sends. A misheard word must not be able to post to
-the company channel.
+- `POST /api/jarvis/send_report` posts the latest analyst report, formatted as
+  the analyst formats it, and answers with `reportCreatedAt` so Jarvis can say
+  how old it is. 422 when there is no report yet.
+- `POST /api/jarvis/send_telegram` with `{"text": "..."}` posts up to 1000
+  characters, HTML-escaped and labelled **Sent by Jarvis**, to the chat the
+  daily digest uses. The length is checked after escaping, against Telegram's
+  4096.
+
+The confirmation lives on the Jarvis side, next to the microphone: the model
+drafts, Jarvis reads the draft back, and its Python sends only after checking
+that the next thing the person said was a yes. A misheard word must not be able
+to post to the company channel.
 
 ## Checking a deployment
 
@@ -159,5 +169,6 @@ compares the tool names it knows about against the catalogue.
 | `src/app/api/jarvis/[tool]/route.ts` | Transport: a header, a query string, a status code. |
 | `src/app/api/jarvis/route.ts` | The catalogue and health check. |
 | `src/lib/jarvis/session.ts` | The session decision, signer injected. |
+| `src/lib/jarvis/actions.ts` | What an action posts, and when it refuses. Deps injected. |
 | `src/app/api/jarvis/session/route.ts` | Transport for the session. |
 | `src/lib/cron-auth.ts` | `isAuthorizedBearer`, shared with cron and ingest. |
