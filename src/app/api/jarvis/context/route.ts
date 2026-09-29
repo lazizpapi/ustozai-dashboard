@@ -1,7 +1,7 @@
 import { isAuthorizedBearer, unauthorized } from "@/lib/cron-auth";
 import { jarvisCallsFor, openJarvisNotes } from "@/lib/db/queries";
 import { roleFromHeader } from "@/lib/jarvis/authority";
-import { callContext } from "@/lib/jarvis/context";
+import { gatherCallContext } from "@/lib/jarvis/context";
 
 export const dynamic = "force-dynamic";
 
@@ -19,13 +19,10 @@ export async function GET(request: Request) {
       { status: 403 },
     );
   }
-  try {
-    const [calls, notes] = await Promise.all([jarvisCallsFor(role), openJarvisNotes(role)]);
-    return Response.json({ ok: true, ...callContext({ now: new Date(), calls, notes }) });
-  } catch (error) {
-    return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
-      { status: 500 },
-    );
-  }
+  const { status, body } = await gatherCallContext(role, {
+    now: new Date(),
+    calls: (asRole) => jarvisCallsFor(asRole),
+    notes: openJarvisNotes,
+  });
+  return Response.json(body, { status });
 }
