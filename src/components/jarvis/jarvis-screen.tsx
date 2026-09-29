@@ -11,10 +11,12 @@ import { StartAudioButton } from '@/components/jarvis/start-audio-button';
 import { CallDock } from '@/components/jarvis/call-dock';
 import { JarvisOrb } from '@/components/jarvis/jarvis-orb';
 import { JarvisStage } from '@/components/jarvis/jarvis-stage';
+import { ScreenPanel } from '@/components/jarvis/screen-panel';
 import { StartButton } from '@/components/jarvis/start-button';
 import { StatusLine } from '@/components/jarvis/status-line';
 import { TranscriptPanel } from '@/components/jarvis/transcript-panel';
 import { useJarvisActivity } from '@/components/jarvis/hooks/use-jarvis-activity';
+import { useJarvisScreen } from '@/components/jarvis/hooks/use-jarvis-screen';
 import { useMediaQuery } from '@/components/jarvis/hooks/use-media-query';
 import { useOrbAmplitude } from '@/components/jarvis/hooks/use-orb-amplitude';
 import { useAgentErrors } from '@/components/jarvis/hooks/useAgentErrors';
@@ -54,7 +56,7 @@ function useCallOutcome(current: CallOutcome | null): CallOutcome | null {
 
 /**
  * The whole app: one stage where the orb stays put while the call starts and
- * ends, and moves to the top when the transcript opens.
+ * ends, and moves to the top when the transcript or Jarvis's screen opens.
  */
 export function JarvisScreen() {
   const session = useSessionContext();
@@ -65,6 +67,11 @@ export function JarvisScreen() {
   const narrow = useMediaQuery('(max-width: 639px)');
   const reduceMotion = useReducedMotion();
   const [chatOpen, setChatOpen] = useState(false);
+  // The latest picture of Jarvis's browser. Hiding one hides only that
+  // picture: the next page Jarvis opens shows again.
+  const picture = useJarvisScreen(session.room, session.isConnected);
+  const [hiddenPicture, setHiddenPicture] = useState<string | null>(null);
+  const screenShown = session.isConnected && picture !== null && picture.id !== hiddenPicture;
   // When a call ends the transcript closes and focus goes back to the start
   // button instead of the page. Adjusted during render, not in an effect.
   const [wasConnected, setWasConnected] = useState(session.isConnected);
@@ -91,7 +98,7 @@ export function JarvisScreen() {
       ? GOODBYE_VIEW
       : orbViewFor(shownOutcome === 'failed' ? 'failed' : liveState);
   const amplitude = useOrbAmplitude(view.amplitude);
-  const docked = session.isConnected && chatOpen;
+  const docked = session.isConnected && (chatOpen || screenShown);
 
   // The orb is always drawn at stage size and scaled down when docked, so the
   // move is a pure transform and never upscales a small render.
@@ -152,13 +159,20 @@ export function JarvisScreen() {
         <AnimatePresence>
           {docked && (
             <motion.div
-              key="transcript"
+              key="panels"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { delay: 0.12, duration: 0.25 } }}
               exit={{ opacity: 0, transition: { duration: 0.12 } }}
-              className="min-h-0 flex-1"
+              className={cn('flex min-h-0 flex-1 flex-col gap-3 pt-3', !chatOpen && 'justify-center')}
             >
-              <TranscriptPanel className="h-full" messages={messages} />
+              {screenShown && picture && (
+                <ScreenPanel
+                  className="shrink-0"
+                  picture={picture}
+                  onHide={() => setHiddenPicture(picture.id)}
+                />
+              )}
+              {chatOpen && <TranscriptPanel className="min-h-0 flex-1" messages={messages} />}
             </motion.div>
           )}
         </AnimatePresence>
