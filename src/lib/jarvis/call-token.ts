@@ -19,7 +19,10 @@ import type { JarvisResponse } from "./handle";
  *
  * The room holds the caller and Jarvis and nobody else. The team-chat send
  * checks that a yes was said after the read-back; with one human in the room,
- * that yes is the caller's.
+ * that yes is the caller's. LiveKit does not count agents toward
+ * maxParticipants, so the limit is one. It is not a guarantee: on 2026-09-29 a
+ * second person with their own token still got into such a room. The agent
+ * therefore ends any call that anyone else joins, for everyone.
  *
  * Pure apart from signing, with the settings and the random suffix passed in,
  * so the tests can decode what comes out.
@@ -94,7 +97,7 @@ export async function mintCallToken({ role, scope, config, suffix }: CallTokenIn
     canSubscribe: true,
   });
   token.roomConfig = new RoomConfiguration({
-    maxParticipants: 2,
+    maxParticipants: 1,
     agents: [new RoomAgentDispatch({ agentName: config.agentName })],
   });
 

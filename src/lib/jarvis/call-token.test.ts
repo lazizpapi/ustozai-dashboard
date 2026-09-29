@@ -79,11 +79,12 @@ describe("a call token", () => {
 
   it("opens a room for the caller and Jarvis alone, with Jarvis dispatched", async () => {
     // A second person in the room could say the yes that sends a team
-    // message. Two participants, the caller and the agent, and no more.
+    // message. LiveKit does not count agents toward the limit, so one means
+    // the caller alone (a room limited to one still took Jarvis, 2026-09-29).
     const { participantToken } = (await mint()).body as Details;
     const roomConfig = decodeJwt(participantToken).roomConfig as Record<string, unknown>;
 
-    expect(roomConfig.maxParticipants).toBe(2);
+    expect(roomConfig.maxParticipants).toBe(1);
     expect(roomConfig.agents).toEqual([expect.objectContaining({ agentName: "my-agent" })]);
   });
 });

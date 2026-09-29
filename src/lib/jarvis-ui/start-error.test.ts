@@ -30,6 +30,28 @@ describe('startErrorMessage', () => {
     );
   });
 
+  // The LiveKit token source puts the dashboard's status in its message.
+  const tokenFailure = (status: number) =>
+    new Error(`Error generating token from endpoint /api/jarvis-token: received ${status} / {}`);
+
+  it('asks for a fresh sign-in when the session has ended', () => {
+    expect(startErrorMessage(tokenFailure(401), false)).toMatch(/sign in again/i);
+  });
+
+  it('says Jarvis is not set up when the dashboard lacks its call settings', () => {
+    expect(startErrorMessage(tokenFailure(503), false)).toMatch(/not set up/i);
+  });
+
+  it('blames the dashboard, not the agent, for any other failed token request', () => {
+    const message = startErrorMessage(tokenFailure(500), false);
+    expect(message).toMatch(/dashboard could not start a call/i);
+    expect(message).not.toMatch(/agent/i);
+  });
+
+  it('never tells the caller to check an agent they cannot see', () => {
+    expect(startErrorMessage(new Error('could not reach the room'), false)).not.toMatch(/agent/i);
+  });
+
   it('copes with something thrown that is not an Error', () => {
     expect(startErrorMessage('nope', false)).toMatch(/could not connect/i);
   });
