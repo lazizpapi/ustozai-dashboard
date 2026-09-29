@@ -44,6 +44,17 @@ describe("briefingPlan", () => {
     expect(names(role).length).toBeGreaterThan(0);
   });
 
+  it("looks for complaints across many recent reviews, not only the latest few", () => {
+    // get_reviews takes the newest reviews first and filters by rating after,
+    // so a small limit would miss yesterday's one-star review behind five
+    // happy ones and report no complaints at all.
+    for (const role of ["ceo", "product"] as const) {
+      const step = briefingPlan(role, EVERY_TOOL).find((s) => s.tool === "get_reviews");
+      expect(step?.args).toMatchObject({ max_rating: 2 });
+      expect(Number(step?.args.limit)).toBeGreaterThanOrEqual(50);
+    }
+  });
+
   it("keeps revenue out of every department's briefing", () => {
     for (const role of ["marketing", "product", "it"] as const) {
       expect(names(role)).not.toContain("get_revenue");

@@ -17,7 +17,9 @@ import type { JarvisResponse } from "./handle";
 export type BriefingStep = { tool: string; args: Record<string, unknown> };
 
 const RECENT = { days: 3 };
-const COMPLAINTS = { max_rating: 2, limit: 5 };
+// get_reviews filters by rating after taking the newest reviews, so the
+// complaints step reads well past the last few to find any.
+const COMPLAINTS = { max_rating: 2, limit: 50 };
 
 const PLANS: Record<Role, BriefingStep[]> = {
   ceo: [

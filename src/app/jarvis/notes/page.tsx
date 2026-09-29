@@ -32,10 +32,12 @@ function NoteList({
   meta: (note: JarvisNote) => string;
 }) {
   if (notes.length === 0) return null;
+  // An id without spaces: aria-labelledby reads a space as a second id.
+  const headingId = `notes-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return (
-    <section aria-labelledby={`notes-${title}`} className="space-y-3">
+    <section aria-labelledby={headingId} className="space-y-3">
       <h2
-        id={`notes-${title}`}
+        id={headingId}
         className="text-muted-foreground flex items-center gap-2 text-sm font-medium"
       >
         <Icon className="size-4" aria-hidden="true" />
