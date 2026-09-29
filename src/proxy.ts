@@ -28,12 +28,17 @@ export function proxy(request: NextRequest) {
    * moved and nothing anywhere recorded an error. A push endpoint fails the
    * same quiet way: the sender would get a 307, follow it to a 200 HTML login
    * page, and log a success while nothing was stored.
+   *
+   * Jarvis's machine routes are matched by whole segment. /api/jarvis-token
+   * shares the prefix but serves a signed-in person, so it takes the ordinary
+   * check below like any page.
    */
   if (
     path.startsWith("/api/cron") ||
     path.startsWith("/api/webhook") ||
     path.startsWith("/api/ingest") ||
-    path.startsWith("/api/jarvis")
+    path === "/api/jarvis" ||
+    path.startsWith("/api/jarvis/")
   ) {
     return NextResponse.next();
   }
