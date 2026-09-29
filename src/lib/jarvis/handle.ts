@@ -1,6 +1,9 @@
 import "server-only";
 
 import type { AskFunctionTool } from "@/lib/analyst/tools";
+import type { Role } from "@/lib/roles";
+
+import { mayPost, pagesFor, toolsFor } from "./authority";
 
 /**
  * What Jarvis is allowed to ask for, and what it gets back.
@@ -24,9 +27,16 @@ import type { AskFunctionTool } from "@/lib/analyst/tools";
  * with JARVIS_ACTIONS_ENABLED off there is no branch below that reaches a send,
  * and with it on they still take a POST. Both are properties a test checks,
  * which is the reason to spend branches on them rather than comments.
+ *
+ * Every request also says who is talking to Jarvis (X-Jarvis-Role, read from
+ * a LiveKit token the dashboard signed). A department gets only the tools its
+ * own screens show, see authority.ts, and the queries run as that department,
+ * so what they return is cut the way the screens cut it.
  */
 
 export type JarvisRequest = {
+  /** Who is talking to Jarvis. Null when the header is missing or unknown. */
+  role: Role | null;
   tool: string;
   method: string;
   args: Record<string, unknown>;
@@ -41,10 +51,17 @@ export type JarvisDeps = {
   /** The tools Jarvis may call. The route passes ASK_TOOLS, never CHAT_TOOLS. */
   readToolNames: () => string[];
   clampArgs: (tool: string, raw: unknown) => Record<string, unknown>;
-  runTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+  runTool: (name: string, args: Record<string, unknown>, role: Role) => Promise<unknown>;
   /** JARVIS_ACTIONS_ENABLED. Off, or no runner, means every action is 501. */
   actionsEnabled?: boolean;
   runAction?: (tool: ActionTool, args: Record<string, unknown>) => Promise<JarvisResponse>;
+  /** JARVIS_POSTING_ROLES: who may post to the team chat. The CEO when unset. */
+  postingRoles?: readonly Role[];
+};
+
+const NO_CALLER: JarvisResponse = {
+  status: 403,
+  body: { ok: false, error: "X-Jarvis-Role is required: say which department is asking." },
 };
 
 /**
@@ -125,9 +142,19 @@ export function argsFromBody(
  */
 async function dispatchAction(
   tool: ActionTool,
+  role: Role,
   request: JarvisRequest,
   deps: JarvisDeps,
 ): Promise<JarvisResponse> {
+  if (!mayPost(role, deps.postingRoles ?? ["ceo"])) {
+    return {
+      status: 403,
+      body: {
+        ok: false,
+        error: `${tool} is not available to ${role}: only the CEO posts to the team chat.`,
+      },
+    };
+  }
   if (!deps.actionsEnabled || !deps.runAction) {
     return {
       status: 501,
@@ -151,27 +178,38 @@ export async function handleJarvis(
   request: JarvisRequest,
   deps: JarvisDeps,
 ): Promise<JarvisResponse> {
-  const { tool } = request;
+  const { tool, role } = request;
+  if (!role) return NO_CALLER;
 
   if ((ACTION_TOOLS as readonly string[]).includes(tool)) {
-    return dispatchAction(tool as ActionTool, request, deps);
+    return dispatchAction(tool as ActionTool, role, request, deps);
   }
 
   const readable = deps.readToolNames();
+  const allowed = toolsFor(role, readable);
   if (!readable.includes(tool)) {
     // The valid names go back with the refusal. The caller is a model choosing
     // tool names, and it can correct itself on the next step if it is told
-    // what exists — a bare 400 just gets the same guess again.
+    // what exists — a bare 400 just gets the same guess again. Only the
+    // caller's own tools are listed: naming the rest would leak what exists.
     return {
       status: 400,
-      body: { ok: false, error: `no such tool: ${tool}`, tools: readable },
+      body: { ok: false, error: `no such tool: ${tool}`, tools: allowed },
+    };
+  }
+  if (!allowed.includes(tool)) {
+    // 403, not 400: the tool is real, and Jarvis should say it belongs to
+    // another department's dashboard rather than go looking for a new name.
+    return {
+      status: 403,
+      body: { ok: false, error: `${tool} is not part of the ${role} dashboard`, tools: allowed },
     };
   }
 
   const args = deps.clampArgs(tool, coerceNumericStrings(request.args));
 
   try {
-    const data = await deps.runTool(tool, args);
+    const data = await deps.runTool(tool, args, role);
     // The arguments come back as used, not as asked for. Jarvis says the
     // period out loud, and after a clamp the two are different numbers.
     return { status: 200, body: { ok: true, tool, args, data } };
@@ -203,6 +241,8 @@ export type JarvisCatalogue = {
   ok: true;
   tools: JarvisToolEntry[];
   actions: { enabled: boolean; tools: string[] };
+  /** The dashboard pages Jarvis may put on this caller's screen. */
+  pages: string[];
 };
 
 /**
@@ -220,16 +260,27 @@ export type JarvisCatalogue = {
  */
 export function jarvisCatalogue(
   tools: readonly AskFunctionTool[],
-  flags: { actionsEnabled: boolean },
+  flags: { actionsEnabled: boolean; role: Role | null; postingRoles?: readonly Role[] },
 ): JarvisResponse {
+  const { role } = flags;
+  if (!role) return NO_CALLER;
+
+  const allowed = toolsFor(
+    role,
+    tools.map((tool) => tool.name),
+  );
   const body: JarvisCatalogue = {
     ok: true,
-    tools: tools.map((tool) => ({
+    tools: tools.filter((tool) => allowed.includes(tool.name)).map((tool) => ({
       name: tool.name,
       description: tool.description ?? "",
       parameters: tool.parameters ? { ...tool.parameters } : { type: "object", properties: {} },
     })),
-    actions: { enabled: flags.actionsEnabled, tools: [...ACTION_TOOLS] },
+    actions: {
+      enabled: flags.actionsEnabled && mayPost(role, flags.postingRoles ?? ["ceo"]),
+      tools: [...ACTION_TOOLS],
+    },
+    pages: pagesFor(role),
   };
   return { status: 200, body };
 }

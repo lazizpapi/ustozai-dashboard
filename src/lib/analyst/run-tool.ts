@@ -26,6 +26,7 @@ import {
 import { saveAgentFact } from "@/lib/db/persist";
 import { isMetricKey, visibleKeys } from "@/lib/metric-keys";
 import type { Period } from "@/lib/growth";
+import type { Role } from "@/lib/roles";
 
 /**
  * Run one tool. The only place a tool name becomes a query, and the only place
@@ -48,7 +49,7 @@ import type { Period } from "@/lib/growth";
 export async function runTool(
   name: string,
   args: Record<string, unknown>,
-  context: { surface?: "telegram" | "chat" } = {},
+  context: { surface?: "telegram" | "chat"; role?: Role } = {},
 ): Promise<unknown> {
   switch (name) {
     case "get_downloads": {
@@ -160,15 +161,15 @@ export async function runTool(
 
     case "get_metric_notes": {
       /*
-       * Deliberately unfiltered by role. Only two things reach this switch: the
-       * dashboard chat, which /api/ask already refuses to anyone but the CEO,
-       * and the Telegram group, which receives the takings in its daily alert
-       * and can ask for them directly. Adding a role filter here would suggest
-       * a third caller exists that has not been checked.
+       * Three callers reach this switch. The dashboard chat, which /api/ask
+       * refuses to anyone but the CEO, and the Telegram group, which receives
+       * the takings in its daily alert, pass no role and read every note.
+       * Jarvis passes the department on the call, so a marketing call never
+       * hears a revenue note: the line visibleKeys draws for the screens.
        */
       const metric = args.metric;
       return noteHistory(25, {
-        keys: visibleKeys("ceo"),
+        keys: visibleKeys(context.role ?? "ceo"),
         days: args.days as number,
         metricKey: isMetricKey(metric) ? metric : undefined,
       });

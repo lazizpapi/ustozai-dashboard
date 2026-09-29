@@ -37,7 +37,7 @@ const KEY_CONTEXT = "ustozai-dashboard:session:v1";
 
 /** Where each role's password lives. The CEO keeps the original variable so
  *  that adding departments does not sign the existing team out. */
-const PASSWORD_VARS: Record<Role, string> = {
+export const PASSWORD_VARS: Record<Role, string> = {
   ceo: "DASHBOARD_PASSWORD",
   marketing: "DASHBOARD_PASSWORD_MARKETING",
   product: "DASHBOARD_PASSWORD_PRODUCT",

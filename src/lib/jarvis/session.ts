@@ -1,6 +1,6 @@
 import "server-only";
 
-import { SESSION_COOKIE, type SessionScope } from "@/lib/gate";
+import { PASSWORD_VARS, SESSION_COOKIE, type SessionScope } from "@/lib/gate";
 import type { Role } from "@/lib/roles";
 
 import type { JarvisResponse } from "./handle";
@@ -15,10 +15,11 @@ import type { JarvisResponse } from "./handle";
  * Three limits keep this narrow. The switch (JARVIS_SESSIONS_ENABLED) is off
  * by default, so the laptop's key signs nobody in until the owner says so. The
  * session lasts thirty minutes rather than a person's thirty days. And it is
- * signed under the CEO password like any other CEO session, so changing that
- * password ends Jarvis's sessions along with everyone else's. It is marked as
- * Jarvis's inside the signature, so the dashboard's chat refuses it: see
- * mayUseChat in gate.ts.
+ * signed for the department on the call, under that department's password
+ * like any of its sessions, so a marketing call opens only marketing's pages
+ * and changing that password ends Jarvis's sessions along with everyone
+ * else's. It is marked as Jarvis's inside the signature, so the dashboard's
+ * chat refuses it: see mayUseChat in gate.ts.
  *
  * Pure, with the signer injected, so the tests need neither the environment
  * nor a clock.
@@ -35,9 +36,11 @@ export type JarvisSessionDeps = {
   enabled: boolean;
   issue: (role: Role, now: number, maxAgeSeconds: number, scope: SessionScope) => string | null;
   now: number;
+  /** The department on the call, from X-Jarvis-Role. */
+  role: Role;
 };
 
-export function mintJarvisSession({ enabled, issue, now }: JarvisSessionDeps): JarvisResponse {
+export function mintJarvisSession({ enabled, issue, now, role }: JarvisSessionDeps): JarvisResponse {
   if (!enabled) {
     return {
       status: 501,
@@ -45,11 +48,14 @@ export function mintJarvisSession({ enabled, issue, now }: JarvisSessionDeps): J
     };
   }
 
-  const token = issue("ceo", now, JARVIS_SESSION_SECONDS, "jarvis");
+  const token = issue(role, now, JARVIS_SESSION_SECONDS, "jarvis");
   if (!token) {
     return {
       status: 503,
-      body: { ok: false, error: "No CEO password is configured (DASHBOARD_PASSWORD), so there is nothing to sign with." },
+      body: {
+        ok: false,
+        error: `No ${role} password is configured (${PASSWORD_VARS[role]}), so there is nothing to sign with.`,
+      },
     };
   }
 

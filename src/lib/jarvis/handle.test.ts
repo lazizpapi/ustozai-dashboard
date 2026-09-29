@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ASK_TOOLS, toolNames, type AskFunctionTool } from "@/lib/analyst/tools";
+import { pagesFor, toolsFor } from "./authority";
 import {
   ACTION_TOOLS,
   argsFromBody,
@@ -49,7 +50,7 @@ function deps(overrides: Partial<JarvisDeps> = {}): JarvisDeps & { calls: unknow
 describe("dispatch", () => {
   it("runs a read tool and returns its data", async () => {
     const d = deps();
-    const result = await handleJarvis({ tool: "get_revenue", method: "GET", args: {} }, d);
+    const result = await handleJarvis({ role: "ceo", tool: "get_revenue", method: "GET", args: {} }, d);
 
     expect(result.status).toBe(200);
     expect(result.body).toMatchObject({ ok: true, tool: "get_revenue" });
@@ -61,7 +62,7 @@ describe("dispatch", () => {
     // request said a hundred thousand days and the query ran over 365, the
     // spoken sentence must be able to say 365.
     const result = await handleJarvis(
-      { tool: "get_revenue", method: "GET", args: { days: 100000 } },
+      { role: "ceo", tool: "get_revenue", method: "GET", args: { days: 100000 } },
       deps(),
     );
     expect(result.body).toMatchObject({ args: { days: 365 } });
@@ -69,7 +70,7 @@ describe("dispatch", () => {
 
   it("refuses a tool it does not know, and says which exist", async () => {
     const d = deps();
-    const result = await handleJarvis({ tool: "get_profits", method: "GET", args: {} }, d);
+    const result = await handleJarvis({ role: "ceo", tool: "get_profits", method: "GET", args: {} }, d);
 
     expect(result.status).toBe(400);
     expect(result.body).toMatchObject({ tools: ["get_revenue", "get_reviews", "get_growth"] });
@@ -81,7 +82,7 @@ describe("dispatch", () => {
     // would read "revenue is nothing" aloud, which is a different sentence from
     // "I cannot reach the dashboard".
     const result = await handleJarvis(
-      { tool: "get_revenue", method: "GET", args: {} },
+      { role: "ceo", tool: "get_revenue", method: "GET", args: {} },
       deps({
         runTool: async () => {
           throw new Error("supabase unreachable");
@@ -94,20 +95,87 @@ describe("dispatch", () => {
   });
 });
 
+describe("who is asking", () => {
+  const readable = ["get_revenue", "get_reviews", "get_growth"];
+
+  it("refuses a request that does not say who is asking", async () => {
+    const d = deps();
+    const result = await handleJarvis({ role: null, tool: "get_growth", method: "GET", args: {} }, d);
+
+    expect(result.status).toBe(403);
+    expect(d.calls).toEqual([]);
+  });
+
+  it("refuses a read outside the caller's department and names what they may use", async () => {
+    const d = deps();
+    const result = await handleJarvis(
+      { role: "marketing", tool: "get_revenue", method: "GET", args: {} },
+      d,
+    );
+
+    expect(result.status).toBe(403);
+    expect(result.body).toMatchObject({ ok: false, tools: toolsFor("marketing", readable) });
+    expect(d.calls).toEqual([]);
+  });
+
+  it("still answers 400 for a tool nobody has, listing only the caller's tools", async () => {
+    const result = await handleJarvis(
+      { role: "marketing", tool: "get_profits", method: "GET", args: {} },
+      deps(),
+    );
+    expect(result.status).toBe(400);
+    expect(result.body).toMatchObject({ tools: toolsFor("marketing", readable) });
+  });
+
+  it("runs the query as the caller, so what it returns can be cut to their department", async () => {
+    const asked: unknown[] = [];
+    const d = deps({ runTool: async (_name, _args, role) => (asked.push(role), {}) });
+    await handleJarvis({ role: "product", tool: "get_growth", method: "GET", args: {} }, d);
+    expect(asked).toEqual(["product"]);
+  });
+
+  it("refuses a department's post even with actions switched on", async () => {
+    const sent: unknown[][] = [];
+    const d = deps({
+      actionsEnabled: true,
+      runAction: async (...args) => (sent.push(args), { status: 200, body: {} }),
+    });
+    const result = await handleJarvis(
+      { role: "marketing", tool: "send_telegram", method: "POST", args: { text: "hi" } },
+      d,
+    );
+    expect(result.status).toBe(403);
+    expect(sent).toEqual([]);
+  });
+
+  it("lets a department post once it is named as a poster", async () => {
+    const d = deps({
+      actionsEnabled: true,
+      postingRoles: ["ceo", "marketing"],
+      runAction: async () => ({ status: 200, body: { ok: true, sent: true } }),
+    });
+    const result = await handleJarvis(
+      { role: "marketing", tool: "send_telegram", method: "POST", args: { text: "hi" } },
+      d,
+    );
+    expect(result.status).toBe(200);
+  });
+});
+
 describe("arguments arriving from a query string", () => {
   it("reads a numeric parameter as a number", async () => {
     // A GET gives every value as a string, and the clamp only recognises
     // numbers. Without this, ?days=7 would silently fall back to 30 and Jarvis
     // would answer a question nobody asked.
     const d = deps();
-    await handleJarvis({ tool: "get_revenue", method: "GET", args: { days: "7" } }, d);
+    await handleJarvis({ role: "ceo", tool: "get_revenue", method: "GET", args: { days: "7" } }, d);
     expect(d.calls).toEqual([["get_revenue", { days: 7 }]]);
   });
 
   it("leaves a genuinely textual parameter alone", async () => {
     const d = deps();
     await handleJarvis(
-      { tool: "get_growth", method: "GET", args: { metric: "telegram", period: "week" } },
+      { role: "ceo", tool: "get_growth", method: "GET", args: { metric: "telegram", period: "week" } },
       d,
     );
     expect(d.calls).toEqual([["get_growth", { metric: "telegram", period: "week" }]]);
@@ -117,7 +185,7 @@ describe("arguments arriving from a query string", () => {
     // Number("") is 0, which would clamp to 1 day and quietly answer about
     // yesterday when the caller meant to omit the parameter.
     const d = deps();
-    await handleJarvis({ tool: "get_revenue", method: "GET", args: { days: "" } }, d);
+    await handleJarvis({ role: "ceo", tool: "get_revenue", method: "GET", args: { days: "" } }, d);
     expect(d.calls).toEqual([["get_revenue", { days: 30 }]]);
   });
 });
@@ -133,7 +201,7 @@ describe("the write boundary", () => {
 
   it("refuses remember_fact even though runTool would happily perform it", async () => {
     const d = deps();
-    const result = await handleJarvis({ tool: "remember_fact", method: "POST", args: {} }, d);
+    const result = await handleJarvis({ role: "ceo", tool: "remember_fact", method: "POST", args: {} }, d);
 
     expect(result.status).toBe(400);
     expect(d.calls).toEqual([]);
@@ -146,7 +214,7 @@ describe("the write boundary", () => {
     for (const tool of ACTION_TOOLS) {
       const sent: unknown[][] = [];
       const d = deps({ runAction: async (...args) => (sent.push(args), { status: 200, body: {} }) });
-      const result = await handleJarvis({ tool, method: "POST", args: { text: "hi" } }, d);
+      const result = await handleJarvis({ role: "ceo", tool, method: "POST", args: { text: "hi" } }, d);
       expect(result.status).toBe(501);
       expect(d.calls).toEqual([]);
       expect(sent).toEqual([]);
@@ -161,7 +229,7 @@ describe("the write boundary", () => {
       actionsEnabled: true,
       runAction: async (...args) => (sent.push(args), { status: 200, body: {} }),
     });
-    const result = await handleJarvis({ tool: "send_report", method: "GET", args: {} }, d);
+    const result = await handleJarvis({ role: "ceo", tool: "send_report", method: "GET", args: {} }, d);
     expect(result.status).toBe(405);
     expect(sent).toEqual([]);
   });
@@ -173,7 +241,7 @@ describe("the write boundary", () => {
       runAction: async (...args) => (sent.push(args), { status: 200, body: { ok: true, sent: true } }),
     });
     const result = await handleJarvis(
-      { tool: "send_telegram", method: "POST", args: { text: "hello" } },
+      { role: "ceo", tool: "send_telegram", method: "POST", args: { text: "hello" } },
       d,
     );
     expect(result).toEqual({ status: 200, body: { ok: true, sent: true } });
@@ -187,7 +255,7 @@ describe("the write boundary", () => {
         throw new Error("database is down");
       },
     });
-    const result = await handleJarvis({ tool: "send_report", method: "POST", args: {} }, d);
+    const result = await handleJarvis({ role: "ceo", tool: "send_report", method: "POST", args: {} }, d);
     expect(result.status).toBe(500);
     expect(result.body).toMatchObject({ ok: false, error: "database is down" });
   });
@@ -223,7 +291,7 @@ describe("the catalogue", () => {
   const readTools = ASK_TOOLS as AskFunctionTool[];
 
   function catalogue(actionsEnabled = false): JarvisCatalogue {
-    const result = jarvisCatalogue(readTools, { actionsEnabled });
+    const result = jarvisCatalogue(readTools, { actionsEnabled, role: "ceo" });
     expect(result.status).toBe(200);
     return result.body as JarvisCatalogue;
   }
@@ -264,7 +332,7 @@ describe("the catalogue", () => {
       parameters: null,
       strict: false,
     } as AskFunctionTool;
-    const body = jarvisCatalogue([bare], { actionsEnabled: false }).body as JarvisCatalogue;
+    const body = jarvisCatalogue([bare], { actionsEnabled: false, role: "ceo" }).body as JarvisCatalogue;
     expect(body.tools[0].parameters).toEqual({ type: "object", properties: {} });
   });
 
@@ -283,6 +351,32 @@ describe("the catalogue", () => {
   it("says actions are off unless the flag turns them on", () => {
     expect(catalogue(false).actions).toEqual({ enabled: false, tools: [...ACTION_TOOLS] });
     expect(catalogue(true).actions).toEqual({ enabled: true, tools: [...ACTION_TOOLS] });
+  });
+});
+
+describe("the catalogue for one caller", () => {
+  const readTools = ASK_TOOLS as AskFunctionTool[];
+
+  it("describes only the tools the caller's department may use", () => {
+    const body = jarvisCatalogue(readTools, { actionsEnabled: false, role: "marketing" })
+      .body as JarvisCatalogue;
+    expect(body.tools.map((tool) => tool.name)).toEqual(toolsFor("marketing", toolNames()));
+  });
+
+  it("reports actions off for a department that may not post, even with the switch on", () => {
+    const body = jarvisCatalogue(readTools, { actionsEnabled: true, role: "product" })
+      .body as JarvisCatalogue;
+    expect(body.actions.enabled).toBe(false);
+  });
+
+  it("lists the pages the caller may be shown", () => {
+    const body = jarvisCatalogue(readTools, { actionsEnabled: false, role: "it" })
+      .body as JarvisCatalogue;
+    expect(body.pages).toEqual(pagesFor("it"));
+  });
+
+  it("refuses to describe anything without a caller", () => {
+    expect(jarvisCatalogue(readTools, { actionsEnabled: false, role: null }).status).toBe(403);
   });
 });
 
