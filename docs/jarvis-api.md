@@ -177,7 +177,7 @@ between calls.
 ```
 
 `args` comes back **as used, not as asked for**. Arguments are clamped
-(`days` to 1–365, `limit` to 1–100), and Jarvis says the period out loud, so
+(`days` to 1 through 365, `limit` to 1 through 100), and Jarvis says the period out loud, so
 after a clamp it needs to know the query really ran over 365 days.
 
 | Status | Meaning |
