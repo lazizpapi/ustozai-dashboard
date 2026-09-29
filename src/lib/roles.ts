@@ -63,6 +63,12 @@ const SECTIONS: Record<Exclude<Role, "ceo">, NavItem[]> = {
   it: [{ href: "/analyst", label: "Analyst" }],
 };
 
+/**
+ * The voice assistant. Open to every department, because Jarvis itself answers
+ * each one only within its own pages: see src/lib/jarvis/authority.ts.
+ */
+const JARVIS: NavItem = { href: "/jarvis", label: "Jarvis" };
+
 /** The CEO's nav, which is also the full list of pages that exist. */
 const ALL: NavItem[] = [
   { href: "/", label: "Overview" },
@@ -75,6 +81,8 @@ const ALL: NavItem[] = [
   { href: "/keywords", label: "Keywords" },
   { href: "/reviews", label: "Reviews" },
   { href: "/comments", label: "Comments" },
+  { href: "/calls", label: "Calls" },
+  JARVIS,
 ];
 
 /**
@@ -99,6 +107,7 @@ export function canSee(role: Role, path: string): boolean {
   if (role === "ceo") return true;
 
   if (path === "/") return true;
+  if (within(path, JARVIS.href)) return true;
   if (within(path, "/audience")) return AUDIENCE_ROLES.includes(role);
   if (within(path, "/tv")) return false;
   // Revenue, MRR and payment providers. Deliberately not reachable by any
@@ -111,5 +120,5 @@ export function canSee(role: Role, path: string): boolean {
 
 export function navFor(role: Role): NavItem[] {
   if (role === "ceo") return ALL;
-  return [{ href: "/", label: "Overview" }, ...SECTIONS[role]];
+  return [{ href: "/", label: "Overview" }, ...SECTIONS[role], JARVIS];
 }

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { serviceClient } from "./client";
+import type { JarvisCall } from "@/lib/jarvis/calls";
 import { localDate } from "@/lib/growth";
 import type {
   ChartApp,
@@ -741,6 +742,15 @@ export async function saveAgentFact(
     .from("agent_facts")
     .insert([{ fact, taught_via: taughtVia }]);
   if (error) throw new Error(`saveAgentFact: ${error.message}`);
+}
+
+/**
+ * The record of one call with Jarvis. See migration 0021; the fields were
+ * checked by parseJarvisCall before they got here.
+ */
+export async function saveJarvisCall(call: JarvisCall): Promise<void> {
+  const { error } = await serviceClient().from("jarvis_calls").insert([call]);
+  if (error) throw new Error(`saveJarvisCall: ${error.message}`);
 }
 
 /** Forgetting, which is a flag rather than a delete. See migration 0020. */

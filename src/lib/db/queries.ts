@@ -2681,3 +2681,42 @@ export async function recentTelegramTurns(
     }))
     .reverse();
 }
+
+export interface JarvisCallRow {
+  id: string;
+  startedAt: string;
+  role: string;
+  callerName: string;
+  durationSeconds: number;
+  toolsUsed: string[];
+  inputTokens: number;
+  outputTokens: number;
+  closeReason: string;
+  summary: string;
+}
+
+/** The most recent calls with Jarvis, newest first. See migration 0021. */
+export async function recentJarvisCalls(limit = 100): Promise<JarvisCallRow[]> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_calls")
+    .select(
+      "id, started_at, role, caller_name, duration_s, tools_used, input_tokens, output_tokens, close_reason, summary",
+    )
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`recentJarvisCalls: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    startedAt: row.started_at as string,
+    role: row.role as string,
+    callerName: row.caller_name as string,
+    durationSeconds: row.duration_s as number,
+    toolsUsed: (row.tools_used as string[] | null) ?? [],
+    inputTokens: row.input_tokens as number,
+    outputTokens: row.output_tokens as number,
+    closeReason: row.close_reason as string,
+    summary: row.summary as string,
+  }));
+}
+

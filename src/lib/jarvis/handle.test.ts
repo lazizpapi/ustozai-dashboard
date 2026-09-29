@@ -344,9 +344,12 @@ describe("the catalogue", () => {
     }
   });
 
-  it("never names a tool 'session', because that path is the session route", () => {
-    expect(catalogue().tools.map((tool) => tool.name)).not.toContain("session");
-  });
+  it.each(["session", "calls"])(
+    "never names a tool %j, because that path is a route of its own",
+    (reserved) => {
+      expect(catalogue().tools.map((tool) => tool.name)).not.toContain(reserved);
+    },
+  );
 
   it("says actions are off unless the flag turns them on", () => {
     expect(catalogue(false).actions).toEqual({ enabled: false, tools: [...ACTION_TOOLS] });

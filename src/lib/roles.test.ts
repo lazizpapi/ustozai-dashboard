@@ -122,3 +122,21 @@ describe("navFor", () => {
     expect(marketing).not.toContain("/analyst");
   });
 });
+
+describe("Jarvis", () => {
+  it("is open to every department, because it answers each within its own pages", () => {
+    for (const role of ROLES) {
+      expect(canSee(role, "/jarvis")).toBe(true);
+      expect(navFor(role).map((item) => item.href)).toContain("/jarvis");
+    }
+  });
+
+  it("keeps the call log to the CEO", () => {
+    expect(canSee("ceo", "/calls")).toBe(true);
+    expect(navFor("ceo").map((item) => item.href)).toContain("/calls");
+    for (const role of ["marketing", "product", "it"] as const) {
+      expect(canSee(role, "/calls")).toBe(false);
+    }
+  });
+});
+
