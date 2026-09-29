@@ -344,7 +344,7 @@ describe("the catalogue", () => {
     }
   });
 
-  it.each(["session", "calls"])(
+  it.each(["session", "calls", "notes", "context", "briefing"])(
     "never names a tool %j, because that path is a route of its own",
     (reserved) => {
       expect(catalogue().tools.map((tool) => tool.name)).not.toContain(reserved);

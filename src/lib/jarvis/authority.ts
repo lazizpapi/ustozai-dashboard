@@ -111,3 +111,11 @@ export const JARVIS_PAGES = [
 export function pagesFor(role: Role): string[] {
   return JARVIS_PAGES.filter((path) => canSee(role, path));
 }
+
+/** How Jarvis and its pages name each department. */
+export const DEPARTMENT_NAMES: Record<Role, string> = {
+  ceo: "CEO",
+  marketing: "Marketing",
+  product: "Product",
+  it: "IT",
+};

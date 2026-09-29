@@ -6,6 +6,7 @@ import { AccessToken } from "livekit-server-sdk";
 import type { SessionScope } from "@/lib/gate";
 import type { Role } from "@/lib/roles";
 
+import { DEPARTMENT_NAMES } from "./authority";
 import type { JarvisResponse } from "./handle";
 
 /**
@@ -42,13 +43,6 @@ const DEFAULT_AGENT_NAME = "my-agent";
 /** How long the token may be used to join. The call itself can run longer. */
 const TOKEN_TTL = "15m";
 
-const LABELS: Record<Role, string> = {
-  ceo: "CEO",
-  marketing: "Marketing",
-  product: "Product",
-  it: "IT",
-};
-
 export function liveKitConfigFrom(env: Record<string, string | undefined>): LiveKitConfig | null {
   const url = env.LIVEKIT_URL?.trim();
   const apiKey = env.LIVEKIT_API_KEY?.trim();
@@ -79,7 +73,7 @@ export async function mintCallToken({ role, scope, config, suffix }: CallTokenIn
     };
   }
 
-  const name = LABELS[role];
+  const name = DEPARTMENT_NAMES[role];
   const identity = `${role}_${suffix}`;
   const roomName = `jarvis_${role}_${suffix}`;
 

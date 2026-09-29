@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, NotebookPen } from 'lucide-react';
 import { ConnectionState } from 'livekit-client';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
@@ -126,6 +126,16 @@ export function JarvisScreen() {
           <ChevronLeft className="text-muted-foreground size-4" aria-hidden="true" />
           Jarvis
         </Link>
+        {/* Leaving the page ends a call, so the way out to notes waits for it to end. */}
+        {!session.isConnected && !connecting && (
+          <Link
+            href="/jarvis/notes"
+            className="text-foreground/75 hover:text-foreground focus-visible:ring-ring/60 ml-auto flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-medium outline-none focus-visible:ring-[3px]"
+          >
+            <NotebookPen className="size-4" aria-hidden="true" />
+            Notes
+          </Link>
+        )}
       </header>
 
       <main

@@ -27,6 +27,9 @@ import { versionBreakdown, type VersionRow } from "@/lib/reviews";
 import { stickiness } from "@/lib/active-users";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import type { AnalystReport } from "@/lib/analyst/schema";
+import type { PastCall } from "@/lib/jarvis/context";
+import type { JarvisNote } from "@/lib/jarvis/notes";
+import type { Role } from "@/lib/roles";
 import type { MetricKey } from "@/lib/metric-keys";
 import {
   countByBucket,
@@ -2693,6 +2696,32 @@ export interface JarvisCallRow {
   outputTokens: number;
   closeReason: string;
   summary: string;
+}
+
+/** A department's open notes and reminders, due ones first. See migration 0022. */
+export async function openJarvisNotes(role: Role, limit = 50): Promise<JarvisNote[]> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_notes")
+    .select("id, text, due_on, created_at")
+    .eq("role", role)
+    .is("cleared_at", null)
+    .order("due_on", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`openJarvisNotes: ${error.message}`);
+  return (data ?? []) as JarvisNote[];
+}
+
+/** A department's latest calls with Jarvis, newest first: when, and the summary. */
+export async function jarvisCallsFor(role: Role, limit = 10): Promise<PastCall[]> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_calls")
+    .select("started_at, summary")
+    .eq("role", role)
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`jarvisCallsFor: ${error.message}`);
+  return (data ?? []) as PastCall[];
 }
 
 /** The most recent calls with Jarvis, newest first. See migration 0021. */

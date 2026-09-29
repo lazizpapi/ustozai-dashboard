@@ -2,6 +2,8 @@ import "server-only";
 
 import { serviceClient } from "./client";
 import type { JarvisCall } from "@/lib/jarvis/calls";
+import type { Role } from "@/lib/roles";
+import type { JarvisNote, NewNote } from "@/lib/jarvis/notes";
 import { localDate } from "@/lib/growth";
 import type {
   ChartApp,
@@ -751,6 +753,35 @@ export async function saveAgentFact(
 export async function saveJarvisCall(call: JarvisCall): Promise<void> {
   const { error } = await serviceClient().from("jarvis_calls").insert([call]);
   if (error) throw new Error(`saveJarvisCall: ${error.message}`);
+}
+
+const NOTE_COLUMNS = "id, text, due_on, created_at";
+
+/** A department's new note or reminder. See migration 0022. */
+export async function saveJarvisNote(role: Role, note: NewNote): Promise<JarvisNote> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_notes")
+    .insert([{ role, text: note.text, due_on: note.due_on }])
+    .select(NOTE_COLUMNS)
+    .single();
+  if (error) throw new Error(`saveJarvisNote: ${error.message}`);
+  return data as JarvisNote;
+}
+
+/**
+ * Clears one open note of this department. False when there is none with that
+ * id here, including a note that belongs to another department.
+ */
+export async function clearJarvisNote(role: Role, id: string): Promise<boolean> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_notes")
+    .update({ cleared_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("role", role)
+    .is("cleared_at", null)
+    .select("id");
+  if (error) throw new Error(`clearJarvisNote: ${error.message}`);
+  return (data ?? []).length > 0;
 }
 
 /** Forgetting, which is a flag rather than a delete. See migration 0020. */
