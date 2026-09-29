@@ -146,6 +146,30 @@ of at most 2000 characters. Every field is checked (`src/lib/jarvis/calls.ts`)
 before it is stored in `jarvis_calls` (migration 0021). The CEO reads the log
 on `/calls`; no department can. Like `session`, `calls` is a reserved name.
 
+## What Jarvis remembers
+
+Three more reserved routes, all bearer plus `X-Jarvis-Role`, all cut to the
+caller's department:
+
+- `GET /api/jarvis/context`: asked as a call begins. The department's last
+  three call summaries, whether this is its first call today in Tashkent
+  time, and the reminders due by today. Either source may fail alone: without
+  the notes there are no reminders, and without the call log Jarvis does not
+  offer the briefing again (`src/lib/jarvis/context.ts`).
+- `GET /api/jarvis/briefing`: the morning briefing, gathered in one request
+  from ordinary read tools and cut by `toolsFor`, so a department's briefing
+  never reaches past its own screens (`src/lib/jarvis/briefing.ts`). One
+  failing part leaves the rest standing.
+- `GET` and `POST /api/jarvis/notes`: a department's notes and reminders
+  (migration 0022). `{ "action": "save", "text", "due_on" }` keeps one, with
+  `due_on` a Tashkent day for a reminder; `{ "action": "clear", "id" }`
+  retires one. Clearing another department's note is 404, the same as a note
+  that never existed (`src/lib/jarvis/notes.ts`). The agent saves or clears
+  only after reading the note back and hearing a yes.
+
+Departments see their notes on `/jarvis/notes`, linked from the call screen
+between calls.
+
 ## Responses
 
 ```json
@@ -227,5 +251,8 @@ same, asking as the CEO.
 | `src/app/api/jarvis-token/route.ts` | Transport for the call token, from the session cookie. |
 | `src/lib/jarvis/calls.ts` | The call record's checks. |
 | `src/app/api/jarvis/calls/route.ts` | Transport for the call record. |
+| `src/lib/jarvis/context.ts`, `briefing.ts`, `notes.ts` | What Jarvis remembers, and their tests. |
+| `src/app/api/jarvis/context/`, `briefing/`, `notes/` | Transport for them. |
+| `src/app/jarvis/notes/page.tsx` | A department's notes and reminders. |
 | `src/app/jarvis/`, `src/components/jarvis/` | The voice screen. |
 | `src/lib/cron-auth.ts` | `isAuthorizedBearer`, shared with cron and ingest. |
