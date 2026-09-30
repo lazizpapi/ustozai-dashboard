@@ -1,5 +1,5 @@
 import { ASK_TOOLS, type AskFunctionTool, clampArgs } from "@/lib/analyst/tools";
-import { EDUCATION_GENRE } from "@/lib/collectors/config";
+import { EDUCATION_GENRE, PLAY_EDUCATION_CATEGORY } from "@/lib/collectors/config";
 import type { ProceedsTotal, RankPoint, ReleaseMarker, Trend } from "@/lib/db/queries";
 import type { VersionRow } from "@/lib/reviews";
 
@@ -16,6 +16,10 @@ import { tashkentDate } from "./context";
  */
 
 const RANK_DAYS = { min: 1, max: 90, fallback: 30 };
+// ownReleases takes the first listing it reads as the starting version, not a
+// release, so it reads a year back and the window asked for is cut after.
+const RELEASE_LOOKBACK_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const RELEASE_DAYS = { min: 1, max: 180, fallback: 90 };
 const PROCEEDS_DAYS = { min: 1, max: 365, fallback: 30 };
 
@@ -34,9 +38,10 @@ function tool(name: string, description: string, parameters: object): AskFunctio
 export const JARVIS_EXTRA_TOOLS: AskFunctionTool[] = [
   tool(
     "get_rank_history",
-    "Our position on the Uzbek Education top free chart, one reading per day, with the latest " +
-      "position against the one before. Use for how the chart rank has moved over days or weeks. " +
-      "A null rank means we were outside the visible chart that day.",
+    "Our position on the Uzbek Education top free chart, one reading per day, and the latest " +
+      "position against one from about a week earlier (spanDays says how far back). Use for how " +
+      "the chart rank has moved over days or weeks. A null rank means we were outside the " +
+      "visible chart that day.",
     {
       type: "object",
       properties: {
@@ -51,8 +56,9 @@ export const JARVIS_EXTRA_TOOLS: AskFunctionTool[] = [
   ),
   tool(
     "get_rating_history",
-    "Our store rating on the App Store and Google Play: the current average, the one before it, " +
-      "and how many ratings there are. Use for whether the rating is going up or down.",
+    "Our store rating on the App Store and Google Play: the current average, one from about a " +
+      "week earlier (spanDays says how far back), and how many ratings there are. Use for " +
+      "whether the rating is going up or down.",
     noArgs,
   ),
   tool(
@@ -158,6 +164,8 @@ export type ExtraDeps = {
   iosProceeds: (days: number) => Promise<ProceedsTotal[]>;
   ownReleases: (days: number) => Promise<ReleaseMarker[]>;
   reviewsByVersion: (days: number) => Promise<VersionRow[]>;
+  /** The clock, for the tests. */
+  now?: () => Date;
 };
 
 export async function runExtraTool(
@@ -168,15 +176,21 @@ export async function runExtraTool(
   switch (name) {
     case "get_rank_history": {
       const platform = args.platform as "ios" | "android";
+      // Each store files Education under its own genre.
+      const genre = platform === "android" ? PLAY_EDUCATION_CATEGORY : EDUCATION_GENRE;
       const [history, latest] = await Promise.all([
-        deps.rankHistory("topfree", "uz", EDUCATION_GENRE, args.days as number, platform),
-        deps.rankTrend("topfree", "uz", EDUCATION_GENRE, platform),
+        deps.rankHistory("topfree", "uz", genre, args.days as number, platform),
+        deps.rankTrend("topfree", "uz", genre, platform),
       ]);
+      const daily = dailyRanks(history);
       return {
         chart: "Education, top free, Uzbekistan",
         platform,
         latest,
-        daily: dailyRanks(history),
+        daily,
+        ...(daily.length === 0
+          ? { note: "No chart readings were collected for that period. That is not off the chart." }
+          : {}),
       };
     }
     case "get_rating_history": {
@@ -198,11 +212,15 @@ export async function runExtraTool(
           };
     }
     case "get_releases": {
-      const [releases, versions] = await Promise.all([
-        deps.ownReleases(args.days as number),
+      const now = deps.now?.() ?? new Date();
+      const since = new Date(now.getTime() - (args.days as number) * DAY_MS)
+        .toISOString()
+        .slice(0, 10);
+      const [all, versions] = await Promise.all([
+        deps.ownReleases(RELEASE_LOOKBACK_DAYS),
         deps.reviewsByVersion(args.days as number),
       ]);
-      return { releases, versions };
+      return { releases: all.filter((release) => release.date >= since), versions };
     }
     case "get_ios_proceeds":
       return {

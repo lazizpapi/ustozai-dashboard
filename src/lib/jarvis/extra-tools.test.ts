@@ -97,12 +97,26 @@ function deps(): ExtraDeps {
 }
 
 describe("runExtraTool", () => {
-  it("reads the Education top free chart in Uzbekistan for the store asked about", async () => {
+  it("reads the Education top free chart in Uzbekistan under each store's own genre", async () => {
+    // Apple files Education as genre 6017; Google Play as "EDUCATION".
     const d = deps();
     const answer = await runExtraTool("get_rank_history", { days: 14, platform: "android" }, d);
-    expect(d.rankHistory).toHaveBeenCalledWith("topfree", "uz", "6017", 14, "android");
-    expect(d.rankTrend).toHaveBeenCalledWith("topfree", "uz", "6017", "android");
+    expect(d.rankHistory).toHaveBeenCalledWith("topfree", "uz", "EDUCATION", 14, "android");
+    expect(d.rankTrend).toHaveBeenCalledWith("topfree", "uz", "EDUCATION", "android");
+    await runExtraTool("get_rank_history", { days: 14, platform: "ios" }, d);
+    expect(d.rankHistory).toHaveBeenLastCalledWith("topfree", "uz", "6017", 14, "ios");
     expect(answer).toMatchObject({ platform: "android", daily: [{ date: "2026-09-28", rank: 14 }] });
+  });
+
+  it("says when there were no chart readings, so it is not heard as off the chart", async () => {
+    const d = deps();
+    d.rankHistory = vi.fn(async () => []);
+    const answer = (await runExtraTool("get_rank_history", { days: 7, platform: "ios" }, d)) as Record<
+      string,
+      unknown
+    >;
+    expect(answer.daily).toEqual([]);
+    expect(String(answer.note)).toMatch(/no chart readings/i);
   });
 
   it("gives both stores' ratings", async () => {
@@ -127,6 +141,20 @@ describe("runExtraTool", () => {
   it("pairs our releases with how each version is rated", async () => {
     const answer = await runExtraTool("get_releases", { days: 90 }, deps());
     expect(answer).toMatchObject({ releases: [{ version: "2.3" }], versions: [] });
+  });
+
+  it("finds a release early in a short window instead of taking it as the baseline", async () => {
+    // ownReleases treats the first listing it reads as the starting point, not
+    // a release, so the window it reads must reach well before the one asked.
+    const d = deps();
+    d.now = () => new Date("2026-09-30T08:00:00Z");
+    d.ownReleases = vi.fn(async () => [
+      { date: "2026-08-16", platform: "android" as const, version: "2.2.8" },
+      { date: "2026-09-27", platform: "ios" as const, version: "2.3.0" },
+    ]);
+    const answer = (await runExtraTool("get_releases", { days: 7 }, d)) as { releases: unknown[] };
+    expect(d.ownReleases).toHaveBeenCalledWith(365);
+    expect(answer.releases).toEqual([{ date: "2026-09-27", platform: "ios", version: "2.3.0" }]);
   });
 
   it("explains an empty proceeds list rather than reporting no money", async () => {
