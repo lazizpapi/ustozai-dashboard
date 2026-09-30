@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 
 interface StartButtonProps {
   connecting: boolean;
+  /** No calls can start, such as when the month's free minutes are spent. */
+  disabled?: boolean;
   /** Take keyboard focus when shown, e.g. after a call ends. */
   focusOnMount?: boolean;
   onStart: () => void;
@@ -15,6 +17,7 @@ interface StartButtonProps {
 /** The one thing to do on the welcome screen. */
 export function StartButton({
   connecting,
+  disabled = false,
   focusOnMount = false,
   onStart,
   className,
@@ -30,9 +33,9 @@ export function StartButton({
       ref={ref}
       type="button"
       onClick={onStart}
-      disabled={connecting}
+      disabled={connecting || disabled}
       className={cn(
-        'bg-primary text-primary-foreground focus-visible:ring-ring/60 shadow-primary/25 inline-flex h-12 items-center justify-center gap-2 rounded-full px-8 text-[15px] font-semibold shadow-[0_8px_40px_-8px] transition-[filter,scale,opacity] outline-none hover:brightness-110 focus-visible:ring-[3px] active:scale-[0.98] disabled:opacity-80',
+        'bg-primary text-primary-foreground focus-visible:ring-ring/60 shadow-primary/25 inline-flex h-12 items-center justify-center gap-2 rounded-full px-8 text-[15px] font-semibold shadow-[0_8px_40px_-8px] transition-[filter,scale,opacity] outline-none hover:brightness-110 focus-visible:ring-[3px] active:scale-[0.98] disabled:opacity-60',
         className
       )}
     >

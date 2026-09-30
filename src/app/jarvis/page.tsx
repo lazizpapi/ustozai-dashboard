@@ -1,5 +1,6 @@
 import { requireAccess } from "@/app/load";
 import { JarvisApp } from "@/components/jarvis/app";
+import { readMonthUsage } from "@/lib/jarvis/month-budget";
 
 export const dynamic = "force-dynamic";
 
@@ -12,5 +13,6 @@ export const dynamic = "force-dynamic";
  */
 export default async function JarvisPage() {
   await requireAccess("/jarvis");
-  return <JarvisApp />;
+  // The free plan's minutes: the call screen says when they run low.
+  return <JarvisApp budget={await readMonthUsage()} />;
 }

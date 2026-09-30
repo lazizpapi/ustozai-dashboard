@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useAgent, useSessionContext, useSessionMessages } from '@livekit/components-react';
 import { StartAudioButton } from '@/components/jarvis/start-audio-button';
 import { CallDock } from '@/components/jarvis/call-dock';
+import { CallerChoice } from '@/components/jarvis/caller-choice';
 import { JarvisOrb } from '@/components/jarvis/jarvis-orb';
 import { JarvisStage } from '@/components/jarvis/jarvis-stage';
 import { ScreenPanel } from '@/components/jarvis/screen-panel';
@@ -17,6 +18,7 @@ import { StatusLine } from '@/components/jarvis/status-line';
 import { TranscriptPanel } from '@/components/jarvis/transcript-panel';
 import { useJarvisActivity } from '@/components/jarvis/hooks/use-jarvis-activity';
 import { useJarvisScreen } from '@/components/jarvis/hooks/use-jarvis-screen';
+import { useLongWait } from '@/components/jarvis/hooks/use-long-wait';
 import { useMediaQuery } from '@/components/jarvis/hooks/use-media-query';
 import { useOrbAmplitude } from '@/components/jarvis/hooks/use-orb-amplitude';
 import { useAgentErrors } from '@/components/jarvis/hooks/useAgentErrors';
@@ -30,6 +32,13 @@ import {
 } from '@/lib/jarvis-ui/orb-state';
 import { cn } from '@/lib/utils';
 import { startErrorMessage } from '@/lib/jarvis-ui/start-error';
+import type { CallerPrefs } from '@/lib/jarvis-ui/caller-prefs';
+import {
+  COLD_START_AFTER_MS,
+  isWaitingForJarvis,
+  statusWhileWaiting,
+} from '@/lib/jarvis-ui/waiting';
+import { type MonthUsage, budgetNotice } from '@/lib/jarvis/budget';
 
 const ORB_SPRING = { type: 'spring', stiffness: 170, damping: 26 } as const;
 /** How long the orb shows how a call ended: a goodbye, or a failure. */
@@ -54,11 +63,19 @@ function useCallOutcome(current: CallOutcome | null): CallOutcome | null {
   return current ?? held;
 }
 
+interface JarvisScreenProps {
+  /** How Jarvis greets this caller, chosen on the welcome screen. */
+  prefs: CallerPrefs;
+  onPrefsChange: (next: CallerPrefs) => void;
+  /** This month's free minutes, or null when they could not be counted. */
+  budget: MonthUsage | null;
+}
+
 /**
  * The whole app: one stage where the orb stays put while the call starts and
  * ends, and moves to the top when the transcript or Jarvis's screen opens.
  */
-export function JarvisScreen() {
+export function JarvisScreen({ prefs, onPrefsChange, budget }: JarvisScreenProps) {
   const session = useSessionContext();
   const agent = useAgent();
   const { messages } = useSessionMessages(session);
@@ -98,6 +115,13 @@ export function JarvisScreen() {
       ? GOODBYE_VIEW
       : orbViewFor(shownOutcome === 'failed' ? 'failed' : liveState);
   const amplitude = useOrbAmplitude(view.amplitude);
+  // The free plan's agent sleeps between calls: a long wake-up is said aloud.
+  const longWait = useLongWait(
+    (session.isConnected || connecting) && isWaitingForJarvis(liveState),
+    COLD_START_AFTER_MS
+  );
+  const status = statusWhileWaiting(liveState, longWait ? COLD_START_AFTER_MS : 0, view.status);
+  const notice = budget ? budgetNotice(budget) : null;
   const docked = session.isConnected && (chatOpen || screenShown);
 
   // The orb is always drawn at stage size and scaled down when docked, so the
@@ -162,7 +186,10 @@ export function JarvisScreen() {
             </motion.div>
           </motion.div>
           <motion.div layout={reduceMotion ? false : 'position'} transition={ORB_SPRING}>
-            <StatusLine text={activity.label ?? view.status} announce={activity.label !== null} />
+            <StatusLine
+              text={activity.label ?? status}
+              announce={activity.label !== null || status !== view.status}
+            />
           </motion.div>
         </section>
 
@@ -200,7 +227,20 @@ export function JarvisScreen() {
               onEnd={session.end}
             />
           ) : (
-            <StartButton connecting={connecting} onStart={start} focusOnMount={returnFocus} />
+            <>
+              <StartButton
+                connecting={connecting}
+                disabled={budget?.spent === true}
+                onStart={start}
+                focusOnMount={returnFocus}
+              />
+              {!connecting && <CallerChoice prefs={prefs} onChange={onPrefsChange} />}
+              {notice && !connecting && (
+                <p role="status" className="text-muted-foreground max-w-xs text-center text-sm">
+                  {notice}
+                </p>
+              )}
+            </>
           )}
         </footer>
       </main>

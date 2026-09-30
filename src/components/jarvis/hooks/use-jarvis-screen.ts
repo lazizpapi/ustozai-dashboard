@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Room } from 'livekit-client';
+import { staleUrls } from '@/lib/jarvis-ui/picture-urls';
 import { SCREEN_TOPIC, type ScreenCaption, readScreen } from '@/lib/jarvis-ui/screen';
 
 export type JarvisPicture = ScreenCaption & { id: string; src: string };
@@ -10,10 +11,12 @@ export type JarvisPicture = ScreenCaption & { id: string; src: string };
  * The latest picture of Jarvis's browser in this call, or null.
  *
  * Only the agent's pictures count. Each picture lives as an object URL, freed
- * once a newer one, or the end of the call, replaces it.
+ * once a newer one, or the end of the call, replaces it, including one that
+ * arrived in the same render as the next and was never shown.
  */
 export function useJarvisScreen(room: Room, connected: boolean): JarvisPicture | null {
   const [picture, setPicture] = useState<JarvisPicture | null>(null);
+  const made = useRef(new Set<string>());
   // A call's pictures end with it. Adjusted during render, not in an effect.
   if (!connected && picture !== null) setPicture(null);
 
@@ -29,7 +32,9 @@ export function useJarvisScreen(room: Room, connected: boolean): JarvisPicture |
         .then((chunks) => {
           if (!live) return;
           const blob = new Blob(chunks as BlobPart[], { type: mimeType });
-          setPicture({ ...caption, id, src: URL.createObjectURL(blob) });
+          const src = URL.createObjectURL(blob);
+          made.current.add(src);
+          setPicture({ ...caption, id, src });
         })
         .catch((error: unknown) => console.warn("Could not read Jarvis's screen:", error));
     });
@@ -39,11 +44,21 @@ export function useJarvisScreen(room: Room, connected: boolean): JarvisPicture |
     };
   }, [room]);
 
-  const src = picture?.src;
+  const src = picture?.src ?? null;
   useEffect(() => {
-    if (!src) return;
-    return () => URL.revokeObjectURL(src);
+    for (const url of staleUrls(made.current, src)) {
+      URL.revokeObjectURL(url);
+      made.current.delete(url);
+    }
   }, [src]);
+
+  useEffect(() => {
+    const urls = made.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
+    };
+  }, []);
 
   return picture;
 }
