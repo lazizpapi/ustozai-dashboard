@@ -143,6 +143,26 @@ describe("runExtraTool", () => {
     expect(answer).toMatchObject({ releases: [{ version: "2.3" }], versions: [] });
   });
 
+  it("names each version once, on the day it was first seen, when a listing flip-flops", async () => {
+    // Seen on 24 September 2026: the App Store listing swung between 2.3.0 and
+    // 2.2.9 several times in one day, which reads back as five releases.
+    const d = deps();
+    d.now = () => new Date("2026-09-30T08:00:00Z");
+    d.ownReleases = vi.fn(async () => [
+      { date: "2026-09-14", platform: "ios" as const, version: "2.2.9" },
+      { date: "2026-09-24", platform: "ios" as const, version: "2.3.0" },
+      { date: "2026-09-24", platform: "ios" as const, version: "2.2.9" },
+      { date: "2026-09-24", platform: "ios" as const, version: "2.3.0" },
+      { date: "2026-09-25", platform: "android" as const, version: "2.3.0" },
+    ]);
+    const answer = (await runExtraTool("get_releases", { days: 30 }, d)) as { releases: unknown[] };
+    expect(answer.releases).toEqual([
+      { date: "2026-09-14", platform: "ios", version: "2.2.9" },
+      { date: "2026-09-24", platform: "ios", version: "2.3.0" },
+      { date: "2026-09-25", platform: "android", version: "2.3.0" },
+    ]);
+  });
+
   it("finds a release early in a short window instead of taking it as the baseline", async () => {
     // ownReleases treats the first listing it reads as the starting point, not
     // a release, so the window it reads must reach well before the one asked.

@@ -145,6 +145,23 @@ export function dailyRanks(points: readonly RankPoint[]): { date: string; rank: 
     .map(([date, { rank }]) => ({ date, rank }));
 }
 
+/**
+ * Each version once per store, on the day it was first seen. A listing can
+ * swing between two builds several times in a day while a release rolls out,
+ * which would otherwise read back as a string of releases.
+ */
+function firstSightings(releases: readonly ReleaseMarker[]): ReleaseMarker[] {
+  const seen = new Set<string>();
+  return [...releases]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .filter((release) => {
+      const key = `${release.platform}:${release.version}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 export type ExtraDeps = {
   rankHistory: (
     chartType: string,
@@ -220,7 +237,7 @@ export async function runExtraTool(
         deps.ownReleases(RELEASE_LOOKBACK_DAYS),
         deps.reviewsByVersion(args.days as number),
       ]);
-      return { releases: all.filter((release) => release.date >= since), versions };
+      return { releases: firstSightings(all).filter((r) => r.date >= since), versions };
     }
     case "get_ios_proceeds":
       return {
