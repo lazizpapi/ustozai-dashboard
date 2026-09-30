@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { callLength, parseJarvisCall, recordJarvisCall, type JarvisCall } from "./calls";
+import { callLength, parseJarvisCall, recordJarvisCall, tokenCount, unusualEnding, type JarvisCall } from "./calls";
 
 /**
  * The record Jarvis leaves when a call ends.
@@ -100,3 +100,26 @@ describe("callLength", () => {
   });
 });
 
+
+describe("how a call ended, when it matters", () => {
+  it("names the endings worth noticing", () => {
+    expect(unusualEnding("time_limit")).toBe("Reached the time limit");
+    expect(unusualEnding("second_person")).toBe("Someone else joined");
+    expect(unusualEnding("error")).toBe("Ended by an error");
+  });
+
+  it("says nothing about an ordinary goodbye or hang-up", () => {
+    for (const reason of ["", "user_initiated", "participant_disconnected", "job_shutdown", "task_completed"]) {
+      expect(unusualEnding(reason)).toBeNull();
+    }
+  });
+});
+
+describe("tokens", () => {
+  it("reads large counts the way the page shows them", () => {
+    expect(tokenCount(0)).toBe("0");
+    expect(tokenCount(950)).toBe("950");
+    expect(tokenCount(12_400)).toBe("12.4k");
+    expect(tokenCount(1_250_000)).toBe("1.3M");
+  });
+});

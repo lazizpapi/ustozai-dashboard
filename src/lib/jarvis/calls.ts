@@ -71,3 +71,21 @@ export function callLength(seconds: number): string {
   return `${rest} s`;
 }
 
+
+const UNUSUAL_ENDINGS: Record<string, string> = {
+  time_limit: "Reached the time limit",
+  second_person: "Someone else joined",
+  error: "Ended by an error",
+};
+
+/** A label for a call that ended in a way worth noticing, or null for a goodbye or hang-up. */
+export function unusualEnding(closeReason: string): string | null {
+  return UNUSUAL_ENDINGS[closeReason] ?? null;
+}
+
+/** A token count at a glance: 950, 12.4k, 1.3M. */
+export function tokenCount(tokens: number): string {
+  if (tokens < 1000) return String(tokens);
+  if (tokens < 1_000_000) return `${(tokens / 1000).toFixed(1)}k`;
+  return `${(tokens / 1_000_000).toFixed(1)}M`;
+}

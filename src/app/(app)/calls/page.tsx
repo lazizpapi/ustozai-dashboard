@@ -11,7 +11,9 @@ import {
 import { load } from "@/app/load";
 import { recentJarvisCalls } from "@/lib/db/queries";
 import { timeAgo } from "@/lib/format";
-import { callLength } from "@/lib/jarvis/calls";
+import { FREE_MINUTES, type MonthUsage } from "@/lib/jarvis/budget";
+import { callLength, tokenCount, unusualEnding } from "@/lib/jarvis/calls";
+import { readMonthUsage } from "@/lib/jarvis/month-budget";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +25,20 @@ export const dynamic = "force-dynamic";
  * which department's password signed the caller in, not which person.
  */
 
+/** This month against the free plan's cap, which stops every call once reached. */
+function monthLine(usage: MonthUsage | null): string {
+  if (!usage) return "This month's minutes could not be counted.";
+  const used = `${usage.used.toLocaleString("en-US")} of ${FREE_MINUTES.toLocaleString("en-US")} free minutes used this month`;
+  if (usage.spent) return `${used}. Calls are paused until the 1st.`;
+  if (usage.low) return `${used}. Only ${usage.left} left: calls stop when they run out.`;
+  return `${used}.`;
+}
+
 export default async function CallsPage() {
-  const result = await load(() => recentJarvisCalls(100), "/calls");
+  const [result, usage] = await Promise.all([
+    load(() => recentJarvisCalls(100), "/calls"),
+    readMonthUsage(),
+  ]);
 
   if (result.kind === "unconfigured") {
     return <SetupNotice reason="unconfigured" detail={result.detail} />;
@@ -32,7 +46,6 @@ export default async function CallsPage() {
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
   const calls = result.data;
-  const minutes = Math.round(calls.reduce((sum, call) => sum + call.durationSeconds, 0) / 60);
 
   return (
     <div className="space-y-10">
@@ -40,7 +53,7 @@ export default async function CallsPage() {
         title="Calls with Jarvis"
         note={
           calls.length
-            ? `${calls.length} most recent, ${minutes} minutes in all. LiveKit's free plan covers 1,000 a month.`
+            ? `${monthLine(usage)} Each call lasts at most twenty minutes.`
             : "Each call with Jarvis is listed here when it ends."
         }
       />
@@ -58,6 +71,7 @@ export default async function CallsPage() {
                 <TableHead>Who</TableHead>
                 <TableHead>Length</TableHead>
                 <TableHead>Used</TableHead>
+                <TableHead className="text-right">Tokens</TableHead>
                 <TableHead className="w-1/2">Summary</TableHead>
               </TableRow>
             </TableHeader>
@@ -68,9 +82,20 @@ export default async function CallsPage() {
                   <TableCell>{call.callerName || call.role}</TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {callLength(call.durationSeconds)}
+                    {unusualEnding(call.closeReason) && (
+                      <span className="text-muted-foreground block text-xs">
+                        {unusualEnding(call.closeReason)}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs">
                     {call.toolsUsed.length ? call.toolsUsed.join(", ") : "nothing"}
+                  </TableCell>
+                  <TableCell
+                    className="text-muted-foreground text-right text-xs whitespace-nowrap tabular-nums"
+                    title={`${call.inputTokens.toLocaleString("en-US")} in, ${call.outputTokens.toLocaleString("en-US")} out`}
+                  >
+                    {tokenCount(call.inputTokens + call.outputTokens)}
                   </TableCell>
                   <TableCell className="text-sm whitespace-normal">{call.summary || "No summary."}</TableCell>
                 </TableRow>
