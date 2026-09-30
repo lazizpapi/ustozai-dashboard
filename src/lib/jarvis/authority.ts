@@ -35,6 +35,8 @@ const DEPARTMENT_TOOLS: Record<Exclude<Role, "ceo">, readonly string[]> = {
     "get_chart",
     "get_market",
     "get_metric_notes",
+    // Jarvis's own (extra-tools.ts): the Rankings page's chart history.
+    "get_rank_history",
   ],
   product: [
     "get_downloads",
@@ -44,6 +46,12 @@ const DEPARTMENT_TOOLS: Record<Exclude<Role, "ceo">, readonly string[]> = {
     "get_audience",
     "get_instagram",
     "get_metric_notes",
+    // Jarvis's own (extra-tools.ts): the rating on product's home view,
+    // installs so far today beside Downloads, and releases with the ratings
+    // by version the Reviews page shows. iOS proceeds stay with the CEO.
+    "get_rating_history",
+    "get_installs_today",
+    "get_releases",
   ],
   it: ["get_collector_health", "get_latest_report"],
 };

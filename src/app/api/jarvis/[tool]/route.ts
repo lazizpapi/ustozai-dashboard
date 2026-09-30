@@ -1,9 +1,24 @@
-import { clampArgs, toolNames } from "@/lib/analyst/tools";
 import { isAuthorizedBearer, unauthorized } from "@/lib/cron-auth";
 import { postingRolesFrom, roleFromHeader } from "@/lib/jarvis/authority";
 import { argsFromBody, flagEnabled, handleJarvis } from "@/lib/jarvis/handle";
 import { runTool } from "@/lib/analyst/run-tool";
-import { latestAnalystReport } from "@/lib/db/queries";
+import {
+  androidInstallsSoFarToday,
+  iosProceeds,
+  latestAnalystReport,
+  ownReleases,
+  rankHistory,
+  rankTrend,
+  ratingTrend,
+  reviewsByVersion,
+} from "@/lib/db/queries";
+import {
+  clampJarvisArgs,
+  isExtraTool,
+  jarvisToolNames,
+  runExtraTool,
+  type ExtraDeps,
+} from "@/lib/jarvis/extra-tools";
 import { sendTelegramMessage } from "@/lib/digest/telegram";
 import { runJarvisAction } from "@/lib/jarvis/actions";
 
@@ -20,8 +35,9 @@ export const dynamic = "force-dynamic";
  * happens when one fails all live in src/lib/jarvis/handle.ts, which is where
  * the tests are, because they can run there without a database.
  *
- * ASK_TOOLS, deliberately, not CHAT_TOOLS: the chat's one writing tool
- * (remember_fact) is not reachable from here. The two Telegram actions are,
+ * ASK_TOOLS plus Jarvis's own read tools (extra-tools.ts), deliberately not
+ * CHAT_TOOLS: the chat's one writing tool (remember_fact) is not reachable
+ * from here. The two Telegram actions are,
  * but only while JARVIS_ACTIONS_ENABLED is on, only on a POST, and only for a
  * department named in JARVIS_POSTING_ROLES (the CEO by default).
  *
@@ -35,9 +51,16 @@ function reportUrl(): string | undefined {
   return base ? `${base}/analyst` : undefined;
 }
 
-function toolList(): string[] {
-  return toolNames();
-}
+/** The queries behind Jarvis's own tools, the ones the dashboard pages use. */
+const EXTRA_DEPS: ExtraDeps = {
+  rankHistory,
+  rankTrend,
+  ratingTrend: (platform) => ratingTrend(platform),
+  androidInstallsSoFarToday,
+  iosProceeds,
+  ownReleases,
+  reviewsByVersion,
+};
 
 async function respond(request: Request, tool: string, args: Record<string, unknown>) {
   if (!isAuthorizedBearer(request, process.env.JARVIS_SECRET)) return unauthorized();
@@ -45,9 +68,12 @@ async function respond(request: Request, tool: string, args: Record<string, unkn
   const { status, body } = await handleJarvis(
     { role: roleFromHeader(request.headers.get("x-jarvis-role")), tool, method: request.method, args },
     {
-      readToolNames: toolList,
-      clampArgs,
-      runTool: (name, toolArgs, role) => runTool(name, toolArgs, { role }),
+      readToolNames: jarvisToolNames,
+      clampArgs: clampJarvisArgs,
+      runTool: (name, toolArgs, role) =>
+        isExtraTool(name)
+          ? runExtraTool(name, toolArgs, EXTRA_DEPS)
+          : runTool(name, toolArgs, { role }),
       actionsEnabled: flagEnabled(process.env.JARVIS_ACTIONS_ENABLED),
       postingRoles: postingRolesFrom(process.env.JARVIS_POSTING_ROLES),
       runAction: (action, actionArgs) =>

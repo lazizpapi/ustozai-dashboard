@@ -1,6 +1,6 @@
-import { ASK_TOOLS, type AskFunctionTool } from "@/lib/analyst/tools";
 import { isAuthorizedBearer, unauthorized } from "@/lib/cron-auth";
 import { postingRolesFrom, roleFromHeader } from "@/lib/jarvis/authority";
+import { jarvisTools } from "@/lib/jarvis/extra-tools";
 import { flagEnabled, jarvisCatalogue } from "@/lib/jarvis/handle";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   if (!isAuthorizedBearer(request, process.env.JARVIS_SECRET)) return unauthorized();
 
-  const { status, body } = jarvisCatalogue(ASK_TOOLS as AskFunctionTool[], {
+  const { status, body } = jarvisCatalogue(jarvisTools(), {
     actionsEnabled: flagEnabled(process.env.JARVIS_ACTIONS_ENABLED),
     role: roleFromHeader(request.headers.get("x-jarvis-role")),
     postingRoles: postingRolesFrom(process.env.JARVIS_POSTING_ROLES),

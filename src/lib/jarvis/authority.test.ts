@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { toolNames } from "@/lib/analyst/tools";
 
 import { mayPost, pagesFor, postingRolesFrom, roleFromHeader, toolsFor } from "./authority";
+import { jarvisToolNames } from "./extra-tools";
 
 /**
  * What Jarvis may read for whoever is talking to it.
@@ -59,6 +60,32 @@ describe("toolsFor", () => {
 
   it("never grants a tool the catalogue does not have", () => {
     expect(toolsFor("marketing", ["get_keywords", "get_revenue"])).toEqual(["get_keywords"]);
+  });
+});
+
+describe("Jarvis's own tools", () => {
+  const EVERY = jarvisToolNames();
+
+  it("give marketing the rank history its Rankings page shows", () => {
+    expect(toolsFor("marketing", EVERY)).toContain("get_rank_history");
+    expect(toolsFor("marketing", EVERY)).not.toContain("get_installs_today");
+  });
+
+  it("give product its ratings, today's installs and how each release landed", () => {
+    expect(toolsFor("product", EVERY)).toEqual(
+      expect.arrayContaining(["get_rating_history", "get_installs_today", "get_releases"]),
+    );
+  });
+
+  it("keep iOS proceeds with the CEO", () => {
+    expect(toolsFor("ceo", EVERY)).toContain("get_ios_proceeds");
+    for (const role of ["marketing", "product", "it"] as const) {
+      expect(toolsFor(role, EVERY)).not.toContain("get_ios_proceeds");
+    }
+  });
+
+  it("give IT nothing new", () => {
+    expect(toolsFor("it", EVERY)).toEqual(["get_latest_report", "get_collector_health"]);
   });
 });
 
