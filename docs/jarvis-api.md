@@ -146,6 +146,17 @@ of at most 2000 characters. Every field is checked (`src/lib/jarvis/calls.ts`)
 before it is stored in `jarvis_calls` (migration 0021). The CEO reads the log
 on `/calls`; no department can. Like `session`, `calls` is a reserved name.
 
+## Jarvis's own tools
+
+Beyond the analyst's tools, the catalogue carries five of Jarvis's own
+(`src/lib/jarvis/extra-tools.ts`): `get_rank_history`, `get_rating_history`,
+`get_installs_today`, `get_releases` and `get_ios_proceeds`. They are kept out
+of `ASK_TOOLS`, because the unattended 6 am report runs with that list and
+would change without anyone asking. They read through the same queries the
+pages use, and `authority.ts` grants them like any other tool: rank history
+to marketing, ratings, today's installs and releases to product, and iOS
+proceeds to the CEO only.
+
 ## What Jarvis remembers
 
 Three more reserved routes, all bearer plus `X-Jarvis-Role`, all cut to the
