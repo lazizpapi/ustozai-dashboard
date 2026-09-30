@@ -13,11 +13,17 @@ const listeners = new Set<() => void>();
 let chosenThisVisit: string | undefined;
 
 function subscribe(listener: () => void) {
+  // A choice made in another tab is stored there: read storage again.
+  const fromAnotherTab = (event: StorageEvent) => {
+    if (event.key !== PREFS_KEY) return;
+    chosenThisVisit = undefined;
+    listener();
+  };
   listeners.add(listener);
-  window.addEventListener('storage', listener);
+  window.addEventListener('storage', fromAnotherTab);
   return () => {
     listeners.delete(listener);
-    window.removeEventListener('storage', listener);
+    window.removeEventListener('storage', fromAnotherTab);
   };
 }
 

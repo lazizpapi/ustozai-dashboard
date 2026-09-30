@@ -95,6 +95,13 @@ export function CallerChoice({ prefs, onChange, className }: CallerChoiceProps) 
             id={nameId}
             value={name}
             onChange={(event) => setName(event.target.value)}
+            // A name typed but not confirmed still counts if the caller goes
+            // straight to Talk to Jarvis.
+            onBlur={() => {
+              if (!unusable && personName(typed) !== prefs.name) {
+                onChange({ ...prefs, name: personName(typed) });
+              }
+            }}
             maxLength={40}
             autoComplete="given-name"
             aria-invalid={unusable}

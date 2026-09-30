@@ -46,7 +46,7 @@ export function useJarvisScreen(room: Room, connected: boolean): JarvisPicture |
 
   const src = picture?.src ?? null;
   useEffect(() => {
-    for (const url of staleUrls(made.current, src)) {
+    for (const url of staleUrls([...made.current], src)) {
       URL.revokeObjectURL(url);
       made.current.delete(url);
     }
