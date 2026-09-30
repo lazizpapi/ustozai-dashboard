@@ -34,6 +34,7 @@ export function startErrorMessage(error: unknown, roomConnected: boolean): strin
 
   const status = tokenStatus(error);
   if (status === 401) return 'Your sign-in has ended. Reload the page and sign in again.';
+  if (status === 429) return "Jarvis has used this month's free minutes. They come back on the 1st.";
   if (status === 503) return 'Jarvis is not set up on this dashboard yet. Ask the dashboard owner.';
   if (status !== null) return 'The dashboard could not start a call. Try again in a moment.';
   return 'Jarvis could not connect. Check your internet connection, then try again.';

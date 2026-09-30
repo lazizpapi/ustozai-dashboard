@@ -7,6 +7,8 @@ import type { SessionScope } from "@/lib/gate";
 import type { Role } from "@/lib/roles";
 
 import { DEPARTMENT_NAMES } from "./authority";
+import { monthUsage } from "./budget";
+import { personName } from "./person-name";
 import type { JarvisResponse } from "./handle";
 
 /**
@@ -51,15 +53,52 @@ export function liveKitConfigFrom(env: Record<string, string | undefined>): Live
   return { url, apiKey, apiSecret, agentName: env.JARVIS_AGENT_NAME?.trim() || DEFAULT_AGENT_NAME };
 }
 
+/** The languages a caller can pick on the call screen. */
+export const CALL_LANGUAGES = ["en", "uz", "ru"] as const;
+export type CallLanguage = (typeof CALL_LANGUAGES)[number];
+
+/** What the caller chose on the call screen: never who they are or what they may do. */
+export type CallerWishes = { lang: CallLanguage; person: string };
+
+/**
+ * Read the caller's choices from the token request the call screen sends
+ * (LiveKit's TokenSource posts participant_name and participant_attributes).
+ *
+ * Only the language and a first name are taken; the department still comes
+ * from the session cookie, so a request that claims to be the CEO changes
+ * nothing. Anything that is not a plain name is dropped rather than signed.
+ */
+export function callerWishes(body: unknown): CallerWishes {
+  const request = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const attributes =
+    request.participant_attributes && typeof request.participant_attributes === "object"
+      ? (request.participant_attributes as Record<string, unknown>)
+      : {};
+  const lang = CALL_LANGUAGES.find((code) => code === attributes.lang) ?? "en";
+  return { lang, person: personName(request.participant_name) };
+}
+
 export type CallTokenInput = {
   role: Role | null;
   scope: SessionScope | null;
   config: LiveKitConfig | null;
   /** Random, to keep rooms and identities apart. */
   suffix: string;
+  wishes?: CallerWishes;
+  /** Agent minutes used this month, or null when they could not be counted. */
+  minutesUsed?: number | null;
 };
 
-export async function mintCallToken({ role, scope, config, suffix }: CallTokenInput): Promise<JarvisResponse> {
+const NO_WISHES: CallerWishes = { lang: "en", person: "" };
+
+export async function mintCallToken({
+  role,
+  scope,
+  config,
+  suffix,
+  wishes = NO_WISHES,
+  minutesUsed = null,
+}: CallTokenInput): Promise<JarvisResponse> {
   if (!role) {
     return { status: 401, body: { ok: false, error: "Sign in to talk to Jarvis." } };
   }
@@ -73,15 +112,32 @@ export async function mintCallToken({ role, scope, config, suffix }: CallTokenIn
     };
   }
 
+  // A count that failed never stops a call: LiveKit's own cap still applies.
+  if (minutesUsed !== null && monthUsage(minutesUsed).spent) {
+    return {
+      status: 429,
+      body: {
+        ok: false,
+        error: "Jarvis has used this month's free minutes. They come back on the 1st.",
+      },
+    };
+  }
+
   const name = DEPARTMENT_NAMES[role];
   const identity = `${role}_${suffix}`;
   const roomName = `jarvis_${role}_${suffix}`;
 
   const token = new AccessToken(config.apiKey, config.apiSecret, {
     identity,
-    name,
+    name: wishes.person || name,
     ttl: TOKEN_TTL,
-    attributes: { role, name, v: "1" },
+    attributes: {
+      role,
+      name,
+      v: "1",
+      lang: wishes.lang,
+      ...(wishes.person ? { person: wishes.person } : {}),
+    },
   });
   token.addGrant({
     room: roomName,
@@ -100,7 +156,7 @@ export async function mintCallToken({ role, scope, config, suffix }: CallTokenIn
     body: {
       serverUrl: config.url,
       roomName,
-      participantName: name,
+      participantName: wishes.person || name,
       participantToken: await token.toJwt(),
     },
   };

@@ -2724,6 +2724,17 @@ export async function jarvisCallsFor(role: Role, limit = 10): Promise<PastCall[]
   return (data ?? []) as PastCall[];
 }
 
+/** How long each call with Jarvis since a moment lasted, in seconds. */
+export async function jarvisCallSecondsSince(since: Date): Promise<number[]> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_calls")
+    .select("duration_s")
+    .gte("started_at", since.toISOString())
+    .limit(5000);
+  if (error) throw new Error(`jarvisCallSecondsSince: ${error.message}`);
+  return (data ?? []).map((row) => Number(row.duration_s) || 0);
+}
+
 /** The most recent calls with Jarvis, newest first. See migration 0021. */
 export async function recentJarvisCalls(limit = 100): Promise<JarvisCallRow[]> {
   const { data, error } = await serviceClient()

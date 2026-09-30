@@ -38,6 +38,10 @@ describe('startErrorMessage', () => {
     expect(startErrorMessage(tokenFailure(401), false)).toMatch(/sign in again/i);
   });
 
+  it("says the month's free minutes are spent, and when they come back", () => {
+    expect(startErrorMessage(tokenFailure(429), false)).toMatch(/minutes.*1st/i);
+  });
+
   it('says Jarvis is not set up when the dashboard lacks its call settings', () => {
     expect(startErrorMessage(tokenFailure(503), false)).toMatch(/not set up/i);
   });
