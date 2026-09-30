@@ -186,7 +186,12 @@ export async function runExtraTool(
     case "get_installs_today": {
       const today = await deps.androidInstallsSoFarToday();
       return today
-        ? { ...today, note: "Google Play only, counted since the time given." }
+        ? {
+            ...today,
+            note:
+              "Google Play only, counted since the time given. Google updates this counter " +
+              "about once a day, so a low or zero count may just mean it has not moved yet.",
+          }
         : {
             installs: null,
             note: "Play has not reported twice today yet, so there is no count. That is not zero.",

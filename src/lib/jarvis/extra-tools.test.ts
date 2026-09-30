@@ -116,6 +116,14 @@ describe("runExtraTool", () => {
     expect(String(answer.note)).toMatch(/not zero/i);
   });
 
+  it("warns that Play's counter moves about once a day, so a low count may be stale", async () => {
+    const d = deps();
+    d.androidInstallsSoFarToday = vi.fn(async () => ({ installs: 0, since: "2026-09-30T00:00:00Z" }));
+    const answer = (await runExtraTool("get_installs_today", {}, d)) as Record<string, unknown>;
+    expect(answer.installs).toBe(0);
+    expect(String(answer.note)).toMatch(/about once a day/);
+  });
+
   it("pairs our releases with how each version is rated", async () => {
     const answer = await runExtraTool("get_releases", { days: 90 }, deps());
     expect(answer).toMatchObject({ releases: [{ version: "2.3" }], versions: [] });
