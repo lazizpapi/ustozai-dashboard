@@ -18,7 +18,10 @@ export function useAgentErrors({ expectedEnd = false }: AgentErrorOptions = {}) 
     if (!isConnected || agent.state !== 'failed') return;
     if (!expectedEnd) {
       const reasons = agent.failureReasons ?? [];
+      // A fixed id: this effect can run again before the call has ended, and
+      // the caller should see the message once, not stacked twice.
       toast.error('Jarvis left the call', {
+        id: 'jarvis-left-the-call',
         description: [reasons.join(' '), 'If this keeps happening, check that the agent is running.']
           .filter(Boolean)
           .join(' '),
