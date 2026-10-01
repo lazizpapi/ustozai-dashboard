@@ -53,3 +53,20 @@ export function tokenOptions(prefs: CallerPrefs): {
     participantAttributes: { lang: prefs.lang },
   };
 }
+
+/**
+ * How long the call screen waits for Jarvis to join. On LiveKit's free plan
+ * the agent is scaled to zero between calls, and the cold start "adds 10 to
+ * 20 seconds before the agent joins the room" (LiveKit's docs). The library's
+ * own default is 20 seconds, the very top of that range, so the first call
+ * after a quiet spell failed about half the time. A minute leaves room to
+ * spare; past it, Jarvis is really down and the error is right.
+ */
+export const AGENT_JOIN_WAIT_MS = 60_000;
+
+/** Everything the call screen passes to the session. */
+export function sessionOptions(prefs: CallerPrefs): ReturnType<typeof tokenOptions> & {
+  agentConnectTimeoutMilliseconds: number;
+} {
+  return { ...tokenOptions(prefs), agentConnectTimeoutMilliseconds: AGENT_JOIN_WAIT_MS };
+}

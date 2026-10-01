@@ -16,7 +16,7 @@ it; it talks back.
 3. Tap the line under **Talk to Jarvis** to choose the language Jarvis greets
    you in (English, Oʻzbek or Русский) and, if you like, your first name.
 4. Tap **Talk to Jarvis** and allow the microphone. After a quiet spell Jarvis
-   takes about 15 seconds to wake up; the screen says so.
+   takes about 20 seconds to wake up; the screen says so.
 
 ## Five things to say
 
@@ -71,7 +71,7 @@ maʼlumot qidiradi. Siz gapirasiz, u javob beradi.
    kutib olishini (English, Oʻzbek yoki Русский) va xohlasangiz, ismingizni
    tanlang.
 4. **Talk to Jarvis** tugmasini bosing va mikrofonga ruxsat bering. Bir muddat
-   qoʻngʻiroq boʻlmagan boʻlsa, Jarvis uygʻonishi uchun taxminan 15
+   qoʻngʻiroq boʻlmagan boʻlsa, Jarvis uygʻonishi uchun taxminan 20
    soniya kerak boʻladi; ekranda shu yoziladi.
 
 ## Nimalar deyish mumkin

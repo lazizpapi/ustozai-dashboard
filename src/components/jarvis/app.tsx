@@ -7,7 +7,7 @@ import { AgentSessionProvider } from '@/components/jarvis/agent-session-provider
 import { useCallerPrefs } from '@/components/jarvis/hooks/use-caller-prefs';
 import { JarvisScreen } from '@/components/jarvis/jarvis-screen';
 import { Toaster } from '@/components/jarvis/ui/sonner';
-import { tokenOptions } from '@/lib/jarvis-ui/caller-prefs';
+import { sessionOptions } from '@/lib/jarvis-ui/caller-prefs';
 import type { MonthUsage } from '@/lib/jarvis/budget';
 
 /**
@@ -21,7 +21,7 @@ import type { MonthUsage } from '@/lib/jarvis/budget';
 export function JarvisApp({ budget }: { budget: MonthUsage | null }) {
   const tokenSource = useMemo(() => TokenSource.endpoint('/api/jarvis-token'), []);
   const [prefs, choose] = useCallerPrefs();
-  const options = useMemo(() => tokenOptions(prefs), [prefs]);
+  const options = useMemo(() => sessionOptions(prefs), [prefs]);
   const session = useSession(tokenSource, options);
 
   return (

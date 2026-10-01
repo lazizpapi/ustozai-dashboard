@@ -17,7 +17,7 @@ describe('statusWhileWaiting', () => {
     for (const state of ['connecting', 'initializing', 'pre-connect-buffering'] as const) {
       expect(statusWhileWaiting(state, 4000, 'Waking up')).toBe(COLD_START_STATUS);
     }
-    expect(COLD_START_STATUS).toMatch(/15 seconds/);
+    expect(COLD_START_STATUS).toMatch(/about 20 seconds/);
   });
 
   it('leaves the line alone once Jarvis is there', () => {
