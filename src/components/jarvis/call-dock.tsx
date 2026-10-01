@@ -1,6 +1,6 @@
 'use client';
 
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Track } from 'livekit-client';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ import {
 import { AgentTrackControl } from '@/components/jarvis/agent-track-control';
 import { Toggle } from '@/components/jarvis/ui/toggle';
 import { useInputControls, usePublishPermissions } from '@/components/jarvis/hooks/use-agent-control-bar';
+import { canShareScreen } from '@/lib/jarvis-ui/screen-share';
 import { cn } from '@/lib/utils';
 
 const QUIET_TOGGLE = [
@@ -153,6 +154,13 @@ function reportDeviceError({ source, error }: { source: Track.Source; error: Err
   );
 }
 
+const noChanges = () => () => {};
+
+/** False on a phone, whose browser cannot share its screen with a page. */
+function useCanShareScreen(): boolean {
+  return useSyncExternalStore(noChanges, () => canShareScreen(navigator.mediaDevices), () => false);
+}
+
 interface CallDockProps {
   /** False until Jarvis has joined; typed text sent before that would be lost. */
   agentReady: boolean;
@@ -165,6 +173,7 @@ interface CallDockProps {
 export function CallDock({ agentReady, isChatOpen, onChatOpenChange, onEnd }: CallDockProps) {
   const { send } = useChat();
   const permissions = usePublishPermissions();
+  const canShare = useCanShareScreen();
   const reduceMotion = useReducedMotion();
   const {
     microphoneTrack,
@@ -241,7 +250,7 @@ export function CallDock({ agentReady, isChatOpen, onChatOpenChange, onEnd }: Ca
             onPressedChange={cameraToggle.toggle}
           />
         )}
-        {permissions.screenShare && (
+        {permissions.screenShare && canShare && (
           <DockToggle
             label="Share screen"
             icon={MonitorUp}
