@@ -14,7 +14,7 @@ it; it talks back.
    Screen". Android: Chrome, the menu, "Install app". Sign in once more inside
    the installed app: it keeps its own sign-in.
 3. Tap the line under **Talk to Jarvis** to choose the language Jarvis greets
-   you in (English, O{O}zbek or Русский) and, if you like, your first name.
+   you in (English, Oʻzbek or Русский) and, if you like, your first name.
 4. Tap **Talk to Jarvis** and allow the microphone. After a quiet spell Jarvis
    takes about 15 seconds to wake up; the screen says so.
 
@@ -34,13 +34,17 @@ releases; IT about the data collectors and the analyst's report.
 
 - **It asks before it acts.** Before Jarvis saves a note, posts to the team
   chat, or clicks something that buys, sends or deletes, it reads it back and
-  waits for your yes: "yes", "okay", "ha", "xo{O}p", "да".
+  waits for your yes: "yes", "okay", "ha", "xoʻp", "да".
 - **What it cannot do:** play sound into the call, sign in anywhere, pay,
   download or upload files, send email, or show another department's figures.
 - **Calls end after 20 minutes.** The company has 1,000 free minutes of calls a
   month in all, so end a call when you are done.
 - **Notes and reminders** belong to your department: everyone signed in as your
   department shares them. See them at /jarvis/notes.
+- **Camera and screen.** Turn on the camera to show Jarvis something, or
+  share your screen to have it read a page. It sees one at a time: whichever
+  you turned on last. Screen sharing works from a computer only; phones cannot
+  share their screen, so the button shows only on a computer.
 - **Privacy.** Calls go through Google's Gemini on its free plan, under which
   Google may review conversations to improve its products. Do not say anything
   personal or confidential you would not want reviewed. The camera and screen
@@ -96,6 +100,11 @@ va relizlar haqida; IT esa maʼlumot yigʻuvchilar va tahliliy hisobot haqida.
   bepul daqiqa bor, shuning uchun ishingiz tugagach qoʻngʻiroqni yakunlang.
 - **Eslatmalar** boʻlimingizga tegishli: boʻlimingiz nomidan kirgan hamma
   ularni koʻradi. Ular /jarvis/notes sahifasida.
+- **Kamera va ekran.** Jarvisga biror narsani koʻrsatish uchun kamerani
+  yoqing, sahifani oʻqib berishi uchun esa ekraningizni ulashing. U bir
+  vaqtda faqat bittasini koʻradi: qaysi birini oxirgi yoqqan boʻlsangiz,
+  oʻshani. Ekran ulashish faqat kompyuterda ishlaydi: telefon brauzerlari
+  ekranni ulasha olmaydi, shuning uchun bu tugma faqat kompyuterda chiqadi.
 - **Maxfiylik.** Qoʻngʻiroqlar Googleʼning Gemini xizmatining bepul tarifi
   orqali oʻtadi, unda Google mahsulotlarini yaxshilash uchun suhbatlarni
   koʻrib chiqishi mumkin. Boshqalar koʻrishini istamaydigan shaxsiy yoki
