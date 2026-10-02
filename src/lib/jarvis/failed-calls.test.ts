@@ -74,6 +74,15 @@ describe("recordFailedCall", () => {
     expect(saved[0]?.summary).toBe("Gave up after waiting 9 s for Jarvis.");
   });
 
+  it("says the microphone was the problem, not a wait for Jarvis", async () => {
+    const { result, saved } = input({
+      body: { room: "jarvis_marketing_c14ed7e9", identity: "marketing_c14ed7e9", reason: "no_microphone", waited_s: 2 },
+    });
+    expect((await result).status).toBe(200);
+    expect(saved[0]?.close_reason).toBe("no_microphone");
+    expect(saved[0]?.summary).toBe("The browser blocked the microphone, found none, or another app had it.");
+  });
+
   it("refuses anyone who is not signed in as a person", async () => {
     expect((await input({ role: null }).result).status).toBe(401);
     expect((await input({ scope: "jarvis" }).result).status).toBe(403);

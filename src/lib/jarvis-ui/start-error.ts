@@ -3,9 +3,11 @@
  * else already told them.
  *
  * Starting a call connects to the room and turns the microphone on at the same
- * time, so a refused microphone fails the start even though the room connected.
- * A room that connected but where Jarvis never arrived is reported by
- * useAgentErrors, so it gets no second message here.
+ * time, so a refused microphone fails the start whether or not the room has
+ * connected yet (a blocked one often fails before connecting has begun, and
+ * useStartCall leaves the room when it connects anyway). A room that connected
+ * but where Jarvis never arrived is reported by useAgentErrors, so it gets no
+ * second message here.
  *
  * Before any of that, the dashboard has to issue a call token. LiveKit's token
  * source reports a refusal as an Error whose message carries the status.
@@ -17,19 +19,26 @@ function tokenStatus(error: unknown): number | null {
   return match ? Number(match[1]) : null;
 }
 
-export function startErrorMessage(error: unknown, roomConnected: boolean): string | null {
-  const name = error instanceof Error ? error.name : '';
+/** What the browser raises when it cannot give the call a microphone, and what to say. */
+const MICROPHONE_FAILURES: Readonly<Record<string, string>> = {
+  NotAllowedError: 'Jarvis needs to hear you. Allow the microphone for this page, then try again.',
+  NotFoundError: 'No microphone found. Connect one, then try again.',
+  NotReadableError: 'Another app is using the microphone. Close it, then try again.',
+};
 
-  switch (name) {
-    case 'NotAllowedError':
-      return 'Jarvis needs to hear you. Allow the microphone for this page, then try again.';
-    case 'NotFoundError':
-      return 'No microphone found. Connect one, then try again.';
-    case 'NotReadableError':
-      return 'Another app is using the microphone. Close it, then try again.';
-    case 'AbortError':
-      return null;
-  }
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : '';
+}
+
+/** True when the browser refused the microphone, found none, or another app holds it. */
+export function isMicrophoneFailure(error: unknown): boolean {
+  return Object.hasOwn(MICROPHONE_FAILURES, errorName(error));
+}
+
+export function startErrorMessage(error: unknown, roomConnected: boolean): string | null {
+  const name = errorName(error);
+  if (isMicrophoneFailure(error)) return MICROPHONE_FAILURES[name];
+  if (name === 'AbortError') return null;
   if (roomConnected) return null;
 
   const status = tokenStatus(error);

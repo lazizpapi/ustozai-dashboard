@@ -75,7 +75,7 @@ export function callLength(seconds: number): string {
  * Calls that never got going. Jarvis cannot record these, because it was
  * never there; the call screen reports them (failed-calls.ts).
  */
-export const FAILED_START_REASONS = ["never_joined", "not_ready", "dropped", "gave_up"] as const;
+export const FAILED_START_REASONS = ["never_joined", "not_ready", "dropped", "gave_up", "no_microphone"] as const;
 export type FailedStartReason = (typeof FAILED_START_REASONS)[number];
 
 const FAILED_STARTS: Record<FailedStartReason, string> = {
@@ -83,6 +83,7 @@ const FAILED_STARTS: Record<FailedStartReason, string> = {
   not_ready: "Jarvis joined but never got ready",
   dropped: "Jarvis dropped out",
   gave_up: "Caller gave up waiting",
+  no_microphone: "Microphone was unavailable",
 };
 
 const UNUSUAL_ENDINGS: Record<string, string> = {

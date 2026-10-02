@@ -8,6 +8,14 @@ describe('startErrorMessage', () => {
     expect(startErrorMessage(named('NotAllowedError'), true)).toMatch(/allow the microphone/i);
   });
 
+  // A microphone the browser already blocks fails the start at once, before
+  // the room has begun connecting: the caller is still told, not left in silence.
+  it('asks for the microphone when it was refused before the room connected', () => {
+    expect(startErrorMessage(named('NotAllowedError'), false)).toBe(
+      'Jarvis needs to hear you. Allow the microphone for this page, then try again.'
+    );
+  });
+
   it('says so when there is no microphone at all', () => {
     expect(startErrorMessage(named('NotFoundError'), false)).toMatch(/no microphone/i);
   });

@@ -10,7 +10,8 @@ import { personName } from "./person-name";
 
 /**
  * A call that never got going, as the call screen saw it: Jarvis never joined,
- * never got ready or dropped out, or the caller gave up waiting. Jarvis cannot
+ * never got ready or dropped out, the caller gave up waiting, or the browser
+ * could not give the call a microphone. Jarvis cannot
  * record these, because it was never there, so on 1 October 2026 a failed
  * first call left no trace anywhere.
  *
@@ -51,6 +52,8 @@ function summaryFor(reason: FailedStartReason, waitedS: number): string {
       return `Gave up after waiting ${callLength(waitedS)} for Jarvis.`;
     case "dropped":
       return `Jarvis dropped out ${callLength(waitedS)} into the call.`;
+    case "no_microphone":
+      return "The browser blocked the microphone, found none, or another app had it.";
     default:
       return `Waited ${callLength(waitedS)} for Jarvis.`;
   }

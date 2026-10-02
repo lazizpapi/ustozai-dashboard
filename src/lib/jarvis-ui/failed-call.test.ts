@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { agentFailureReason, failedCallReport, gaveUp } from './failed-call';
+import { agentFailureReason, failedCallReport, gaveUp, startFailureReason } from './failed-call';
 
 /**
  * What the call screen reports when a call never got going, so the Calls page
@@ -52,5 +52,25 @@ describe('failedCallReport', () => {
 
   it('has nothing to send before the room was joined', () => {
     expect(failedCallReport({ room: '', identity: '', reason: 'gave_up', waitedMs: 9000, person: '' })).toBeNull();
+  });
+});
+
+describe('startFailureReason', () => {
+  const named = (name: string) => Object.assign(new Error('boom'), { name });
+
+  // The browser refused it, found none, or another app holds it: the call
+  // never started, though its room may still have connected for a moment.
+  it('logs a microphone the browser could not use', () => {
+    for (const name of ['NotAllowedError', 'NotFoundError', 'NotReadableError']) {
+      expect(startFailureReason(named(name))).toBe('no_microphone');
+    }
+  });
+
+  it('logs nothing for a cancelled start or a refused call token, which never reach a room', () => {
+    expect(startFailureReason(named('AbortError'))).toBeNull();
+    expect(
+      startFailureReason(new Error('Error generating token from endpoint /api/jarvis-token: received 429 / {}'))
+    ).toBeNull();
+    expect(startFailureReason('nope')).toBeNull();
   });
 });

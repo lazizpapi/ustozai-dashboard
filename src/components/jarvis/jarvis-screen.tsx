@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { ChevronLeft, NotebookPen } from 'lucide-react';
 import { ConnectionState } from 'livekit-client';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { toast } from 'sonner';
 import { useAgent, useSessionContext, useSessionMessages } from '@livekit/components-react';
 import { StartAudioButton } from '@/components/jarvis/start-audio-button';
 import { CallDock } from '@/components/jarvis/call-dock';
@@ -22,6 +21,7 @@ import { useFailedCallReport } from '@/components/jarvis/hooks/use-failed-call-r
 import { useLongWait } from '@/components/jarvis/hooks/use-long-wait';
 import { useMediaQuery } from '@/components/jarvis/hooks/use-media-query';
 import { useOrbAmplitude } from '@/components/jarvis/hooks/use-orb-amplitude';
+import { useStartCall } from '@/components/jarvis/hooks/use-start-call';
 import { useAgentErrors } from '@/components/jarvis/hooks/useAgentErrors';
 import { ORB_SIZE } from '@/lib/jarvis-ui/orb-palette';
 import {
@@ -33,7 +33,6 @@ import {
 } from '@/lib/jarvis-ui/orb-state';
 import { cn } from '@/lib/utils';
 import { agentFailureReason } from '@/lib/jarvis-ui/failed-call';
-import { startErrorMessage } from '@/lib/jarvis-ui/start-error';
 import type { CallerPrefs } from '@/lib/jarvis-ui/caller-prefs';
 import {
   COLD_START_AFTER_MS,
@@ -89,6 +88,7 @@ export function JarvisScreen({ prefs, onPrefsChange, budget }: JarvisScreenProps
     [reportFailure]
   );
   useAgentErrors({ expectedEnd: activity.ending, onFailure: onAgentFailure });
+  const start = useStartCall({ onFailure: reportFailure });
   const narrow = useMediaQuery('(max-width: 639px)');
   const reduceMotion = useReducedMotion();
   const [chatOpen, setChatOpen] = useState(false);
@@ -136,16 +136,6 @@ export function JarvisScreen({ prefs, onPrefsChange, budget }: JarvisScreenProps
   // move is a pure transform and never upscales a small render.
   const stage = narrow ? ORB_SIZE.stageNarrow : ORB_SIZE.stage;
   const box = docked ? ORB_SIZE.docked : stage;
-
-  const start = () => {
-    session.start().catch((error: unknown) => {
-      console.error('Could not start the call:', error);
-      const message = startErrorMessage(error, session.room.state === ConnectionState.Connected);
-      if (message) toast.error(message);
-      // A refused microphone still leaves the room connected; do not keep it.
-      void session.end();
-    });
-  };
 
   return (
     <JarvisStage orb={view.orb} docked={docked}>

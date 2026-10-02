@@ -130,11 +130,13 @@ describe("calls that never got going", () => {
     expect(unusualEnding("not_ready")).toBe("Jarvis joined but never got ready");
     expect(unusualEnding("dropped")).toBe("Jarvis dropped out");
     expect(unusualEnding("gave_up")).toBe("Caller gave up waiting");
+    expect(unusualEnding("no_microphone")).toBe("Microphone was unavailable");
   });
 
   it("tells a failed start from a call that happened, however it ended", () => {
     expect(isFailedStart("never_joined")).toBe(true);
     expect(isFailedStart("gave_up")).toBe(true);
+    expect(isFailedStart("no_microphone")).toBe(true);
     for (const reason of ["", "user_initiated", "time_limit", "error"]) expect(isFailedStart(reason)).toBe(false);
   });
 
