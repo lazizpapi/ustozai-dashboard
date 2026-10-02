@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, NotebookPen } from 'lucide-react';
 import { ConnectionState } from 'livekit-client';
@@ -18,6 +18,7 @@ import { StatusLine } from '@/components/jarvis/status-line';
 import { TranscriptPanel } from '@/components/jarvis/transcript-panel';
 import { useJarvisActivity } from '@/components/jarvis/hooks/use-jarvis-activity';
 import { useJarvisScreen } from '@/components/jarvis/hooks/use-jarvis-screen';
+import { useFailedCallReport } from '@/components/jarvis/hooks/use-failed-call-report';
 import { useLongWait } from '@/components/jarvis/hooks/use-long-wait';
 import { useMediaQuery } from '@/components/jarvis/hooks/use-media-query';
 import { useOrbAmplitude } from '@/components/jarvis/hooks/use-orb-amplitude';
@@ -31,6 +32,7 @@ import {
   orbViewFor,
 } from '@/lib/jarvis-ui/orb-state';
 import { cn } from '@/lib/utils';
+import { agentFailureReason } from '@/lib/jarvis-ui/failed-call';
 import { startErrorMessage } from '@/lib/jarvis-ui/start-error';
 import type { CallerPrefs } from '@/lib/jarvis-ui/caller-prefs';
 import {
@@ -80,7 +82,13 @@ export function JarvisScreen({ prefs, onPrefsChange, budget }: JarvisScreenProps
   const agent = useAgent();
   const { messages } = useSessionMessages(session);
   const activity = useJarvisActivity(session.isConnected);
-  useAgentErrors({ expectedEnd: activity.ending });
+  // A call that never got going is reported, so the Calls page shows it.
+  const reportFailure = useFailedCallReport(prefs.name);
+  const onAgentFailure = useCallback(
+    (reasons: readonly string[]) => reportFailure(agentFailureReason(reasons)),
+    [reportFailure]
+  );
+  useAgentErrors({ expectedEnd: activity.ending, onFailure: onAgentFailure });
   const narrow = useMediaQuery('(max-width: 639px)');
   const reduceMotion = useReducedMotion();
   const [chatOpen, setChatOpen] = useState(false);

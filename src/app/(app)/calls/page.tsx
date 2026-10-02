@@ -12,7 +12,13 @@ import { load } from "@/app/load";
 import { recentJarvisCalls } from "@/lib/db/queries";
 import { timeAgo } from "@/lib/format";
 import { FREE_MINUTES, type MonthUsage } from "@/lib/jarvis/budget";
-import { callLength, tokenCount, unusualEnding } from "@/lib/jarvis/calls";
+import {
+  callLength,
+  isFailedStart,
+  tokenCount,
+  unusualEnding,
+  withoutShadowedFailures,
+} from "@/lib/jarvis/calls";
 import { readMonthUsage } from "@/lib/jarvis/month-budget";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +29,17 @@ export const dynamic = "force-dynamic";
  * The CEO's alone (canSee fails closed for it), because a summary can carry
  * an answer about the takings. There are no personal accounts, so a row says
  * which department's password signed the caller in, not which person.
+ *
+ * A call that never got going (Jarvis never joined, the caller gave up
+ * waiting, the microphone was blocked) is reported by the call screen and
+ * listed too, so a colleague's failed first try is not invisible.
  */
+
+/** "2 calls in this list did not start.", or nothing when all of them did. */
+function failedLine(failed: number): string {
+  if (failed === 0) return "";
+  return failed === 1 ? " 1 call in this list did not start." : ` ${failed} calls in this list did not start.`;
+}
 
 /** This month against the free plan's cap, which stops every call once reached. */
 function monthLine(usage: MonthUsage | null): string {
@@ -45,7 +61,8 @@ export default async function CallsPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const calls = result.data;
+  const calls = withoutShadowedFailures(result.data);
+  const failed = calls.filter((call) => isFailedStart(call.closeReason)).length;
 
   return (
     <div className="space-y-10">
@@ -53,7 +70,7 @@ export default async function CallsPage() {
         title="Calls with Jarvis"
         note={
           calls.length
-            ? `${monthLine(usage)} Each call lasts at most twenty minutes.`
+            ? `${monthLine(usage)} Each call lasts at most twenty minutes.${failedLine(failed)}`
             : "Each call with Jarvis is listed here when it ends."
         }
       />
@@ -81,7 +98,11 @@ export default async function CallsPage() {
                   <TableCell className="whitespace-nowrap">{timeAgo(call.startedAt)}</TableCell>
                   <TableCell>{call.callerName || call.role}</TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">
-                    {callLength(call.durationSeconds)}
+                    {isFailedStart(call.closeReason) ? (
+                      <span className="text-destructive font-medium">Did not start</span>
+                    ) : (
+                      callLength(call.durationSeconds)
+                    )}
                     {unusualEnding(call.closeReason) && (
                       <span className="text-muted-foreground block text-xs">
                         {unusualEnding(call.closeReason)}

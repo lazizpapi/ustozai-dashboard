@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { callLength, parseJarvisCall, recordJarvisCall, tokenCount, unusualEnding, type JarvisCall } from "./calls";
+import {
+  callLength,
+  isFailedStart,
+  parseJarvisCall,
+  recordJarvisCall,
+  tokenCount,
+  unusualEnding,
+  withoutShadowedFailures,
+  type JarvisCall,
+} from "./calls";
 
 /**
  * The record Jarvis leaves when a call ends.
@@ -112,6 +121,32 @@ describe("how a call ended, when it matters", () => {
     for (const reason of ["", "user_initiated", "participant_disconnected", "job_shutdown", "task_completed"]) {
       expect(unusualEnding(reason)).toBeNull();
     }
+  });
+});
+
+describe("calls that never got going", () => {
+  it("names each way a call can fail to start", () => {
+    expect(unusualEnding("never_joined")).toBe("Jarvis never joined");
+    expect(unusualEnding("not_ready")).toBe("Jarvis joined but never got ready");
+    expect(unusualEnding("dropped")).toBe("Jarvis dropped out");
+    expect(unusualEnding("gave_up")).toBe("Caller gave up waiting");
+  });
+
+  it("tells a failed start from a call that happened, however it ended", () => {
+    expect(isFailedStart("never_joined")).toBe(true);
+    expect(isFailedStart("gave_up")).toBe(true);
+    for (const reason of ["", "user_initiated", "time_limit", "error"]) expect(isFailedStart(reason)).toBe(false);
+  });
+
+  it("hides a failed start when Jarvis recorded the same call itself", () => {
+    // The screen gave up just as Jarvis got going: Jarvis's own record wins.
+    const rows = [
+      { id: "1", room: "jarvis_ceo_aa", closeReason: "user_initiated" },
+      { id: "2", room: "jarvis_ceo_aa", closeReason: "gave_up" },
+      { id: "3", room: "jarvis_ceo_bb", closeReason: "never_joined" },
+      { id: "4", room: "jarvis_ceo_cc", closeReason: "" },
+    ];
+    expect(withoutShadowedFailures(rows).map((row) => row.id)).toEqual(["1", "3", "4"]);
   });
 });
 

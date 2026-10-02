@@ -27,6 +27,7 @@ import { versionBreakdown, type VersionRow } from "@/lib/reviews";
 import { stickiness } from "@/lib/active-users";
 import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestions";
 import type { AnalystReport } from "@/lib/analyst/schema";
+import { FAILED_START_REASONS } from "@/lib/jarvis/calls";
 import type { PastCall } from "@/lib/jarvis/context";
 import type { JarvisNote } from "@/lib/jarvis/notes";
 import type { Role } from "@/lib/roles";
@@ -2687,6 +2688,7 @@ export async function recentTelegramTurns(
 
 export interface JarvisCallRow {
   id: string;
+  room: string;
   startedAt: string;
   role: string;
   callerName: string;
@@ -2712,12 +2714,17 @@ export async function openJarvisNotes(role: Role, limit = 50): Promise<JarvisNot
   return (data ?? []) as JarvisNote[];
 }
 
-/** A department's latest calls with Jarvis, newest first: when, and the summary. */
+/**
+ * A department's latest calls with Jarvis, newest first: when, and the summary.
+ * Calls that never got going are left out: Jarvis would remember a call it was
+ * never on, and would skip the morning briefing after a failed first try.
+ */
 export async function jarvisCallsFor(role: Role, limit = 10): Promise<PastCall[]> {
   const { data, error } = await serviceClient()
     .from("jarvis_calls")
     .select("started_at, summary")
     .eq("role", role)
+    .not("close_reason", "in", `(${FAILED_START_REASONS.join(",")})`)
     .order("started_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(`jarvisCallsFor: ${error.message}`);
@@ -2735,12 +2742,31 @@ export async function jarvisCallSecondsSince(since: Date): Promise<number[]> {
   return (data ?? []).map((row) => Number(row.duration_s) || 0);
 }
 
+/** Whether a call in this room is already in the log, by Jarvis or by the call screen. */
+export async function jarvisCallLogged(room: string): Promise<boolean> {
+  const { data, error } = await serviceClient().from("jarvis_calls").select("id").eq("room", room).limit(1);
+  if (error) throw new Error(`jarvisCallLogged: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
+/** How many failed calls a department's call screens reported since a moment. */
+export async function jarvisFailedCallsSince(role: Role, since: Date): Promise<number> {
+  const { count, error } = await serviceClient()
+    .from("jarvis_calls")
+    .select("id", { count: "exact", head: true })
+    .eq("role", role)
+    .in("close_reason", [...FAILED_START_REASONS])
+    .gte("created_at", since.toISOString());
+  if (error) throw new Error(`jarvisFailedCallsSince: ${error.message}`);
+  return count ?? 0;
+}
+
 /** The most recent calls with Jarvis, newest first. See migration 0021. */
 export async function recentJarvisCalls(limit = 100): Promise<JarvisCallRow[]> {
   const { data, error } = await serviceClient()
     .from("jarvis_calls")
     .select(
-      "id, started_at, role, caller_name, duration_s, tools_used, input_tokens, output_tokens, close_reason, summary",
+      "id, room, started_at, role, caller_name, duration_s, tools_used, input_tokens, output_tokens, close_reason, summary",
     )
     .order("started_at", { ascending: false })
     .limit(limit);
@@ -2748,6 +2774,7 @@ export async function recentJarvisCalls(limit = 100): Promise<JarvisCallRow[]> {
 
   return (data ?? []).map((row) => ({
     id: row.id as string,
+    room: row.room as string,
     startedAt: row.started_at as string,
     role: row.role as string,
     callerName: row.caller_name as string,

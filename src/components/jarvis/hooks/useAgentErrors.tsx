@@ -7,10 +7,12 @@ import { useAgent, useSessionContext } from '@livekit/components-react';
 interface AgentErrorOptions {
   /** Jarvis said goodbye and is leaving on purpose: end quietly, no toast. */
   expectedEnd?: boolean;
+  /** Told LiveKit's reasons whenever the failure is shown, for the call log. */
+  onFailure?: (reasons: readonly string[]) => void;
 }
 
 /** When Jarvis drops out of a live call, say so once and end the call. */
-export function useAgentErrors({ expectedEnd = false }: AgentErrorOptions = {}) {
+export function useAgentErrors({ expectedEnd = false, onFailure }: AgentErrorOptions = {}) {
   const agent = useAgent();
   const { isConnected, end } = useSessionContext();
 
@@ -27,7 +29,8 @@ export function useAgentErrors({ expectedEnd = false }: AgentErrorOptions = {}) 
           .join(' '),
         duration: 10_000,
       });
+      onFailure?.(reasons);
     }
     end();
-  }, [agent, isConnected, end, expectedEnd]);
+  }, [agent, isConnected, end, expectedEnd, onFailure]);
 }

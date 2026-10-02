@@ -71,16 +71,44 @@ export function callLength(seconds: number): string {
   return `${rest} s`;
 }
 
+/**
+ * Calls that never got going. Jarvis cannot record these, because it was
+ * never there; the call screen reports them (failed-calls.ts).
+ */
+export const FAILED_START_REASONS = ["never_joined", "not_ready", "dropped", "gave_up"] as const;
+export type FailedStartReason = (typeof FAILED_START_REASONS)[number];
+
+const FAILED_STARTS: Record<FailedStartReason, string> = {
+  never_joined: "Jarvis never joined",
+  not_ready: "Jarvis joined but never got ready",
+  dropped: "Jarvis dropped out",
+  gave_up: "Caller gave up waiting",
+};
 
 const UNUSUAL_ENDINGS: Record<string, string> = {
   time_limit: "Reached the time limit",
   second_person: "Someone else joined",
   error: "Ended by an error",
+  ...FAILED_STARTS,
 };
 
 /** A label for a call that ended in a way worth noticing, or null for a goodbye or hang-up. */
 export function unusualEnding(closeReason: string): string | null {
   return UNUSUAL_ENDINGS[closeReason] ?? null;
+}
+
+/** True for a call that never got going, as reported by the call screen. */
+export function isFailedStart(closeReason: string): closeReason is FailedStartReason {
+  return Object.hasOwn(FAILED_STARTS, closeReason);
+}
+
+/**
+ * The calls to list, without a failed start that Jarvis's own record of the
+ * same room contradicts: the screen can give up just as Jarvis gets going.
+ */
+export function withoutShadowedFailures<T extends { room: string; closeReason: string }>(rows: readonly T[]): T[] {
+  const happened = new Set(rows.filter((row) => !isFailedStart(row.closeReason)).map((row) => row.room));
+  return rows.filter((row) => !isFailedStart(row.closeReason) || !happened.has(row.room));
 }
 
 /** A token count at a glance: 950, 12.4k, 1.3M. */
