@@ -102,4 +102,36 @@ describe("gatherCallContext", () => {
     const result = await gatherCallContext("ceo", { now: NOW, calls: broken, notes: broken });
     expect(result.status).toBe(500);
   });
+
+  const outage = {
+    failedDays: 19,
+    since: "2026-09-27",
+    lastWritten: "2026-09-26",
+    reason: "the OpenAI account has run out of credits",
+  };
+
+  it("tells the CEO and IT when the daily report has stopped, so Jarvis says so as the call opens", async () => {
+    for (const role of ["ceo", "it"] as const) {
+      const result = await gatherCallContext(role, { now: NOW, calls, notes, reportOutage: async () => outage });
+      expect(result.body).toMatchObject({ ok: true, reportOutage: outage });
+    }
+  });
+
+  it("does not trouble the other departments with it, whose screens do not show the report", async () => {
+    let asked = 0;
+    const result = await gatherCallContext("marketing", {
+      now: NOW,
+      calls,
+      notes,
+      reportOutage: async () => (asked++, outage),
+    });
+    expect(asked).toBe(0);
+    expect(result.body).toMatchObject({ ok: true, reportOutage: null });
+  });
+
+  it("starts the call without it when the runs cannot be read", async () => {
+    const result = await gatherCallContext("ceo", { now: NOW, calls, notes, reportOutage: broken });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ ok: true, reportOutage: null, firstCallToday: true });
+  });
 });

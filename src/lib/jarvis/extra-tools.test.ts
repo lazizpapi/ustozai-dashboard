@@ -17,10 +17,12 @@ const EXTRA = [
   "get_installs_today",
   "get_releases",
   "get_ios_proceeds",
+  "get_analyst_runs",
+  "get_comment_activity",
 ];
 
 describe("the tools Jarvis has beyond the analyst's", () => {
-  it("adds five tools after the analyst's own, and names none twice", () => {
+  it("adds seven tools after the analyst's own, and names none twice", () => {
     const names = jarvisToolNames();
     expect(names).toEqual([...toolNames(), ...EXTRA]);
     expect(new Set(names).size).toBe(names.length);
@@ -93,8 +95,17 @@ function deps(): ExtraDeps {
     iosProceeds: vi.fn(async () => []),
     ownReleases: vi.fn(async () => [{ date: "2026-09-20", platform: "ios" as const, version: "2.3" }]),
     reviewsByVersion: vi.fn(async () => []),
+    analystRunStatuses: vi.fn(async () => []),
+    commentActivity: vi.fn(async () => null),
   } as unknown as ExtraDeps;
 }
+
+const NO_CREDITS = "429 You have no credits remaining. Add credits to continue using the API.";
+const analystRun = (day: string, status: "ok" | "failed" | "stale-data", error: string | null = null) => ({
+  createdAt: `${day}T01:40:07.000Z`,
+  status,
+  error,
+});
 
 describe("runExtraTool", () => {
   it("reads the Education top free chart in Uzbekistan under each store's own genre", async () => {
@@ -181,5 +192,105 @@ describe("runExtraTool", () => {
     const answer = (await runExtraTool("get_ios_proceeds", { days: 30 }, deps())) as Record<string, unknown>;
     expect(answer.proceeds).toEqual([]);
     expect(String(answer.note)).toMatch(/Payme/);
+  });
+});
+
+describe("the analyst's run history", () => {
+  it("lists recent runs by day, says why each failed, and how long the report has been out", async () => {
+    const d = deps();
+    d.analystRunStatuses = vi.fn(async () => [
+      analystRun("2026-10-15", "failed", NO_CREDITS),
+      analystRun("2026-10-14", "failed", NO_CREDITS),
+      analystRun("2026-10-13", "stale-data", "collectors failing: play"),
+      analystRun("2026-10-12", "ok"),
+    ]);
+    const answer = await runExtraTool("get_analyst_runs", {}, d);
+    expect(answer).toEqual({
+      runs: [
+        { day: "2026-10-15", outcome: "failed", reason: "the OpenAI account has run out of credits" },
+        { day: "2026-10-14", outcome: "failed", reason: "the OpenAI account has run out of credits" },
+        {
+          day: "2026-10-13",
+          outcome: "refused",
+          reason: "data collectors were failing (play), so it refused to write from bad numbers",
+        },
+        { day: "2026-10-12", outcome: "written" },
+      ],
+      outage: {
+        failedDays: 3,
+        since: "2026-10-13",
+        lastWritten: "2026-10-12",
+        reason: "the OpenAI account has run out of credits",
+      },
+    });
+  });
+
+  it("lists two weeks of runs at most, though it reads further back to count the outage", async () => {
+    const d = deps();
+    const failing = Array.from({ length: 30 }, (_, i) =>
+      analystRun(new Date(Date.UTC(2026, 9, 30 - i)).toISOString().slice(0, 10), "failed", NO_CREDITS),
+    );
+    d.analystRunStatuses = vi.fn(async () => failing);
+    const answer = (await runExtraTool("get_analyst_runs", {}, d)) as {
+      runs: unknown[];
+      outage: { failedDays: number };
+    };
+    expect(answer.runs).toHaveLength(14);
+    expect(answer.outage.failedDays).toBe(30);
+  });
+});
+
+describe("the comment bot", () => {
+  const activity = {
+    health: { lastPolledAt: "2026-10-15T04:50:00Z", minutesSincePoll: 10, alive: true },
+    counts: { replied24h: 6, flagged24h: 1, skipped24h: 3 },
+    recent: Array.from({ length: 25 }, (_, i) => ({
+      commentId: `c${i}`,
+      at: "2026-10-15T04:00:00Z",
+      category: "reply",
+      author: "Aziza",
+      comment: "x".repeat(800),
+      reply: "Rahmat!",
+      reason: null,
+      posted: true,
+      videoId: "v1",
+    })),
+  };
+
+  it("gives the bot's health, its last day's counts and its newest comments, cut short", async () => {
+    const d = deps();
+    d.commentActivity = vi.fn(async () => activity);
+    const answer = (await runExtraTool("get_comment_activity", {}, d)) as {
+      health: unknown;
+      counts: unknown;
+      recent: { comment: string; commentId?: string }[];
+      note: string;
+    };
+    expect(answer.health).toEqual(activity.health);
+    expect(answer.counts).toEqual(activity.counts);
+    expect(answer.recent).toHaveLength(15);
+    expect(answer.recent[0].comment).toHaveLength(300);
+    expect(answer.recent[0]).not.toHaveProperty("commentId");
+    // Comments come from the public: data to report, never instructions. The
+    // note comes first, so a result cut short for Jarvis still carries it.
+    expect(answer.note).toMatch(/written by the public/i);
+    expect(Object.keys(answer)[0]).toBe("note");
+  });
+
+  it("says when the bot has stopped answering comments, so a quiet day is not heard as calm", async () => {
+    const d = deps();
+    d.commentActivity = vi.fn(async () => ({
+      ...activity,
+      health: { lastPolledAt: "2026-10-14T04:00:00Z", minutesSincePoll: 1500, alive: false },
+    }));
+    const answer = (await runExtraTool("get_comment_activity", {}, d)) as { note: string };
+    expect(answer.note).toMatch(/has stopped/i);
+  });
+
+  it("says plainly when the bot is not connected to the dashboard", async () => {
+    expect(await runExtraTool("get_comment_activity", {}, deps())).toEqual({
+      available: false,
+      note: "The comment bot is not connected to the dashboard, so there is nothing to report.",
+    });
   });
 });

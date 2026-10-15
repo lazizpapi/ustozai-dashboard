@@ -9,10 +9,11 @@ import { canSee, isRole, type Role } from "@/lib/roles";
  * the views and pages in roles.ts:
  *
  *   marketing  its dashboard (funnel, keywords, listings, audience), Growth,
- *              Rankings, Market, Keywords and the audience pages
- *   product    its dashboard (installs, reviews, listings), Downloads,
- *              Reviews, Growth and the audience pages
- *   it         its dashboard (collectors, analyst runs) and Analyst
+ *              Rankings, Market, Keywords, Comments and the audience pages
+ *   product    its dashboard (installs, reviews, listings), Downloads (with
+ *              the funnel), Reviews, Growth and the audience pages
+ *   it         its dashboard (collectors, analyst runs) and Analyst (the
+ *              report, its runs and the metric notes)
  *
  * The CEO gets every tool, including any added later. A department gets a new
  * tool only when it is named below, so the list fails closed the way canSee
@@ -35,11 +36,15 @@ const DEPARTMENT_TOOLS: Record<Exclude<Role, "ceo">, readonly string[]> = {
     "get_chart",
     "get_market",
     "get_metric_notes",
-    // Jarvis's own (extra-tools.ts): the Rankings page's chart history.
+    // Jarvis's own (extra-tools.ts): the Rankings page's chart history, and
+    // the comment bot the Comments page shows.
     "get_rank_history",
+    "get_comment_activity",
   ],
   product: [
     "get_downloads",
+    // The Downloads page shows the funnel and its traffic sources.
+    "get_conversion_funnel",
     "get_reviews",
     "get_listing_changes",
     "get_growth",
@@ -53,7 +58,14 @@ const DEPARTMENT_TOOLS: Record<Exclude<Role, "ceo">, readonly string[]> = {
     "get_installs_today",
     "get_releases",
   ],
-  it: ["get_collector_health", "get_latest_report"],
+  it: [
+    "get_collector_health",
+    "get_latest_report",
+    // The Analyst page shows the notes (the revenue ones removed when the
+    // tool runs) and every recent run, which is how a stopped report shows.
+    "get_metric_notes",
+    "get_analyst_runs",
+  ],
 };
 
 /** The tools a role may use, in the catalogue's own order. */

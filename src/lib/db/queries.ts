@@ -1430,6 +1430,27 @@ export async function recentAnalystRuns(limit = 14): Promise<AnalystRow[]> {
   return (data ?? []).map(toAnalystRow);
 }
 
+/**
+ * Just when each recent run happened and how it ended, newest first: enough to
+ * tell how long the report has been failing (src/lib/analyst/outage.ts)
+ * without reading every report and briefing pack along the way.
+ */
+export async function recentAnalystRunStatuses(
+  limit = 200,
+): Promise<Pick<AnalystRow, "createdAt" | "status" | "error">[]> {
+  const { data, error } = await serviceClient()
+    .from("analyst_reports")
+    .select("created_at, status, error")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`recentAnalystRunStatuses: ${error.message}`);
+  return (data ?? []).map((row) => ({
+    createdAt: row.created_at as string,
+    status: row.status as AnalystRow["status"],
+    error: (row.error as string) ?? null,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Growth over time
 // ---------------------------------------------------------------------------

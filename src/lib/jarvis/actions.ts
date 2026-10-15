@@ -1,6 +1,7 @@
 import "server-only";
 
 import { TELEGRAM_LIMIT, formatAnalystMessage } from "@/lib/analyst/format";
+import { STALE_AFTER_DAYS, reportAge, spokenDay } from "@/lib/analyst/outage";
 import { escapeHtml } from "@/lib/collectors/alerts";
 import type { AnalystRow } from "@/lib/db/queries";
 import type { TelegramResult } from "@/lib/digest/telegram";
@@ -37,7 +38,25 @@ export type ActionDeps = {
   latestReport: () => Promise<AnalystRow | null>;
   send: (text: string) => Promise<TelegramResult>;
   reportUrl?: string;
+  /** The clock, for the tests. */
+  now?: () => Date;
 };
+
+/**
+ * An out-of-date report is dated at the top of the post. The analyst's own
+ * message carries no date, because it goes out the morning it is written; a
+ * report Jarvis posts can be weeks old (15 October 2026: every run since
+ * 26 September had failed), and the chat would take it for today's.
+ */
+function datedIfOld(message: string, createdAt: string, now: Date): string {
+  const { writtenOn, ageDays } = reportAge(createdAt, now);
+  if (ageDays < STALE_AFTER_DAYS) return message;
+  const dated = `⚠️ <b>Report of ${spokenDay(writtenOn)}, ${ageDays} days old</b>\n`;
+  // Trimmed the way formatAnalystMessage trims, so the date still fits.
+  return dated.length + message.length <= TELEGRAM_LIMIT
+    ? `${dated}${message}`
+    : `${dated}${message.slice(0, TELEGRAM_LIMIT - dated.length - 20)}…\n\n(trimmed)`;
+}
 
 function refused(error: string): JarvisResponse {
   return { status: 422, body: { ok: false, error } };
@@ -51,7 +70,8 @@ async function sendReport(deps: ActionDeps): Promise<JarvisResponse> {
   const row = await deps.latestReport();
   if (!row?.report) return refused("There is no analyst report to send yet.");
 
-  const result = await deps.send(formatAnalystMessage(row.report, deps.reportUrl));
+  const message = formatAnalystMessage(row.report, deps.reportUrl);
+  const result = await deps.send(datedIfOld(message, row.createdAt, deps.now?.() ?? new Date()));
   if (!result.sent) return notDelivered(result);
   return {
     status: 200,

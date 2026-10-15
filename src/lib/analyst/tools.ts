@@ -183,8 +183,9 @@ export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
     name: "get_latest_report",
     description:
       "The most recent daily analyst report: its headline, health, findings and " +
-      "recommendations. Use when asked about the last report or to avoid " +
-      "contradicting a conclusion already published to the team.",
+      "recommendations, with the day it was written (writtenOn, ageDays). A note says " +
+      "when it is out of date and why no newer one exists. Use when asked about the " +
+      "last report or to avoid contradicting a conclusion already published to the team.",
     type: "function",
     strict: false,
     parameters: noArgs,

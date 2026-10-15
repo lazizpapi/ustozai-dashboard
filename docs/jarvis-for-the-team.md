@@ -27,8 +27,10 @@ it; it talks back.
 - "Search the web for the weather in Tashkent."
 
 Each department hears its own figures: Marketing asks about ranks, keywords,
-the market and audiences; Product about installs, reviews, ratings and
-releases; IT about the data collectors and the analyst's report.
+the market, audiences and the YouTube comment bot; Product about installs, the
+conversion funnel, reviews, ratings and releases; IT about the data collectors,
+the analyst's report and its daily runs. When a report is out of date, Jarvis
+says how old it is.
 
 ## Good to know
 
@@ -83,8 +85,10 @@ maʼlumot qidiradi. Siz gapirasiz, u javob beradi.
 - "Internetdan Toshkentdagi obʼhavoni qidirib ber."
 
 Har bir boʻlim oʻz raqamlarini eshitadi: Marketing reyting, kalit soʻzlar,
-bozor va auditoriya haqida soʻraydi; Product yuklab olishlar, sharhlar, reyting
-va relizlar haqida; IT esa maʼlumot yigʻuvchilar va tahliliy hisobot haqida.
+bozor, auditoriya va YouTube izohlar boti haqida soʻraydi; Product yuklab
+olishlar, konversiya voronkasi, sharhlar, reyting va relizlar haqida; IT esa
+maʼlumot yigʻuvchilar, tahliliy hisobot va uning har kungi ishga tushishlari
+haqida. Hisobot eskirgan boʻlsa, Jarvis uning qachon yozilganini aytadi.
 
 ## Bilib qoʻying
 

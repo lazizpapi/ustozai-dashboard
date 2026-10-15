@@ -35,9 +35,10 @@ describe("toolsFor", () => {
     ]);
   });
 
-  it("gives product installs, reviews and listings", () => {
+  it("gives product installs, the funnel its Downloads page shows, reviews and listings", () => {
     expect(toolsFor("product", ALL)).toEqual([
       "get_downloads",
+      "get_conversion_funnel",
       "get_reviews",
       "get_audience",
       "get_growth",
@@ -47,8 +48,8 @@ describe("toolsFor", () => {
     ]);
   });
 
-  it("gives IT the collectors and the analyst report", () => {
-    expect(toolsFor("it", ALL)).toEqual(["get_latest_report", "get_collector_health"]);
+  it("gives IT the collectors, the analyst report and the notes its Analyst page shows", () => {
+    expect(toolsFor("it", ALL)).toEqual(["get_latest_report", "get_metric_notes", "get_collector_health"]);
   });
 
   it.each(["marketing", "product", "it"] as const)(
@@ -84,8 +85,22 @@ describe("Jarvis's own tools", () => {
     }
   });
 
-  it("give IT nothing new", () => {
-    expect(toolsFor("it", EVERY)).toEqual(["get_latest_report", "get_collector_health"]);
+  it("give marketing the comment bot its Comments page shows, and no one else below the CEO", () => {
+    expect(toolsFor("marketing", EVERY)).toContain("get_comment_activity");
+    expect(toolsFor("ceo", EVERY)).toContain("get_comment_activity");
+    expect(toolsFor("product", EVERY)).not.toContain("get_comment_activity");
+    expect(toolsFor("it", EVERY)).not.toContain("get_comment_activity");
+  });
+
+  it("give IT the analyst's run history, so it can tell when the report stopped", () => {
+    expect(toolsFor("it", EVERY)).toEqual([
+      "get_latest_report",
+      "get_metric_notes",
+      "get_collector_health",
+      "get_analyst_runs",
+    ]);
+    expect(toolsFor("marketing", EVERY)).not.toContain("get_analyst_runs");
+    expect(toolsFor("product", EVERY)).not.toContain("get_analyst_runs");
   });
 });
 

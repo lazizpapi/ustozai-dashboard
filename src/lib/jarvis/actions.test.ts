@@ -57,6 +57,20 @@ describe("send_report", () => {
     expect(d.sent[0]).toContain("https://dash.example/analyst");
   });
 
+  it("dates an old report at the top of the post, so the chat does not take it for today's", async () => {
+    // 15 October 2026: the newest report was weeks old, because every run since had failed.
+    const d = deps({ now: () => new Date("2026-10-15T05:00:00Z") });
+    await runJarvisAction("send_report", {}, d);
+    expect(d.sent[0].startsWith("⚠️ <b>Report of Monday 28 September, 17 days old</b>\n")).toBe(true);
+  });
+
+  it("posts a report from today or yesterday as the analyst wrote it", async () => {
+    const d = deps({ now: () => new Date("2026-09-29T05:00:00Z") });
+    await runJarvisAction("send_report", {}, d);
+    expect(d.sent[0]).not.toContain("days old");
+    expect(d.sent[0].startsWith("🟢")).toBe(true);
+  });
+
   it("refuses clearly when there is no report to send", async () => {
     const d = deps({ latestReport: async () => null });
     const result = await runJarvisAction("send_report", {}, d);

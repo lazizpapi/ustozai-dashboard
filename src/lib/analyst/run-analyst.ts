@@ -6,8 +6,11 @@ import { analystJsonSchema, analystReportSchema, type AnalystReport } from "./sc
 import { buildPack, pipelineBroken, type AnalystPack } from "./pack";
 import { gatherPack } from "./gather";
 import { formatAnalystMessage } from "./format";
+import { notifyOutage } from "./outage";
 import { serviceClient } from "@/lib/db/client";
 import { recordRuns } from "@/lib/db/persist";
+import { recentAnalystRunStatuses } from "@/lib/db/queries";
+import { sendTelegramMessage } from "@/lib/digest/telegram";
 import { analystModel, openaiKey, telegramEnv } from "@/lib/env";
 import { localDate } from "@/lib/growth";
 
@@ -168,6 +171,23 @@ async function sendToTelegram(
   return { sent: true };
 }
 
+/**
+ * After a run that wrote no report: tell the team chat on the second day in a
+ * row, then weekly (outage.ts). Read after this run's row is saved, so the
+ * run counts itself.
+ */
+async function alertIfOutage(options: RunOptions): Promise<void> {
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const alert = await notifyOutage({
+    silent: options.silent === true,
+    recentRuns: () => recentAnalystRunStatuses(),
+    send: (text) => sendTelegramMessage(text),
+    url: base ? `${base}/analyst` : undefined,
+  });
+  // The next try is a week away, so a lost alert at least leaves a trace.
+  if (alert && !alert.sent) console.error("analyst outage alert not sent:", alert.reason);
+}
+
 export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResult> {
   const key = openaiKey();
   if (!key) {
@@ -198,6 +218,7 @@ export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResul
       error: reason,
     });
     await recordRuns([{ source: "analyst", status: "skipped", error: reason }]);
+    await alertIfOutage(options);
     return { status: "stale-data", reason };
   }
 
@@ -246,6 +267,7 @@ export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResul
     await recordRuns([
       { source: "analyst", status: "failed", error: reason, durationMs: Date.now() - started },
     ]);
+    await alertIfOutage(options);
     return { status: "failed", reason };
   }
 }

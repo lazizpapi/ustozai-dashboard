@@ -1,3 +1,4 @@
+import type { ReportOutage } from "@/lib/analyst/outage";
 import type { Role } from "@/lib/roles";
 
 import type { JarvisResponse } from "./handle";
@@ -12,6 +13,10 @@ import type { JarvisNote } from "./notes";
  * offers the morning briefing), and the reminders that have come due.
  *
  * "Today" is Tashkent's calendar day, the same day a reminder is due on.
+ *
+ * The CEO and IT also hear when the daily report has stopped being written
+ * (src/lib/analyst/outage.ts): theirs are the screens that show it, and in
+ * September 2026 it failed for nineteen days before anyone noticed.
  */
 
 export const RECENT_CALLS = 3;
@@ -60,7 +65,12 @@ export type ContextDeps = {
   now: Date;
   calls: (role: Role) => Promise<PastCall[]>;
   notes: (role: Role) => Promise<JarvisNote[]>;
+  /** The daily report's current outage, null while it is being written. */
+  reportOutage?: () => Promise<ReportOutage | null>;
 };
+
+/** The departments whose screens show the daily report. */
+const REPORT_READERS: readonly Role[] = ["ceo", "it"];
 
 /**
  * The context for one department's call, read from both sources side by side.
@@ -70,7 +80,12 @@ export type ContextDeps = {
  * already offered the briefing today, so it does not offer it again.
  */
 export async function gatherCallContext(role: Role, deps: ContextDeps): Promise<JarvisResponse> {
-  const [calls, notes] = await Promise.allSettled([deps.calls(role), deps.notes(role)]);
+  const outageFor = REPORT_READERS.includes(role) ? deps.reportOutage : undefined;
+  const [calls, notes, outage] = await Promise.allSettled([
+    deps.calls(role),
+    deps.notes(role),
+    outageFor ? outageFor() : Promise.resolve(null),
+  ]);
   if (calls.status === "rejected" && notes.status === "rejected") {
     const reason = calls.reason instanceof Error ? calls.reason.message : String(calls.reason);
     return { status: 500, body: { ok: false, error: reason } };
@@ -81,5 +96,7 @@ export async function gatherCallContext(role: Role, deps: ContextDeps): Promise<
     notes: notes.status === "fulfilled" ? notes.value : [],
   });
   const firstCallToday = calls.status === "fulfilled" && context.firstCallToday;
-  return { status: 200, body: { ok: true, ...context, firstCallToday } };
+  // Without the runs the call simply starts without the warning.
+  const reportOutage = outage.status === "fulfilled" ? outage.value : null;
+  return { status: 200, body: { ok: true, ...context, firstCallToday, reportOutage } };
 }

@@ -10,6 +10,7 @@ import {
   iosFunnelBySource,
   keywordSuggestionSets,
   latestAnalystReport,
+  recentAnalystRunStatuses,
   latestKeywordRanks,
   marketOverview,
   noteHistory,
@@ -24,6 +25,7 @@ import {
   type GrowthSeriesKey,
 } from "@/lib/db/queries";
 import { saveAgentFact } from "@/lib/db/persist";
+import { reportWithFreshness } from "./outage";
 import { isMetricKey, visibleKeys } from "@/lib/metric-keys";
 import type { Period } from "@/lib/growth";
 import type { Role } from "@/lib/roles";
@@ -112,8 +114,12 @@ export async function runTool(
     case "get_listing_changes":
       return recentListingChanges(20);
 
-    case "get_latest_report":
-      return (await latestAnalystReport()) ?? { available: false };
+    case "get_latest_report": {
+      // With its age, and why nothing newer exists: the newest good report can
+      // be weeks old when the runs since have failed (outage.ts).
+      const [report, runs] = await Promise.all([latestAnalystReport(), recentAnalystRunStatuses()]);
+      return reportWithFreshness(report, runs, new Date());
+    }
 
     case "get_revenue":
       return revenueSummary(args.days as number);

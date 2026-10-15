@@ -53,10 +53,17 @@ change it. It is trusted here because only the agent holds `JARVIS_SECRET`.
 
 - **No role, or an unknown one: 403.** Nothing falls back to the CEO.
 - **A department gets what its own screens show** (`src/lib/jarvis/authority.ts`):
-  marketing the funnel, keywords, listings, audience, growth, chart, market and
-  metric notes; product downloads, reviews, listings, growth, audience and notes;
-  IT collector health and the latest report. `get_revenue` is the CEO's alone,
-  as `/business` is.
+  marketing the funnel, keywords, listings, audience, growth, chart, market,
+  metric notes, rank history and the comment bot (`get_comment_activity`);
+  product downloads, the funnel, reviews, listings, growth, audience, notes,
+  ratings, installs today and releases; IT collector health, the latest report,
+  metric notes and the report's runs (`get_analyst_runs`). `get_revenue` is the
+  CEO's alone, as `/business` is.
+- **The latest report carries its age** (`writtenOn`, `ageDays`), with a note
+  when it is out of date and why no newer one exists
+  (`src/lib/analyst/outage.ts`). `/api/jarvis/context` tells the CEO's and IT's
+  calls when the report has stopped (`reportOutage`), and the daily run posts
+  to the team chat on the second failed day in a row, then weekly.
 - **Queries run as the caller.** Metric notes are cut by `visibleKeys`, so a
   department never hears a revenue note.
 - **A tool outside the role: 403** with the caller's own tools listed. An

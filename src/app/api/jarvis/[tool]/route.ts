@@ -10,8 +10,10 @@ import {
   rankHistory,
   rankTrend,
   ratingTrend,
+  recentAnalystRunStatuses,
   reviewsByVersion,
 } from "@/lib/db/queries";
+import { CommentBotNotConfiguredError, fetchCommentActivity } from "@/lib/comments/client";
 import {
   clampJarvisArgs,
   isExtraTool,
@@ -60,6 +62,13 @@ const EXTRA_DEPS: ExtraDeps = {
   iosProceeds,
   ownReleases,
   reviewsByVersion,
+  analystRunStatuses: () => recentAnalystRunStatuses(),
+  // Not connected is an answer; a bot that does not answer is an error.
+  commentActivity: () =>
+    fetchCommentActivity().catch((error: unknown) => {
+      if (error instanceof CommentBotNotConfiguredError) return null;
+      throw error;
+    }),
 };
 
 async function respond(request: Request, tool: string, args: Record<string, unknown>) {
