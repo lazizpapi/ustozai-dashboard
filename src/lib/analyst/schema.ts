@@ -179,9 +179,9 @@ export const metricNoteSchema = z.object({
   note_uz: z
     .string()
     .describe(
-      "2-3 jumla, o'zbek tilida, lotin yozuvida. Nima o'zgargani va nima " +
-        "sababdan bo'lishi mumkinligi. Ehtiyotkor ohangda: 'ehtimol', " +
-        "'ko'rinishidan'. Faqat dashborddagi raqamlarga tayan.",
+      "2-3 jumla, oʻzbek tilida, lotin yozuvida. Nima oʻzgargani va nima " +
+        "sababdan boʻlishi mumkinligi. Ehtiyotkor ohangda: \"ehtimol\", " +
+        "\"koʻrinishidan\". Faqat dashborddagi raqamlarga tayan.",
     ),
   evidence: z
     .array(

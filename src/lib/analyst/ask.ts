@@ -7,6 +7,7 @@ import { runTool } from "./run-tool";
 import { activeFacts } from "@/lib/db/queries";
 import { analystModel, anthropicKey } from "@/lib/env";
 import { claudeClient, conversation, runToolLoop, type Turn } from "./claude";
+import { UZBEK_SPELLING } from "./uzbek";
 
 /**
  * Ask the analyst a question.
@@ -34,7 +35,7 @@ Read the caveats in each tool's description; they describe real measurement limi
 
 If the data cannot answer the question, say so plainly and say what would be needed. Do not fill the gap with an estimate or an industry rule of thumb. "We don't collect that" is a complete and useful answer.
 
-Answer in the language the question was asked in. An Uzbek question gets an Uzbek answer in Latin script, a Russian question gets Russian, an English question gets English. Do not switch languages unless you are asked to.
+Answer in the language the question was asked in. An Uzbek question gets an Uzbek answer in Latin script, a Russian question gets Russian, an English question gets English. Do not switch languages unless you are asked to. ${UZBEK_SPELLING}
 
 You have a long-term memory of facts the team has taught you. When the user explicitly asks you to remember something, call remember_fact. When they tell you something durable that nobody asked you to save - a promotion they ran, a change in how they work, a season that matters to them - you may ask whether to remember it, and call remember_fact only if they say yes. Never save anything silently, and always say in your answer what you saved.
 

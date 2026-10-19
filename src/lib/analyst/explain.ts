@@ -6,6 +6,7 @@ import { formatFactsBlock } from "./memory";
 import { metricNoteJsonSchema, metricNoteSchema, type MetricNote } from "./schema";
 import { analystModel, anthropicKey } from "@/lib/env";
 import { claudeClient, runToolLoop, type Send } from "./claude";
+import { UZBEK_SPELLING } from "./uzbek";
 import { saveMetricNote } from "@/lib/db/persist";
 import { activeFacts, notedMovements } from "@/lib/db/queries";
 import type { Movement } from "@/lib/collectors/metric-alerts";
@@ -76,7 +77,7 @@ Correlation is not cause, and you are looking at correlation. Write hedged: "eht
 
 If nothing in the data plausibly explains the movement, set no_clear_driver to true and say so in the note. This is a good answer and it is expected often. Do not reach for a weak explanation to avoid it.
 
-Write note_uz in Uzbek, Latin script, 2 to 3 sentences. Plain and direct. No marketing language, no greeting, no restating the question.`;
+Write note_uz in Uzbek, Latin script, 2 to 3 sentences. Plain and direct. No marketing language, no greeting, no restating the question. ${UZBEK_SPELLING}`;
 
 /**
  * The identity of a movement: which figure, and which day.

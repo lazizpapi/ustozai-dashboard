@@ -8,6 +8,7 @@ import {
   unexplained,
 } from "./explain";
 import { metricNoteJsonSchema, metricNoteSchema } from "./schema";
+import { UZBEK_SPELLING } from "./uzbek";
 import type { Movement } from "@/lib/collectors/metric-alerts";
 
 /**
@@ -167,6 +168,21 @@ describe("explainMovements", () => {
     );
 
     vi.unstubAllEnvs();
+  });
+});
+
+describe("Uzbek spelling", () => {
+  // A note written with a plain apostrophe (o'zbek) was copying the plain
+  // apostrophes in its own instruction (19 October 2026).
+  it("is spelled right in the note's own instruction, so the model copies the right marks", () => {
+    const json = JSON.stringify(metricNoteJsonSchema());
+    expect(json).toContain("o\u02bbzbek");
+    expect(json).not.toMatch(/[a-z]'[a-z]/i);
+  });
+
+  it("is spelled out for the model: ʻ in oʻ and gʻ, ʼ for the glottal stop", () => {
+    expect(UZBEK_SPELLING).toContain("\u02bb");
+    expect(UZBEK_SPELLING).toContain("\u02bc");
   });
 });
 
