@@ -4,6 +4,7 @@ import { serviceClient } from "./client";
 import type { JarvisCall } from "@/lib/jarvis/calls";
 import type { Role } from "@/lib/roles";
 import type { JarvisNote, NewNote } from "@/lib/jarvis/notes";
+import type { ReminderRow } from "@/lib/jarvis/reminder-posts";
 import { localDate } from "@/lib/growth";
 import type {
   ChartApp,
@@ -781,6 +782,49 @@ export async function clearJarvisNote(role: Role, id: string): Promise<boolean> 
     .is("cleared_at", null)
     .select("id");
   if (error) throw new Error(`clearJarvisNote: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
+/**
+ * Marks a reminder posted today, but only if no other run already did: the
+ * update matches the post count it was read with. False when it lost the race.
+ * See migration 0023 and src/lib/jarvis/reminder-posts.ts.
+ */
+export async function claimReminderPost(row: ReminderRow, today: string): Promise<boolean> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_notes")
+    .update({ last_posted_on: today, post_count: row.post_count + 1 })
+    .eq("id", row.id)
+    .eq("post_count", row.post_count)
+    .is("cleared_at", null)
+    .select("id");
+  if (error) throw new Error(`claimReminderPost: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
+/** Gives a claim back after its message did not go out. */
+export async function unclaimReminderPost(row: ReminderRow): Promise<void> {
+  const { error } = await serviceClient()
+    .from("jarvis_notes")
+    .update({ last_posted_on: row.last_posted_on, post_count: row.post_count })
+    .eq("id", row.id)
+    .eq("post_count", row.post_count + 1);
+  if (error) throw new Error(`unclaimReminderPost: ${error.message}`);
+}
+
+/**
+ * Clears a reminder from its button in the team group, saying who. Never the
+ * CEO's, which are never posted. False when it was already cleared.
+ */
+export async function clearReminderByTap(id: string, who: string): Promise<boolean> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_notes")
+    .update({ cleared_at: new Date().toISOString(), cleared_by: who })
+    .eq("id", id)
+    .neq("role", "ceo")
+    .is("cleared_at", null)
+    .select("id");
+  if (error) throw new Error(`clearReminderByTap: ${error.message}`);
   return (data ?? []).length > 0;
 }
 

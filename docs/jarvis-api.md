@@ -188,6 +188,16 @@ caller's department:
 Departments see their notes on `/jarvis/notes`, linked from the call screen
 between calls.
 
+Due reminders are also posted to the team's Telegram group by the hourly
+poll's 9:00 run (Tashkent), one Uzbek message per department, never the
+CEO's, on three mornings at most for one nobody clears
+(`src/lib/jarvis/reminder-posts.ts`, migration 0023). Each run claims a
+reminder for the day before sending, so a rerun never posts twice. A
+"Bajarildi" button under each reminder clears it and redraws the message with
+who did it (`callback_query` in `src/app/api/webhook/telegram/route.ts`).
+Telegram delivers button taps only once the webhook is registered for them:
+`POST /api/cron/telegram-webhook` with the cron secret does that, once.
+
 ## Responses
 
 ```json

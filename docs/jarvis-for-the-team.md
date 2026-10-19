@@ -42,7 +42,10 @@ says how old it is.
 - **Calls end after 20 minutes.** The company has 1,000 free minutes of calls a
   month in all, so end a call when you are done.
 - **Notes and reminders** belong to your department: everyone signed in as your
-  department shares them. See them at /jarvis/notes.
+  department shares them. See them at /jarvis/notes. On the day a reminder is
+  due, it is posted in the team's Telegram group at 9:00, with a "Bajarildi"
+  button anyone can tap to tick it off; one nobody ticks off comes back the next
+  two mornings. The CEO's reminders are never posted.
 - **Camera and screen.** Turn on the camera to show Jarvis something, or
   share your screen to have it read a page. It sees one at a time: whichever
   you turned on last. Screen sharing works from a computer only; phones cannot
@@ -103,7 +106,10 @@ haqida. Hisobot eskirgan boʻlsa, Jarvis uning qachon yozilganini aytadi.
 - **Qoʻngʻiroq 20 daqiqadan keyin tugaydi.** Kompaniyada oyiga jami 1000
   bepul daqiqa bor, shuning uchun ishingiz tugagach qoʻngʻiroqni yakunlang.
 - **Eslatmalar** boʻlimingizga tegishli: boʻlimingiz nomidan kirgan hamma
-  ularni koʻradi. Ular /jarvis/notes sahifasida.
+  ularni koʻradi. Ular /jarvis/notes sahifasida. Eslatma muddati kelgan kuni
+  soat 9:00 da jamoaning Telegram guruhiga yuboriladi, ostida "Bajarildi"
+  tugmasi boʻladi, uni istalgan kishi bosishi mumkin; hech kim bosmasa, keyingi
+  ikki kun ertalab yana yuboriladi. CEO eslatmalari guruhga yuborilmaydi.
 - **Kamera va ekran.** Jarvisga biror narsani koʻrsatish uchun kamerani
   yoqing, sahifani oʻqib berishi uchun esa ekraningizni ulashing. U bir
   vaqtda faqat bittasini koʻradi: qaysi birini oxirgi yoqqan boʻlsangiz,

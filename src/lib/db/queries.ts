@@ -29,6 +29,7 @@ import { latestSuggestionSets, type SeedSuggestions } from "@/lib/aso/suggestion
 import type { AnalystReport } from "@/lib/analyst/schema";
 import { FAILED_START_REASONS } from "@/lib/jarvis/calls";
 import type { PastCall } from "@/lib/jarvis/context";
+import { MAX_POSTS, type ReminderRow } from "@/lib/jarvis/reminder-posts";
 import type { JarvisNote } from "@/lib/jarvis/notes";
 import type { Role } from "@/lib/roles";
 import type { MetricKey } from "@/lib/metric-keys";
@@ -2733,6 +2734,35 @@ export async function openJarvisNotes(role: Role, limit = 50): Promise<JarvisNot
     .limit(limit);
   if (error) throw new Error(`openJarvisNotes: ${error.message}`);
   return (data ?? []) as JarvisNote[];
+}
+
+const REMINDER_COLUMNS =
+  "id, role, text, due_on, created_at, post_count, last_posted_on, cleared_at, cleared_by";
+
+/**
+ * Open reminders due on or before this Tashkent day that may still be posted
+ * to the team group (src/lib/jarvis/reminder-posts.ts makes the final cut).
+ */
+export async function remindersDueBy(today: string): Promise<ReminderRow[]> {
+  const { data, error } = await serviceClient()
+    .from("jarvis_notes")
+    .select(REMINDER_COLUMNS)
+    .is("cleared_at", null)
+    .lte("due_on", today)
+    .neq("role", "ceo")
+    .lt("post_count", MAX_POSTS)
+    .limit(200);
+  if (error) throw new Error(`remindersDueBy: ${error.message}`);
+  return (data ?? []) as ReminderRow[];
+}
+
+/** The reminders a posted message holds, in the order asked for. */
+export async function remindersByIds(ids: readonly string[]): Promise<ReminderRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await serviceClient().from("jarvis_notes").select(REMINDER_COLUMNS).in("id", [...ids]);
+  if (error) throw new Error(`remindersByIds: ${error.message}`);
+  const byId = new Map(((data ?? []) as ReminderRow[]).map((row) => [row.id, row]));
+  return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
 }
 
 /**

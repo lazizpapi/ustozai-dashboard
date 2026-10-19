@@ -3,16 +3,23 @@ import { after } from "next/server";
 import { safeEqual } from "@/lib/cron-auth";
 import { ask } from "@/lib/analyst/ask";
 import { escapeHtml } from "@/lib/collectors/alerts";
-import { sendTelegramMessage, sendTelegramTyping } from "@/lib/digest/telegram";
+import {
+  answerTelegramTap,
+  editTelegramMessage,
+  sendTelegramMessage,
+  sendTelegramTyping,
+} from "@/lib/digest/telegram";
+import { reminderMessage } from "@/lib/jarvis/reminder-posts";
 import { formatFactsList } from "@/lib/analyst/memory";
-import { activeFacts, recentTelegramTurns } from "@/lib/db/queries";
-import { deactivateAgentFact, saveAgentFact, saveTelegramTurns } from "@/lib/db/persist";
+import { activeFacts, recentTelegramTurns, remindersByIds } from "@/lib/db/queries";
+import { clearReminderByTap, deactivateAgentFact, saveAgentFact, saveTelegramTurns } from "@/lib/db/persist";
 import { anthropicKey, socialEnv, telegramEnv, telegramWebhookSecret } from "@/lib/env";
 import { fetchTelegramMembers } from "@/lib/collectors/social";
 import { isDue } from "@/lib/collectors/freshen";
 import {
   WEBHOOK_REFRESH_FLOOR_MS,
   classifyUpdate,
+  type UpdateVerdict,
 } from "@/lib/collectors/telegram-webhook";
 import { hourBucket, saveSocialSnapshots } from "@/lib/db/persist";
 import { latestPlatformCheck } from "@/lib/db/queries";
@@ -110,6 +117,15 @@ export async function POST(request: Request) {
      */
     after(() => answer(verdict.text, verdict.chatId, verdict.messageId));
     return ok({ asked: true });
+  }
+
+  /*
+   * A reminder's "Bajarildi" button. Awaited: one update, one read and one
+   * edit, and the person who tapped is watching the button spin.
+   */
+  if (verdict.kind === "done") {
+    await handleDone(verdict);
+    return ok({ replied: "done" });
   }
 
   /*
@@ -303,3 +319,31 @@ async function handleMemory(
     return "I could not reach my memory just now. Try again in a moment.";
   }
 }
+
+/**
+ * Ticks a reminder off from its button in the team group, then redraws the
+ * message from the database so it shows who did it, and stops the spinner.
+ * A tap on one already cleared, by an earlier tap or on a call, just says so.
+ */
+async function handleDone(verdict: Extract<UpdateVerdict, { kind: "done" }>): Promise<void> {
+  let note = "Bajarildi ✓";
+  try {
+    const cleared = await clearReminderByTap(verdict.noteId, verdict.who);
+    if (!cleared) note = "Bu eslatma allaqachon bajarilgan";
+    const rows = await remindersByIds(verdict.noteIds);
+    const role = rows[0]?.role;
+    if (role) {
+      const { text, keyboard } = reminderMessage(role, rows);
+      const edited = await editTelegramMessage(verdict.chatId, verdict.messageId, text, keyboard);
+      // "Message is not modified", when nothing changed, is not a failure.
+      if (!edited.sent && !/not modified/i.test(edited.reason ?? "")) {
+        console.error("could not redraw a reminder message:", edited.reason);
+      }
+    }
+  } catch (error) {
+    console.error("could not tick off a reminder:", error);
+    note = "Hozir boʻlmadi, birozdan keyin qayta bosing";
+  }
+  await answerTelegramTap(verdict.callbackId, note).catch(() => undefined);
+}
+

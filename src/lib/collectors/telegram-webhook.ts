@@ -1,4 +1,5 @@
 import { parseMemoryCommand } from "@/lib/analyst/memory";
+import { doneNoteId } from "@/lib/jarvis/reminder-posts";
 
 /**
  * Deciding what a Telegram webhook call means.
@@ -48,9 +49,31 @@ export type UpdateVerdict =
   | ({ kind: "forget"; index: number | null } & MessageOrigin)
   | ({ kind: "facts" } & MessageOrigin)
   | { kind: "help" }
+  | ({
+      kind: "done";
+      /** Answered to stop the button's spinner. */
+      callbackId: string;
+      noteId: string;
+      /** Every reminder the message holds, read off its buttons, to redraw it; empty when unknown. */
+      noteIds: string[];
+      who: string;
+      messageId: number;
+    } & Omit<MessageOrigin, "messageId">)
   | { kind: "ignore"; reason: string };
 
+interface CallbackQuery {
+  id?: unknown;
+  data?: unknown;
+  from?: { is_bot?: unknown; first_name?: unknown; last_name?: unknown; username?: unknown };
+  message?: {
+    message_id?: unknown;
+    chat?: { id?: unknown };
+    reply_markup?: { inline_keyboard?: unknown };
+  };
+}
+
 interface ChatMemberUpdate {
+  callback_query?: CallbackQuery;
   chat_member?: {
     chat?: { username?: unknown; type?: unknown };
   };
@@ -112,6 +135,9 @@ export function classifyUpdate(
 
   const message = (update as ChatMemberUpdate).message;
   if (message) return classifyMessage(message, askChatId);
+
+  const tap = (update as ChatMemberUpdate).callback_query;
+  if (tap) return classifyTap(tap, askChatId);
 
   const membership = (update as ChatMemberUpdate).chat_member;
   if (!membership) {
@@ -207,4 +233,68 @@ function classifyMessage(
   return (
     asMemory(text) ?? { kind: "question", text: text.slice(0, MAX_QUESTION_CHARS), ...origin }
   );
+}
+
+/** Longest name kept for "who ticked it off". */
+const MAX_WHO_CHARS = 100;
+
+/**
+ * A tap on a reminder's "Bajarildi" button (src/lib/jarvis/reminder-posts.ts).
+ *
+ * Accepted only from the team group, the same allowlist as a question: the
+ * secret proves Telegram sent it, the chat proves it came from the group the
+ * reminders were posted to. Anyone in that group may tick one off, and the
+ * message then says who did.
+ */
+function classifyTap(tap: CallbackQuery, askChatId?: string | null): UpdateVerdict {
+  if (!askChatId) return { kind: "ignore", reason: "no ask chat configured" };
+
+  const chatId = tap.message?.chat?.id;
+  if (chatId === undefined || String(chatId) !== String(askChatId)) {
+    return { kind: "ignore", reason: "button tapped in another chat" };
+  }
+
+  const noteId = doneNoteId(tap.data);
+  const messageId = tap.message?.message_id;
+  if (!noteId || typeof tap.id !== "string" || typeof messageId !== "number") {
+    return { kind: "ignore", reason: "not a reminder's button" };
+  }
+
+  const rows = Array.isArray(tap.message?.reply_markup?.inline_keyboard)
+    ? (tap.message.reply_markup.inline_keyboard as unknown[])
+    : [];
+  const noteIds = rows
+    .flatMap((row) => (Array.isArray(row) ? row : []))
+    .map((button) => doneNoteId((button as { callback_data?: unknown })?.callback_data))
+    .filter((id): id is string => id !== null);
+
+  const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const name = [text(tap.from?.first_name), text(tap.from?.last_name)].filter(Boolean).join(" ");
+  const who = (name || text(tap.from?.username) || "someone").slice(0, MAX_WHO_CHARS);
+
+  return {
+    kind: "done",
+    callbackId: tap.id,
+    noteId,
+    // Empty when Telegram left out the buttons (old messages): then nothing is
+    // redrawn, rather than the message cut down to the one tapped.
+    noteIds,
+    chatId: String(chatId),
+    messageId,
+    who,
+  };
+}
+
+
+/**
+ * The update list to re-register the webhook with so reminder buttons work,
+ * or null when nothing needs to change.
+ *
+ * The list is fixed at setWebhook time, and a registration replaces it whole,
+ * so taps are added to whatever it already delivers. An empty or missing list
+ * means Telegram's default, which already includes button taps.
+ */
+export function allowedUpdatesWithTaps(current: readonly string[] | undefined): string[] | null {
+  if (!current || current.length === 0 || current.includes("callback_query")) return null;
+  return [...current, "callback_query"];
 }

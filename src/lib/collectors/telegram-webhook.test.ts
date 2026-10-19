@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WEBHOOK_REFRESH_FLOOR_MS, classifyUpdate,
+import { WEBHOOK_REFRESH_FLOOR_MS, allowedUpdatesWithTaps, classifyUpdate,
   MAX_QUESTION_CHARS,
 } from "./telegram-webhook";
 import { isDue } from "./freshen";
@@ -331,5 +331,79 @@ describe("memory commands over Telegram", () => {
       chatId: CHAT,
       messageId: undefined,
     });
+  });
+});
+
+describe("a tap on a reminder's button", () => {
+  // Reminders are posted to the team group with a "Bajarildi" button under
+  // each (src/lib/jarvis/reminder-posts.ts); a tap is a callback_query.
+  const GROUP = "-1001234567890";
+  const A = "8c1c2f1e-6a4b-4b8e-9d3a-2f0c7c5e1a90";
+  const B = "1f0e2d3c-4b5a-4968-8776-5a4b3c2d1e0f";
+  const tap = (overrides: Record<string, unknown> = {}) => ({
+    callback_query: {
+      id: "cb-1",
+      data: `done:${B}`,
+      from: { id: 5, is_bot: false, first_name: "Aziza", last_name: "Karimova" },
+      message: {
+        message_id: 77,
+        chat: { id: Number(GROUP), type: "supergroup" },
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "Bajarildi ✓ 1", callback_data: `done:${A}` }],
+            [{ text: "Bajarildi ✓ 2", callback_data: `done:${B}` }],
+          ],
+        },
+      },
+      ...overrides,
+    },
+  });
+
+  it("is a reminder ticked off, with who tapped and every reminder the message holds", () => {
+    expect(classifyUpdate(tap(), "ustozai", GROUP)).toEqual({
+      kind: "done",
+      callbackId: "cb-1",
+      noteId: B,
+      noteIds: [A, B],
+      chatId: GROUP,
+      messageId: 77,
+      who: "Aziza Karimova",
+    });
+  });
+
+  it("falls back to the username when there is no name", () => {
+    const verdict = classifyUpdate(tap({ from: { id: 5, is_bot: false, first_name: " ", username: "aziza_k" } }), "ustozai", GROUP);
+    expect(verdict).toMatchObject({ kind: "done", who: "aziza_k" });
+  });
+
+  it("ignores a tap in another chat, or with nobody allowed to answer", () => {
+    const elsewhere = tap({ message: { message_id: 1, chat: { id: -100999 } } });
+    expect(classifyUpdate(elsewhere, "ustozai", GROUP)).toMatchObject({ kind: "ignore" });
+    expect(classifyUpdate(tap(), "ustozai", null)).toMatchObject({ kind: "ignore" });
+  });
+
+  it("names no reminders to redraw when Telegram leaves out an old message's buttons", () => {
+    // Messages older than about two days can arrive without their keyboard;
+    // redrawing from the tapped one alone would cut the message down to it.
+    const old = tap({ message: { message_id: 77, chat: { id: Number(GROUP) } } });
+    expect(classifyUpdate(old, "ustozai", GROUP)).toMatchObject({ kind: "done", noteId: B, noteIds: [] });
+  });
+
+  it("ignores a button that is not a reminder's", () => {
+    expect(classifyUpdate(tap({ data: "delete:everything" }), "ustozai", GROUP)).toMatchObject({ kind: "ignore" });
+  });
+});
+
+describe("allowedUpdatesWithTaps", () => {
+  // The webhook's update list is set at registration. Taps must be added to
+  // it without dropping what it already delivers (joins, messages).
+  it("adds button taps to the list the webhook was registered with", () => {
+    expect(allowedUpdatesWithTaps(["message", "chat_member"])).toEqual(["message", "chat_member", "callback_query"]);
+  });
+
+  it("changes nothing when taps are already delivered, including by Telegram's default list", () => {
+    expect(allowedUpdatesWithTaps(["message", "callback_query", "chat_member"])).toBeNull();
+    expect(allowedUpdatesWithTaps([])).toBeNull();
+    expect(allowedUpdatesWithTaps(undefined)).toBeNull();
   });
 });

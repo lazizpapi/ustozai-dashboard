@@ -111,7 +111,13 @@ export default async function JarvisNotesPage() {
               title="Due now"
               icon={BellRing}
               notes={groups.due}
-              meta={(note) => `Due ${dueLabel(note.due_on ?? "")}. Jarvis says it at the start of calls.`}
+              meta={(note) =>
+                `Due ${dueLabel(note.due_on ?? "")}. ${
+                  role === "ceo"
+                    ? "Jarvis says it at the start of calls."
+                    : "Posted in the team chat at 9:00 on up to three mornings, and said at the start of calls."
+                }`
+              }
             />
             <NoteList
               title="Coming up"
