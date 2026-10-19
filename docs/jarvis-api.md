@@ -196,7 +196,10 @@ reminder for the day before sending, so a rerun never posts twice. A
 "Bajarildi" button under each reminder clears it and redraws the message with
 who did it (`callback_query` in `src/app/api/webhook/telegram/route.ts`).
 Telegram delivers button taps only once the webhook is registered for them:
-`POST /api/cron/telegram-webhook` with the cron secret does that, once.
+`POST /api/cron/telegram-webhook` with the cron secret does that, once. The
+bot had never been registered before 19 October 2026, and was then registered
+for button taps alone (Lazizbek's choice), so the group's `/ask` and memory
+commands stay off: messages are not delivered.
 
 ## Responses
 

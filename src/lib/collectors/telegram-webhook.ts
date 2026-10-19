@@ -298,3 +298,21 @@ export function allowedUpdatesWithTaps(current: readonly string[] | undefined): 
   if (!current || current.length === 0 || current.includes("callback_query")) return null;
   return [...current, "callback_query"];
 }
+
+/**
+ * What to register the webhook as so reminder buttons work, or null when it
+ * already delivers them.
+ *
+ * On 19 October 2026 the bot turned out never to have been registered, so no
+ * update had ever reached this dashboard. A first registration asks for button
+ * taps alone, Lazizbek's choice: messages stay undelivered, so /ask and the
+ * memory commands stay off in the team group, as they have always been.
+ */
+export function webhookRegistration(
+  current: { url: string; allowedUpdates?: readonly string[] },
+  ownUrl: string,
+): { url: string; allowedUpdates: string[] } | null {
+  if (!current.url) return { url: ownUrl, allowedUpdates: ["callback_query"] };
+  const allowedUpdates = allowedUpdatesWithTaps(current.allowedUpdates);
+  return allowedUpdates ? { url: current.url, allowedUpdates } : null;
+}

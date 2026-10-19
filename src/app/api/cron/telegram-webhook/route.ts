@@ -1,5 +1,5 @@
 import { isAuthorizedCron, unauthorized } from "@/lib/cron-auth";
-import { allowedUpdatesWithTaps } from "@/lib/collectors/telegram-webhook";
+import { webhookRegistration } from "@/lib/collectors/telegram-webhook";
 import { registerTelegramWebhook, telegramWebhookInfo } from "@/lib/digest/telegram";
 import { telegramWebhookSecret } from "@/lib/env";
 
@@ -8,12 +8,12 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/cron/telegram-webhook: lets reminder buttons reach the webhook.
  *
- * Telegram delivers only the update types the webhook was registered with,
- * and button taps were never among them. Run once, by hand, with the cron
- * secret: it reads the current registration, adds button taps to its update
- * list, and registers it again at the same address with this deployment's own
- * secret, so the bot token and secret never leave Vercel. Safe to repeat: it
- * changes nothing when taps are already delivered.
+ * Telegram delivers only the update types the webhook was registered with.
+ * Run once, by hand, with the cron secret. With no registration yet (the case
+ * on 19 October 2026), it registers this dashboard's webhook route for button
+ * taps alone; with one, it adds taps to its update list at the same address.
+ * Either way with this deployment's own secret, so the bot token and secret
+ * never leave Vercel. Safe to repeat: it changes nothing once taps arrive.
  */
 export async function POST(request: Request) {
   if (!isAuthorizedCron(request)) return unauthorized();
@@ -24,21 +24,25 @@ export async function POST(request: Request) {
   }
 
   const info = await telegramWebhookInfo();
-  if (!info?.url) {
-    return Response.json(
-      { ok: false, error: "could not read the webhook from Telegram, or it is not registered" },
-      { status: 409 },
-    );
+  if (!info) {
+    return Response.json({ ok: false, error: "could not read the webhook from Telegram" }, { status: 502 });
   }
 
-  const allowedUpdates = allowedUpdatesWithTaps(info.allowedUpdates);
-  if (!allowedUpdates) {
+  const ownUrl = new URL("/api/webhook/telegram", request.url).toString();
+  const next = webhookRegistration(info, ownUrl);
+  if (!next) {
     return Response.json({ ok: true, changed: false, allowedUpdates: info.allowedUpdates ?? "Telegram's default" });
   }
 
-  const result = await registerTelegramWebhook(info.url, secret, allowedUpdates);
+  const result = await registerTelegramWebhook(next.url, secret, next.allowedUpdates);
   return Response.json(
-    { ok: result.sent, changed: result.sent, allowedUpdates, ...(result.reason ? { error: result.reason } : {}) },
+    {
+      ok: result.sent,
+      changed: result.sent,
+      url: next.url,
+      allowedUpdates: next.allowedUpdates,
+      ...(result.reason ? { error: result.reason } : {}),
+    },
     { status: result.sent ? 200 : 502 },
   );
 }

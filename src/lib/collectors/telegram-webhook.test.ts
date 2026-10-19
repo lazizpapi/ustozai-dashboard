@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { WEBHOOK_REFRESH_FLOOR_MS, allowedUpdatesWithTaps, classifyUpdate,
+import { WEBHOOK_REFRESH_FLOOR_MS, allowedUpdatesWithTaps, classifyUpdate, webhookRegistration,
   MAX_QUESTION_CHARS,
 } from "./telegram-webhook";
 import { isDue } from "./freshen";
@@ -405,5 +405,26 @@ describe("allowedUpdatesWithTaps", () => {
     expect(allowedUpdatesWithTaps(["message", "callback_query", "chat_member"])).toBeNull();
     expect(allowedUpdatesWithTaps([])).toBeNull();
     expect(allowedUpdatesWithTaps(undefined)).toBeNull();
+  });
+});
+
+describe("webhookRegistration", () => {
+  const OWN = "https://dash.example/api/webhook/telegram";
+
+  it("registers this dashboard for button taps alone when the bot has no webhook yet", () => {
+    // 19 October 2026: the bot had never been registered, so nothing reached
+    // the dashboard. Taps only, Lazizbek's choice: /ask stays off in the group.
+    expect(webhookRegistration({ url: "" }, OWN)).toEqual({ url: OWN, allowedUpdates: ["callback_query"] });
+  });
+
+  it("adds taps to an existing registration, at its own address", () => {
+    expect(webhookRegistration({ url: "https://old.example/hook", allowedUpdates: ["chat_member"] }, OWN)).toEqual({
+      url: "https://old.example/hook",
+      allowedUpdates: ["chat_member", "callback_query"],
+    });
+  });
+
+  it("changes nothing when taps already arrive", () => {
+    expect(webhookRegistration({ url: OWN, allowedUpdates: ["callback_query"] }, OWN)).toBeNull();
   });
 });
