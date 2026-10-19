@@ -1,12 +1,11 @@
 import "server-only";
 
-import OpenAI from "openai";
-
 import { ASK_TOOLS, clampArgs } from "./tools";
 import { runTool } from "./run-tool";
 import { formatFactsBlock } from "./memory";
 import { metricNoteJsonSchema, metricNoteSchema, type MetricNote } from "./schema";
-import { analystModel, openaiKey } from "@/lib/env";
+import { analystModel, anthropicKey } from "@/lib/env";
+import { claudeClient, runToolLoop, type Send } from "./claude";
 import { saveMetricNote } from "@/lib/db/persist";
 import { activeFacts, notedMovements } from "@/lib/db/queries";
 import type { Movement } from "@/lib/collectors/metric-alerts";
@@ -138,106 +137,40 @@ export function explainPrompt(movement: Movement): string {
   ].join("\n");
 }
 
+/** The explainer's instructions, with the facts the team has taught. */
+export function explainInstructions(facts: Parameters<typeof formatFactsBlock>[0]): string {
+  return [SYSTEM_PROMPT, formatFactsBlock(facts)].filter(Boolean).join("\n\n");
+}
+
 /**
  * One movement, explained. Throws, and its caller catches per movement.
  *
- * The loop mirrors the chat's, with the differences that matter here: it ends
- * in a schema rather than in prose, and it has no history, because a note about
- * downloads should not be coloured by the note about rankings that preceded it.
+ * The same loop as the chat's (claude.ts), with the differences that matter
+ * here: it ends in a schema rather than in prose, it has no history, because a
+ * note about downloads should not be coloured by the note about rankings that
+ * preceded it, and its last step may not call a tool, so the loop cannot run
+ * out mid-investigation with nothing to show.
  */
-async function explainOne(
-  client: OpenAI,
+export async function explainOne(
+  send: Send,
   model: string,
   movement: Movement,
-  instructions: string,
+  system: string,
+  deadline?: number,
 ): Promise<{ note: MetricNote; usage: { input: number; output: number } }> {
-  const input: OpenAI.Responses.ResponseInput = [
-    { role: "user", content: explainPrompt(movement) },
-  ];
-
-  let inputTokens = 0;
-  let outputTokens = 0;
-
-  for (let step = 0; step < MAX_EXPLAIN_STEPS; step += 1) {
-    const last = step === MAX_EXPLAIN_STEPS - 1;
-
-    const response = await client.responses.create({
-      model,
-      max_output_tokens: 2_000,
-      instructions,
-      /*
-       * The tools are withheld on the final step so the loop cannot run out
-       * mid-investigation with nothing to show. Given no way to ask for more,
-       * the model has to answer from what it already read, which is the note we
-       * would rather have than an exhausted loop and an exception.
-       */
-      ...(last ? {} : { tools: ASK_TOOLS }),
-      text: {
-        format: {
-          type: "json_schema" as const,
-          name: "metric_note",
-          strict: true,
-          schema: metricNoteJsonSchema(),
-        },
-      },
-      input,
-    });
-
-    inputTokens += response.usage?.input_tokens ?? 0;
-    outputTokens += response.usage?.output_tokens ?? 0;
-
-    /*
-     * Both checked before reading the text. A refusal and a truncation each
-     * come back as an ordinary success, so parsing first would report "not
-     * valid JSON" for what is really a declined or cut-off answer.
-     */
-    const message = response.output.find((item) => item.type === "message");
-    const refusal = message?.content.find((part) => part.type === "refusal");
-    if (refusal) throw new Error(`model declined: ${refusal.refusal}`);
-
-    if (response.status === "incomplete") {
-      throw new Error(
-        `note was cut off (${response.incomplete_details?.reason ?? "unknown reason"})`,
-      );
-    }
-
-    const calls = response.output.filter((item) => item.type === "function_call");
-
-    if (calls.length === 0) {
-      return {
-        note: metricNoteSchema.parse(JSON.parse(response.output_text)),
-        usage: { input: inputTokens, output: outputTokens },
-      };
-    }
-
-    // Every output item goes back verbatim, reasoning included: a reasoning
-    // model carries state in those, and dropping them loses the thread.
-    input.push(...(response.output as OpenAI.Responses.ResponseInputItem[]));
-
-    for (const call of calls) {
-      let parsed: unknown = {};
-      try {
-        parsed = JSON.parse(call.arguments || "{}");
-      } catch {
-        parsed = {};
-      }
-
-      let output: string;
-      try {
-        output = JSON.stringify(await runTool(call.name, clampArgs(call.name, parsed)));
-      } catch (error) {
-        // Handed back rather than thrown, so one dead query becomes something
-        // the model can work around instead of losing the note.
-        output = JSON.stringify({
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      input.push({ type: "function_call_output", call_id: call.call_id, output });
-    }
-  }
-
-  throw new Error("ran out of steps without writing a note");
+  const { answer, usage } = await runToolLoop({
+    send,
+    request: { model, maxTokens: 8_000, system, effort: "medium", schema: metricNoteJsonSchema() },
+    tools: ASK_TOOLS,
+    messages: [{ role: "user", content: explainPrompt(movement) }],
+    maxSteps: MAX_EXPLAIN_STEPS,
+    answerOnLastStep: true,
+    execute: (name, input) => runTool(name, clampArgs(name, input)),
+    what: "the note",
+    deadline,
+  });
+  if (answer === null) throw new Error("ran out of steps without writing a note");
+  return { note: metricNoteSchema.parse(JSON.parse(answer)), usage };
 }
 
 /**
@@ -257,7 +190,7 @@ export async function explainMovements(
   if (movements.length === 0) return notes;
 
   try {
-    const key = openaiKey();
+    const key = anthropicKey();
     // The same degradation as everywhere else: without a key the alert still
     // goes out, exactly as it did before any of this existed.
     if (!key) return notes;
@@ -267,7 +200,9 @@ export async function explainMovements(
     if (todo.length === 0) return notes;
 
     const model = analystModel();
-    const client = new OpenAI({ apiKey: key });
+    // A minute per request at most: this shares the daily cron's 300 seconds.
+    const client = claudeClient(key, 60_000);
+    const send: Send = (params) => client.beta.messages.create(params);
 
     /*
      * The team's taught facts, which is exactly the material this loop is
@@ -275,9 +210,7 @@ export async function explainMovements(
      * and it is the most likely honest answer to why a number moved.
      */
     const facts = await activeFacts().catch(() => []);
-    const instructions = [SYSTEM_PROMPT, formatFactsBlock(facts)]
-      .filter(Boolean)
-      .join("\n\n");
+    const instructions = explainInstructions(facts);
 
     for (const movement of todo) {
       if (Date.now() >= deadline) {
@@ -286,7 +219,7 @@ export async function explainMovements(
       }
 
       try {
-        const { note, usage } = await explainOne(client, model, movement, instructions);
+        const { note, usage } = await explainOne(send, model, movement, instructions, deadline);
         await saveMetricNote({
           metric_key: movement.metricKey,
           movement_date: movement.date,

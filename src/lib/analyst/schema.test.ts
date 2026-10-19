@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   analystJsonSchema,
+  metricNoteJsonSchema,
   analystReportSchema,
   storedAnalystReportSchema,
 } from "./schema";
@@ -70,6 +71,20 @@ describe("generating a report", () => {
     const schema = analystJsonSchema() as { required?: string[] };
 
     expect(schema.required).toContain("followUp");
+  });
+
+  it("closes every object, as Claude's structured outputs require", () => {
+    // An object left open fails the whole request, for the report and the notes alike.
+    const open: string[] = [];
+    const walk = (node: unknown, path: string) => {
+      if (node === null || typeof node !== "object") return;
+      const record = node as Record<string, unknown>;
+      if (record.type === "object" && record.additionalProperties !== false) open.push(path || "/");
+      for (const [key, value] of Object.entries(record)) walk(value, `${path}/${key}`);
+    };
+    walk(analystJsonSchema(), "");
+    walk(metricNoteJsonSchema(), "");
+    expect(open).toEqual([]);
   });
 
   it("carries no keyword the API's strict mode rejects", () => {

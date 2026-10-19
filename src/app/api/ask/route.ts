@@ -8,7 +8,7 @@ import { activeFacts } from "@/lib/db/queries";
 import { deactivateAgentFact, saveAgentFact } from "@/lib/db/persist";
 import { currentRole, currentScope } from "@/app/load";
 import { mayUseChat } from "@/lib/gate";
-import { openaiKey } from "@/lib/env";
+import { anthropicKey } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -51,9 +51,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Not available for this account." }, { status: 403 });
   }
 
-  if (!openaiKey()) {
+  if (!anthropicKey()) {
     return Response.json(
-      { error: "The analyst needs OPENAI_API_KEY set in the environment." },
+      { error: "The analyst needs ANTHROPIC_API_KEY set in the environment." },
       { status: 503 },
     );
   }

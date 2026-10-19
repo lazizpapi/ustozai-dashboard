@@ -40,14 +40,15 @@ export function analyticsRequestId(): string | null {
 }
 
 /**
- * The OpenAI credential the analyst runs on.
+ * The Anthropic credential the analyst runs on: the daily report, the notes on
+ * why a number moved, and the chat. (OpenAI until October 2026.)
  *
  * Optional, and its absence is a skip rather than a failure: without it every
  * collector still runs and every page still renders, and only the analyst is
  * dormant. Same pattern as the App Store and Instagram credentials.
  */
-export function openaiKey(): string | null {
-  return process.env.OPENAI_API_KEY?.trim() || null;
+export function anthropicKey(): string | null {
+  return process.env.ANTHROPIC_API_KEY?.trim() || null;
 }
 
 /**
@@ -55,7 +56,7 @@ export function openaiKey(): string | null {
  * the chat, since they want the same judgement.
  */
 export function analystModel(): string {
-  return process.env.ANALYST_MODEL?.trim() || "gpt-5.6";
+  return process.env.ANALYST_MODEL?.trim() || "claude-sonnet-5-5";
 }
 
 /**

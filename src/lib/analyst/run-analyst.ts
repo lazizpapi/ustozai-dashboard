@@ -1,8 +1,9 @@
 import "server-only";
 
-import OpenAI from "openai";
+import type Anthropic from "@anthropic-ai/sdk";
 
 import { analystJsonSchema, analystReportSchema, type AnalystReport } from "./schema";
+import { claudeClient, claudeRequest, finishedText } from "./claude";
 import { buildPack, pipelineBroken, type AnalystPack } from "./pack";
 import { gatherPack } from "./gather";
 import { formatAnalystMessage } from "./format";
@@ -11,7 +12,7 @@ import { serviceClient } from "@/lib/db/client";
 import { recordRuns } from "@/lib/db/persist";
 import { recentAnalystRunStatuses } from "@/lib/db/queries";
 import { sendTelegramMessage } from "@/lib/digest/telegram";
-import { analystModel, openaiKey, telegramEnv } from "@/lib/env";
+import { analystModel, anthropicKey, telegramEnv } from "@/lib/env";
 import { localDate } from "@/lib/growth";
 
 /**
@@ -63,71 +64,57 @@ function periodOf(pack: AnalystPack): { from: string; to: string } {
 /**
  * Ask the model for a report, validating what comes back.
  *
- * Structured outputs constrain generation to the schema, so a malformed report
+ * Structured outputs hold the answer to the schema, so a malformed report
  * should be impossible rather than merely unlikely. The validation and the one
  * retry exist because "should be impossible" is not a thing to stake a daily
  * job on, and a single retry costs cents.
+ *
+ * Streamed, because a long report with high-effort thinking can take minutes,
+ * and a request held open that long without a stream can time out.
  */
 async function requestReport(
-  client: OpenAI,
+  client: Anthropic,
   model: string,
   pack: AnalystPack,
 ): Promise<{ report: AnalystReport; usage: { input: number; output: number } }> {
   let lastError: unknown;
+  const usage = { input: 0, output: 0 };
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const response = await client.responses.create({
-      model,
-      // Generous: reasoning and the response share this budget, and a report
-      // truncated mid-recommendation would be worse than none at all.
-      max_output_tokens: 16_000,
-      instructions: SYSTEM_PROMPT,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "analyst_report",
-          strict: true,
+    const message = await client.beta.messages
+      .stream({
+        // High effort: one careful report a day is what this exists for.
+        // Generous room: thinking and the report share max_tokens, and a
+        // report cut off mid-recommendation would be worse than none.
+        ...claudeRequest({
+          model,
+          maxTokens: 32_000,
+          system: SYSTEM_PROMPT,
+          effort: "high",
           schema: analystJsonSchema(),
-        },
-      },
-      input: [
-        {
-          role: "user",
-          content:
-            `Today's briefing:\n\n${JSON.stringify(pack, null, 1)}\n\n` +
-            `Write today's assessment.`,
-        },
-      ],
-    });
+          cache: false,
+        }),
+        messages: [
+          {
+            role: "user",
+            content:
+              `Today's briefing:\n\n${JSON.stringify(pack, null, 1)}\n\n` +
+              `Write today's assessment.`,
+          },
+        ],
+      })
+      .finalMessage();
 
-    const usage = {
-      input: response.usage?.input_tokens ?? 0,
-      output: response.usage?.output_tokens ?? 0,
-    };
+    usage.input += message.usage.input_tokens + (message.usage.cache_read_input_tokens ?? 0);
+    usage.output += message.usage.output_tokens;
 
-    /*
-     * Both checked before reading the text. A refusal and a truncation each
-     * come back as an ordinary success, so parsing first would report "not
-     * valid JSON" for what is really a declined or cut-off answer.
-     */
-    const message = response.output.find((item) => item.type === "message");
-    const refusal = message?.content.find((part) => part.type === "refusal");
-    if (refusal) throw new Error(`model declined the request: ${refusal.refusal}`);
-
-    if (response.status === "incomplete") {
-      throw new Error(
-        `report was cut off (${response.incomplete_details?.reason ?? "unknown reason"})`,
-      );
-    }
-
+    // A refusal or a cut-off answer throws here, before any parsing, so it is
+    // reported as what it is rather than as "not valid JSON".
+    const text = finishedText(message, "the report");
     try {
-      return {
-        report: analystReportSchema.parse(JSON.parse(response.output_text)),
-        usage,
-      };
+      return { report: analystReportSchema.parse(JSON.parse(text)), usage };
     } catch (error) {
       lastError = error;
-      if (attempt === 2) break;
     }
   }
 
@@ -189,12 +176,12 @@ async function alertIfOutage(options: RunOptions): Promise<void> {
 }
 
 export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResult> {
-  const key = openaiKey();
+  const key = anthropicKey();
   if (!key) {
     await recordRuns([
-      { source: "analyst", status: "skipped", error: "OPENAI_API_KEY is not set" },
+      { source: "analyst", status: "skipped", error: "ANTHROPIC_API_KEY is not set" },
     ]);
-    return { status: "skipped", reason: "OPENAI_API_KEY is not set" };
+    return { status: "skipped", reason: "ANTHROPIC_API_KEY is not set" };
   }
 
   const model = analystModel();
@@ -224,7 +211,7 @@ export async function runAnalyst(options: RunOptions = {}): Promise<AnalystResul
 
   const started = Date.now();
   try {
-    const client = new OpenAI({ apiKey: key });
+    const client = claudeClient(key);
     const { report, usage } = await requestReport(client, model, pack);
 
     await save({

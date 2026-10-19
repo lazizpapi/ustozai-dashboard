@@ -1,5 +1,3 @@
-import type OpenAI from "openai";
-
 import { GROWTH_SERIES, type GrowthSeriesKey } from "@/lib/db/queries";
 import { FACT_MAX_CHARS } from "./memory";
 import { METRIC_KEYS, isMetricKey } from "@/lib/metric-keys";
@@ -54,7 +52,7 @@ const daysSchema = (hint: string) => ({
 
 const noArgs = { type: "object" as const, properties: {} };
 
-export const ASK_TOOLS: OpenAI.Responses.Tool[] = [
+export const ASK_TOOLS: AskFunctionTool[] = [
   {
     name: "get_downloads",
     description:
@@ -306,10 +304,19 @@ const REMEMBER_FACT_TOOL: AskFunctionTool = {
  * Only ask() uses this. Every other caller takes ASK_TOOLS and stays
  * read-only.
  */
-export const CHAT_TOOLS: OpenAI.Responses.Tool[] = [...ASK_TOOLS, REMEMBER_FACT_TOOL];
+export const CHAT_TOOLS: AskFunctionTool[] = [...ASK_TOOLS, REMEMBER_FACT_TOOL];
 
-/** Responses.Tool is a union across tool kinds; ours are all functions. */
-export type AskFunctionTool = Extract<OpenAI.Responses.Tool, { type: "function" }>;
+/**
+ * One tool, as the catalogue declares it. Jarvis reads this shape from
+ * /api/jarvis, so it stays put; claude.ts turns it into what Claude takes.
+ */
+export type AskFunctionTool = {
+  type: "function";
+  name: string;
+  description?: string | null;
+  strict: boolean | null;
+  parameters: Record<string, unknown> | null;
+};
 
 export function toolNames(): string[] {
   return (ASK_TOOLS as AskFunctionTool[]).map((tool) => tool.name);

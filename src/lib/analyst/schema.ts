@@ -120,7 +120,8 @@ export const storedAnalystReportSchema = analystReportSchema.extend({
 export type AnalystReport = z.infer<typeof storedAnalystReportSchema>;
 
 /**
- * Recursively drop keywords OpenAI's strict mode does not accept.
+ * Recursively drop keywords structured outputs do not accept (OpenAI's strict
+ * mode then, Claude's now: neither takes length, count or range limits).
  *
  * `maxItems` comes from the `.max()` on recommendations. Strict mode supports
  * only a subset of JSON Schema and rejects the whole request if it meets one

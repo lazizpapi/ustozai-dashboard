@@ -1,13 +1,12 @@
 import "server-only";
 
-import OpenAI from "openai";
-
 import { CHAT_TOOLS, clampArgs } from "./tools";
 import { pagePrompt } from "./page-context";
 import { formatFactsBlock } from "./memory";
 import { runTool } from "./run-tool";
 import { activeFacts } from "@/lib/db/queries";
-import { analystModel, openaiKey } from "@/lib/env";
+import { analystModel, anthropicKey } from "@/lib/env";
+import { claudeClient, conversation, runToolLoop, type Turn } from "./claude";
 
 /**
  * Ask the analyst a question.
@@ -52,15 +51,20 @@ export interface AskResult {
   usage: { input: number; output: number };
 }
 
-export type AskTurn = { role: "user" | "assistant"; content: string };
+export type AskTurn = Turn;
+
+/** What the chat says when it ran out of steps rather than answer from a guess. */
+const GAVE_UP =
+  "I went round in circles on that one and stopped before running up a bill. " +
+  "Try asking it in a narrower way.";
 
 export async function ask(
   question: string,
   history: AskTurn[] = [],
   page?: string,
 ): Promise<AskResult> {
-  const key = openaiKey();
-  if (!key) throw new Error("OPENAI_API_KEY is not set");
+  const key = anthropicKey();
+  if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
 
   // Where the question was asked from, when we recognise the page. Enough for
   // the model to read "how are we doing?" as being about what is on screen.
@@ -73,109 +77,29 @@ export async function ask(
    */
   const facts = await activeFacts().catch(() => []);
 
-  const instructions = [SYSTEM_PROMPT, where, formatFactsBlock(facts)]
+  const system = [SYSTEM_PROMPT, where, formatFactsBlock(facts)]
     .filter(Boolean)
     .join("\n\n");
 
-  const client = new OpenAI({ apiKey: key });
-  const input: OpenAI.Responses.ResponseInput = [
-    ...history.map((turn) => ({ role: turn.role, content: turn.content })),
-    { role: "user" as const, content: question },
-  ];
-
+  const client = claudeClient(key);
   const steps: AskStep[] = [];
-  let inputTokens = 0;
-  let outputTokens = 0;
+  const { answer, usage } = await runToolLoop({
+    send: (params) => client.beta.messages.create(params),
+    // Medium effort: a chat answer is a few tool reads, not a hard problem, and
+    // the person is waiting for it.
+    request: { model: analystModel(), maxTokens: 16_000, system, effort: "medium" },
+    tools: CHAT_TOOLS,
+    messages: conversation(history, question),
+    maxSteps: MAX_STEPS,
+    // The last step answers from what was read rather than asking for more.
+    answerOnLastStep: true,
+    execute: (name, input) => {
+      // Recorded as clamped, so the trace shows what was actually read.
+      const args = clampArgs(name, input);
+      steps.push({ tool: name, args });
+      return runTool(name, args, { surface: page === "/telegram" ? "telegram" : "chat" });
+    },
+  });
 
-  for (let step = 0; step < MAX_STEPS; step += 1) {
-    const response = await client.responses.create({
-      model: analystModel(),
-      max_output_tokens: 8_000,
-      instructions,
-      tools: CHAT_TOOLS,
-      input,
-    });
-
-    inputTokens += response.usage?.input_tokens ?? 0;
-    outputTokens += response.usage?.output_tokens ?? 0;
-
-    /*
-     * Checked before reading any text. A refusal and a truncation both come
-     * back as an ordinary success, so pulling the answer out first would
-     * return an empty string and hide why.
-     */
-    const message = response.output.find((item) => item.type === "message");
-    const refusal = message?.content.find((part) => part.type === "refusal");
-    if (refusal) throw new Error(`the model declined: ${refusal.refusal}`);
-
-    if (response.status === "incomplete") {
-      throw new Error(
-        `the answer was cut off (${response.incomplete_details?.reason ?? "unknown reason"})`,
-      );
-    }
-
-    const calls = response.output.filter((item) => item.type === "function_call");
-
-    if (calls.length === 0) {
-      return {
-        answer: response.output_text.trim(),
-        steps,
-        usage: { input: inputTokens, output: outputTokens },
-      };
-    }
-
-    /*
-     * Every output item goes back verbatim, then one result item per call.
-     * All of them, not just the calls: reasoning models carry state in their
-     * reasoning items, and dropping those between turns loses the thread.
-     *
-     * The cast narrows away a computer-use variant that the output union
-     * allows but this agent cannot produce, since the only tools it is given
-     * are the read-only functions in tools.ts.
-     */
-    input.push(...(response.output as OpenAI.Responses.ResponseInputItem[]));
-
-    for (const call of calls) {
-      // Arguments arrive as a JSON string, and a malformed one is the model's
-      // mistake to recover from rather than ours to crash on.
-      let parsed: unknown = {};
-      try {
-        parsed = JSON.parse(call.arguments || "{}");
-      } catch {
-        parsed = {};
-      }
-
-      const args = clampArgs(call.name, parsed);
-      steps.push({ tool: call.name, args });
-
-      try {
-        const data = await runTool(call.name, args, {
-          surface: page === "/telegram" ? "telegram" : "chat",
-        });
-        input.push({
-          type: "function_call_output",
-          call_id: call.call_id,
-          output: JSON.stringify(data),
-        });
-      } catch (error) {
-        // Handed back to the model rather than thrown, so one dead query
-        // becomes something it can work around instead of losing the answer.
-        input.push({
-          type: "function_call_output",
-          call_id: call.call_id,
-          output: JSON.stringify({
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        });
-      }
-    }
-  }
-
-  return {
-    answer:
-      "I went round in circles on that one and stopped before running up a bill. " +
-      "Try asking it in a narrower way.",
-    steps,
-    usage: { input: inputTokens, output: outputTokens },
-  };
+  return { answer: answer ?? GAVE_UP, steps, usage };
 }

@@ -56,6 +56,9 @@ export function runReason(run: RunSummary): string {
     const sources = error.replace(/^collectors failing:\s*/i, "").trim();
     return `data collectors were failing${sources ? ` (${sources})` : ""}, so it refused to write from bad numbers`;
   }
+  if (/credit balance is too low/i.test(error)) {
+    return "the Anthropic account has run out of credits";
+  }
   if (/no credits|insufficient_quota|exceeded your current quota/i.test(error)) {
     return "the OpenAI account has run out of credits";
   }

@@ -7,7 +7,7 @@ import { sendTelegramMessage, sendTelegramTyping } from "@/lib/digest/telegram";
 import { formatFactsList } from "@/lib/analyst/memory";
 import { activeFacts, recentTelegramTurns } from "@/lib/db/queries";
 import { deactivateAgentFact, saveAgentFact, saveTelegramTurns } from "@/lib/db/persist";
-import { openaiKey, socialEnv, telegramEnv, telegramWebhookSecret } from "@/lib/env";
+import { anthropicKey, socialEnv, telegramEnv, telegramWebhookSecret } from "@/lib/env";
 import { fetchTelegramMembers } from "@/lib/collectors/social";
 import { isDue } from "@/lib/collectors/freshen";
 import {
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
   }
 
   if (verdict.kind === "question") {
-    if (!openaiKey()) {
+    if (!anthropicKey()) {
       after(() =>
         sendTelegramMessage("The analyst is not configured on this deployment.").then(
           () => undefined,

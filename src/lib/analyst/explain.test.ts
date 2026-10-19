@@ -160,7 +160,7 @@ describe("explainMovements", () => {
      * returning an empty map rather than throwing, and without touching the
      * database on the way.
      */
-    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
 
     expect(await explainMovements([movement("ios_downloads", "2026-08-11")])).toEqual(
       new Map(),

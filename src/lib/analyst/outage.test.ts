@@ -93,6 +93,15 @@ describe("reportOutage", () => {
     });
   });
 
+  it("names the Anthropic account when that is the one out of credits", () => {
+    const anthropic =
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too ' +
+      'low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}';
+    expect(reportOutage([run("2026-10-20", "failed", anthropic), run("2026-10-19", "ok")])?.reason).toBe(
+      "the Anthropic account has run out of credits",
+    );
+  });
+
   it("passes on any other error briefly, and admits when the last good report is out of sight", () => {
     const outage = reportOutage([run("2026-10-02", "failed", `report was cut off (max_output_tokens)\n${"x".repeat(300)}`)]);
     expect(outage?.reason).toBe("the last attempt failed with: report was cut off (max_output_tokens)");

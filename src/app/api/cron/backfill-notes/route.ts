@@ -1,6 +1,6 @@
 import { isAuthorizedCron, unauthorized } from "@/lib/cron-auth";
 import { backfillNotes } from "@/lib/analyst/backfill-notes";
-import { openaiKey } from "@/lib/env";
+import { anthropicKey } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -38,9 +38,9 @@ export async function GET(request: Request) {
   // Said plainly rather than returning an empty result. Without a key this
   // finds every movement and explains none of them, which looks identical to
   // a quiet month unless somebody says otherwise.
-  if (!openaiKey()) {
+  if (!anthropicKey()) {
     return Response.json(
-      { ok: false, error: "OPENAI_API_KEY is not set on this deployment" },
+      { ok: false, error: "ANTHROPIC_API_KEY is not set on this deployment" },
       { status: 503 },
     );
   }
