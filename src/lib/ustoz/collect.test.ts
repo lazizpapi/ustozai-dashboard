@@ -47,4 +47,19 @@ describe("ustozRanges", () => {
 
     expect(wide).toEqual(daily);
   });
+
+  it("also asks for yesterday alone, so the finished day gets its whole figure", () => {
+    // The headline reads the last finished day. Asked only for today, that
+    // day's session length stopped at the last poll before midnight.
+    const { yesterday } = ustozRanges("2026-08-24", "2026-08-17");
+
+    expect(yesterday).toEqual({ startDate: "2026-08-23", endDate: "2026-08-23" });
+  });
+
+  it("finds yesterday across a month boundary", () => {
+    expect(ustozRanges("2026-10-01", "2026-09-24").yesterday).toEqual({
+      startDate: "2026-09-30",
+      endDate: "2026-09-30",
+    });
+  });
 });

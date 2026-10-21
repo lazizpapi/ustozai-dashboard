@@ -49,14 +49,23 @@ export type UstozRange = {
  * as though it described that date. Widening the backfill made the headline
  * session figure less true rather than more complete, which is the opposite of
  * what a backfill is for.
+ *
+ * `yesterday` is the same single-day window a day earlier. The headline reads
+ * the last finished day, and asked only for today that day's figure froze at
+ * the last poll before midnight. Asking again once it has closed makes it whole.
  */
 export function ustozRanges(
   today: string,
   earliest: string,
-): { wide: UstozRange; daily: UstozRange } {
+): { wide: UstozRange; daily: UstozRange; yesterday: UstozRange } {
+  const before = new Date(`${today}T12:00:00Z`);
+  before.setUTCDate(before.getUTCDate() - 1);
+  const previous = before.toISOString().slice(0, 10);
+
   return {
     wide: { startDate: earliest, endDate: today },
     daily: { startDate: today, endDate: today },
+    yesterday: { startDate: previous, endDate: previous },
   };
 }
 
@@ -101,7 +110,11 @@ export async function collectUstozMetrics(
     };
   }
 
-  const { wide: range, daily: dayRange } = ustozRanges(tashkentDay(), tashkentDay(-days));
+  const {
+    wide: range,
+    daily: dayRange,
+    yesterday: yesterdayRange,
+  } = ustozRanges(tashkentDay(), tashkentDay(-days));
   const { startDate, endDate } = range;
 
   const activeStep = await step("ustoz:active-users", async () => {
@@ -124,10 +137,20 @@ export async function collectUstozMetrics(
    * fifty-day one onto the same row, both stored in a table called
    * app_engagement_daily and displayed beside a figure that really is daily.
    * That is how the tile came to read 29.4 minutes.
+   *
+   * Yesterday is asked for again, alone, because the tile reads the last
+   * finished day and today's figure is still moving. Each answer is filed
+   * under the one day it describes.
    */
   const visitStep = await step("ustoz:visit-summary", async () => {
-    const payload = await get("visitSummary", dayRange);
-    return parseVisitSummary(payload);
+    const [today, yesterday] = await Promise.all([
+      get("visitSummary", dayRange),
+      get("visitSummary", yesterdayRange),
+    ]);
+    return [
+      { date: yesterdayRange.endDate, ...parseVisitSummary(yesterday) },
+      { date: dayRange.endDate, ...parseVisitSummary(today) },
+    ];
   });
 
   const revenueStep = await step("ustoz:transactions", async () => {
@@ -153,8 +176,8 @@ export async function collectUstozMetrics(
 
   /*
    * Views are per day and land on the days they describe. The visit summary is
-   * a single figure, now asked for a single day, so attributing it to that day
-   * is honest rather than the best available approximation.
+   * a single figure, asked for a single day at a time, so attributing each to
+   * its day is honest rather than the best available approximation.
    *
    * Historical rows still hold the trailing-window values written before this
    * changed. Rewriting them would cost one request per day, the same trade the
@@ -163,15 +186,11 @@ export async function collectUstozMetrics(
    */
   const engagementRows = [
     ...(viewsStep.value ?? []).map((point) => ({ date: point.date, views: point.count })),
-    ...(visitStep.value
-      ? [
-          {
-            date: endDate,
-            totalLogins: visitStep.value.totalLogins,
-            averageMinutes: visitStep.value.averageMinutes,
-          },
-        ]
-      : []),
+    ...(visitStep.value ?? []).map((day) => ({
+      date: day.date,
+      totalLogins: day.totalLogins,
+      averageMinutes: day.averageMinutes,
+    })),
   ];
 
   if (engagementRows.length > 0) {

@@ -661,10 +661,33 @@ export async function saveActiveUsers(
 }
 
 /**
+ * Rows grouped by the columns they carry, so each group can be its own upsert.
+ *
+ * supabase-js sends a batch as one upsert whose column list is the union of
+ * every row's keys, and a row missing one of those keys gets null for it, which
+ * the merge then writes over the stored value. Leaving a field out of a row is
+ * therefore not enough to leave it alone; the row has to travel in a batch
+ * where no other row carries that field either.
+ */
+export function byColumnShape<T extends Record<string, unknown>>(rows: T[]): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const shape = Object.keys(row).sort().join(",");
+    groups.set(shape, [...(groups.get(shape) ?? []), row]);
+  }
+  return [...groups.values()];
+}
+
+/**
  * Views, logins and average session length.
  *
  * Each field is written only when present, so a day that already has views
  * does not lose them because the visit-summary call failed on a later run.
+ *
+ * That promise only holds one shape at a time; see byColumnShape. Sent as one
+ * batch, today's session length beside a week of view counts wrote null over
+ * the session length of the six days before, every hour, and the dashboard
+ * showed none for any finished day.
  */
 export async function saveEngagement(
   rows: {
@@ -690,10 +713,12 @@ export async function saveEngagement(
     merged.set(row.date, existing);
   }
 
-  const { error } = await serviceClient()
-    .from("app_engagement_daily")
-    .upsert([...merged.values()], { onConflict: "date" });
-  if (error) throw new Error(`saveEngagement: ${error.message}`);
+  for (const group of byColumnShape([...merged.values()])) {
+    const { error } = await serviceClient()
+      .from("app_engagement_daily")
+      .upsert(group, { onConflict: "date" });
+    if (error) throw new Error(`saveEngagement: ${error.message}`);
+  }
   return merged.size;
 }
 
