@@ -6,7 +6,7 @@ import { Section } from "@/components/dashboard/page-header";
 import { SetupNotice } from "@/components/dashboard/setup-notice";
 import { load } from "@/app/load";
 import { latestInstallRate } from "@/lib/installs";
-import { releaseNoteExcerpt } from "@/lib/market";
+import { fieldLabel, releaseNoteExcerpt, splitListingChanges } from "@/lib/market";
 import {
   androidDailyInstalls,
   iosDailyDownloads,
@@ -35,17 +35,6 @@ import { cn } from "@/lib/utils";
  * Our own version history sits alongside, because "what did they feel" is
  * usually asked right after "what did we ship".
  */
-
-const OUR_FIELDS = new Set(["version", "releaseNotes"]);
-
-const FIELD_LABELS: Record<string, string> = {
-  title: "name",
-  description: "description",
-  version: "version",
-  releaseNotes: "release notes",
-  screenshots: "screenshots",
-  icon: "icon",
-};
 
 /**
  * Shorter than the market page's cap, because this list lives in a narrow
@@ -76,9 +65,10 @@ export async function ProductView() {
   const lastDownload = downloads.at(-1) ?? null;
 
   // Our own releases, not competitors': this panel answers "what did we ship".
-  const ourReleases = listingChanges.filter((change) =>
-    change.changedFields.some((field) => OUR_FIELDS.has(field)),
-  );
+  // A release is a version that moved, which splitListingChanges decides the
+  // same way everywhere. The old field-name guess also counted a lone
+  // release-notes edit, and it let Apple's CDN flap through as repeats.
+  const ourReleases = splitListingChanges(listingChanges).releases;
 
   const unhappy = reviews.filter((review) => review.rating <= 3).length;
 
@@ -199,9 +189,7 @@ export async function ProductView() {
                   <span className="text-muted-foreground">
                     {" "}
                     {release.platform === "ios" ? "App Store" : "Google Play"},{" "}
-                    {release.changedFields
-                      .map((field) => FIELD_LABELS[field] ?? field)
-                      .join(", ")}
+                    {release.changedFields.map(fieldLabel).join(", ")}
                   </span>
                   {release.version ? (
                     <span className="tnum font-medium"> {release.version}</span>

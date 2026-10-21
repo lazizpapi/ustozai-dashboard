@@ -14,7 +14,13 @@ import {
   TAP_EVENTS,
   type SourceFunnel,
 } from "@/lib/funnel";
-import { chartMovers, listingDiffs, type ListingChange } from "@/lib/market";
+import {
+  chartMovers,
+  listingDiffs,
+  splitListingChanges,
+  type ListingActivity,
+  type ListingChange,
+} from "@/lib/market";
 import {
   completeDays,
   counterVelocity,
@@ -1124,7 +1130,14 @@ export async function ownReleases(days = 90): Promise<ReleaseMarker[]> {
  * Fetches enough versions that each change row still has its predecessor to
  * diff against; the diffing is pure and pinned in market.test.ts.
  */
-export async function recentListingChanges(limit = 20): Promise<ListingChange[]> {
+/**
+ * Every listing change in the fetched window, undated and unsliced.
+ *
+ * Shared by the two public readers below so the fetch and the diff happen
+ * once. Separate from them because the day-collapse has to see the whole
+ * window: run it after a slice and a flap straddling the cut survives.
+ */
+async function allListingChanges(): Promise<ListingChange[]> {
   const { data, error } = await serviceClient()
     .from("listing_versions")
     .select("app_id, fields, detected_at, apps!inner(platform, store_id)")
@@ -1154,7 +1167,23 @@ export async function recentListingChanges(limit = 20): Promise<ListingChange[]>
     };
   });
 
-  return listingDiffs(rows).slice(0, limit);
+  return listingDiffs(rows);
+}
+
+export async function recentListingChanges(limit = 20): Promise<ListingChange[]> {
+  return (await allListingChanges()).slice(0, limit);
+}
+
+/**
+ * The same changes, split into what shipped and what was merely reworded.
+ *
+ * The market pages read this instead of the flat list. Splitting here rather
+ * than in the page keeps the two events named the same way everywhere, and
+ * lets the split see the whole window before either side is capped.
+ */
+export async function recentListingActivity(limit = 20): Promise<ListingActivity> {
+  const { releases, edits } = splitListingChanges(await allListingChanges());
+  return { releases: releases.slice(0, limit), edits: edits.slice(0, limit) };
 }
 
 /**

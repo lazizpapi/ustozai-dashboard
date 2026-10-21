@@ -14,6 +14,7 @@ import {
   socialTrends,
 } from "@/lib/db/queries";
 import { sourceLabel } from "@/lib/funnel";
+import { fieldLabel, splitListingChanges } from "@/lib/market";
 import {
   apostropheNote,
   delta,
@@ -43,14 +44,6 @@ const SOCIAL_LABELS = {
   youtube: "YouTube",
 } as const;
 
-const FIELD_LABELS: Record<string, string> = {
-  title: "name",
-  description: "description",
-  version: "version",
-  releaseNotes: "release notes",
-  screenshots: "screenshots",
-  icon: "icon",
-};
 
 export async function MarketingView() {
   const result = await load(() =>
@@ -68,7 +61,10 @@ export async function MarketingView() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const [social, funnel, bySource, keywords, listingChanges] = result.data;
+  const [social, funnel, bySource, keywords, allChanges] = result.data;
+  // This panel is titled "Listing edits" and always meant the ASO half: a
+  // rewritten description, not a shipped build.
+  const listingChanges = splitListingChanges(allChanges).edits;
 
   /*
    * The one line the source breakdown is worth on this page.
@@ -245,9 +241,7 @@ export async function MarketingView() {
                     className="text-muted-foreground text-xs"
                   >
                     <span className="text-foreground">{change.appName}</span> changed{" "}
-                    {change.changedFields
-                      .map((field) => FIELD_LABELS[field] ?? field)
-                      .join(", ")}
+                    {change.changedFields.map(fieldLabel).join(", ")}
                     <span className="text-muted-foreground/70">
                       {" "}
                       {formatDay(change.detectedAt)}

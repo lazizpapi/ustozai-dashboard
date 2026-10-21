@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   chartMovers,
+  collapseSameDay,
+  fieldLabel,
   listingDiffs,
   releaseNoteExcerpt,
+  splitListingChanges,
   type ChartAppRow,
+  type ListingChange,
   type ListingVersionRow,
 } from "./market";
 
@@ -180,5 +184,155 @@ describe("releaseNoteExcerpt", () => {
   it("has nothing to say about nothing", () => {
     expect(releaseNoteExcerpt(null, 240)).toBeNull();
     expect(releaseNoteExcerpt("   ", 240)).toBeNull();
+  });
+});
+
+function change(
+  appName: string,
+  detectedAt: string,
+  changedFields: string[],
+  version: string | null = null,
+  platform = "ios",
+): ListingChange {
+  return {
+    appId: `${appName}-${platform}`,
+    appName,
+    platform,
+    detectedAt,
+    changedFields,
+    version,
+    releaseNotes: null,
+  };
+}
+
+describe("collapseSameDay", () => {
+  it("collapses a day of readings into the state the store ended it in", () => {
+    // Praktika really did this on 20 August. Apple's CDN answered with
+    // different versions from different nodes and the poll recorded each one,
+    // so the page showed five releases where there had been one.
+    const flap = collapseSameDay([
+      change("Praktika", "2026-08-20T14:00:00Z", ["version"], "4.32.0"),
+      change("Praktika", "2026-08-20T11:00:00Z", ["version"], "4.31.0"),
+      change("Praktika", "2026-08-20T08:00:00Z", ["version"], "4.32.0"),
+      change("Praktika", "2026-08-20T05:00:00Z", ["version"], "4.31.0"),
+      change("Praktika", "2026-08-20T02:00:00Z", ["version"], "4.32.0"),
+    ]);
+
+    expect(flap).toHaveLength(1);
+    // The last reading of the day, which is the state the store ended up in.
+    expect(flap[0].version).toBe("4.32.0");
+    expect(flap[0].detectedAt).toBe("2026-08-20T14:00:00Z");
+  });
+
+  it("names every field that moved during the day", () => {
+    // A morning wording tweak and an evening release are one day of activity,
+    // and keeping only the last reading would lose the description edit.
+    const day = collapseSameDay([
+      change("Ibrat", "2026-08-26T18:00:00Z", ["releaseNotes", "version"], "2.4.0"),
+      change("Ibrat", "2026-08-26T09:00:00Z", ["description"]),
+    ]);
+
+    expect(day).toHaveLength(1);
+    expect(day[0].changedFields).toEqual(["description", "releaseNotes", "version"]);
+    expect(day[0].version).toBe("2.4.0");
+  });
+
+  it("keeps days, stores and apps apart", () => {
+    const rows = collapseSameDay([
+      change("Ibrat", "2026-08-26T09:00:00Z", ["version"], "2.4.0"),
+      change("Ibrat", "2026-08-25T09:00:00Z", ["version"], "2.3.9"),
+      change("Ibrat", "2026-08-26T09:00:00Z", ["version"], "2.4.0", "android"),
+      change("Englify", "2026-08-26T09:00:00Z", ["version"], "2.7.4"),
+    ]);
+
+    expect(rows).toHaveLength(4);
+  });
+
+  it("files a reading by its Tashkent day", () => {
+    // Tashkent is UTC+5, so an evening UTC reading is already tomorrow here.
+    // Filing it by the UTC date would fold it into the wrong day.
+    const rows = collapseSameDay([
+      change("Ibrat", "2026-08-26T20:30:00Z", ["version"], "2.4.1"),
+      change("Ibrat", "2026-08-26T09:00:00Z", ["version"], "2.4.0"),
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0].version).toBe("2.4.1");
+  });
+
+  it("returns newest first", () => {
+    const rows = collapseSameDay([
+      change("Ibrat", "2026-08-20T09:00:00Z", ["version"], "2.3.9"),
+      change("Ibrat", "2026-08-26T09:00:00Z", ["version"], "2.4.0"),
+    ]);
+    expect(rows.map((row) => row.version)).toEqual(["2.4.0", "2.3.9"]);
+  });
+
+  it("has nothing to collapse in nothing", () => {
+    expect(collapseSameDay([])).toEqual([]);
+  });
+});
+
+describe("splitListingChanges", () => {
+  it("calls a version change a release", () => {
+    const { releases, edits } = splitListingChanges([
+      change("Ibrat", "2026-08-31T09:00:00Z", ["icon", "releaseNotes", "version"], "2.4.1"),
+    ]);
+
+    expect(releases).toHaveLength(1);
+    expect(edits).toHaveLength(0);
+  });
+
+  it("calls a listing edit with no new version an edit", () => {
+    // Nobody shipped. They reworded the store page to win search, which is a
+    // different event and used to render identically to a release.
+    const { releases, edits } = splitListingChanges([
+      change("Englify", "2026-08-25T09:00:00Z", ["description", "screenshots"]),
+    ]);
+
+    expect(releases).toHaveLength(0);
+    expect(edits).toHaveLength(1);
+  });
+
+  it("collapses the flap before splitting", () => {
+    const { releases } = splitListingChanges([
+      change("Praktika", "2026-08-20T14:00:00Z", ["version"], "4.32.0"),
+      change("Praktika", "2026-08-20T11:00:00Z", ["version"], "4.31.0"),
+      change("Praktika", "2026-08-20T08:00:00Z", ["version"], "4.32.0"),
+    ]);
+
+    expect(releases).toHaveLength(1);
+  });
+
+  it("keeps both lists newest first", () => {
+    const { releases, edits } = splitListingChanges([
+      change("Ibrat", "2026-08-20T09:00:00Z", ["version"], "2.3.9"),
+      change("Ibrat", "2026-08-26T09:00:00Z", ["version"], "2.4.0"),
+      change("Englify", "2026-08-21T09:00:00Z", ["description"]),
+      change("Englify", "2026-08-27T09:00:00Z", ["screenshots"]),
+    ]);
+
+    expect(releases.map((row) => row.version)).toEqual(["2.4.0", "2.3.9"]);
+    expect(edits.map((row) => row.detectedAt.slice(0, 10))).toEqual([
+      "2026-08-27",
+      "2026-08-21",
+    ]);
+  });
+
+  it("has nothing to split in nothing", () => {
+    expect(splitListingChanges([])).toEqual({ releases: [], edits: [] });
+  });
+});
+
+describe("fieldLabel", () => {
+  it("says what a field is in words", () => {
+    expect(fieldLabel("releaseNotes")).toBe("release notes");
+    expect(fieldLabel("title")).toBe("name");
+  });
+
+  it("passes through a field it has no word for", () => {
+    // Apple can add one. An unlabelled field reading as its own name is ugly
+    // and true; a blank is neither.
+    expect(fieldLabel("subtitle")).toBe("subtitle");
   });
 });

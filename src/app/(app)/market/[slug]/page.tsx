@@ -11,7 +11,12 @@ import { VelocityChart } from "@/components/dashboard/velocity-chart";
 import { load } from "@/app/load";
 import { competitorProfile } from "@/lib/db/queries";
 import { COMPETITORS } from "@/lib/collectors/config";
-import { releaseNoteExcerpt, RELEASE_NOTE_CHARS } from "@/lib/market";
+import {
+  fieldLabel,
+  releaseNoteExcerpt,
+  splitListingChanges,
+  RELEASE_NOTE_CHARS,
+} from "@/lib/market";
 import { formatDay, formatNumber, formatRating, formatSigned, NO_VALUE} from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -37,17 +42,6 @@ export const dynamic = "force-dynamic";
  */
 
 const SLUGS = ["ustoz-ai", ...COMPETITORS.map((c) => c.slug)];
-
-const FIELD_LABELS: Record<string, string> = {
-  title: "name",
-  description: "description",
-  version: "version",
-  releaseNotes: "release notes",
-  screenshots: "screenshots",
-  icon: "icon",
-};
-
-const fieldLabel = (field: string) => FIELD_LABELS[field] ?? field;
 
 /** The plain-text value of a listing field, when it is a string. */
 function textField(
@@ -89,6 +83,9 @@ export default async function CompetitorPage({
   const app = result.data;
   if (!app) notFound();
 
+  // Split here rather than in the query: the profile already holds every
+  // change for this one app, so a second fetch would buy nothing.
+  const { releases, edits } = splitListingChanges(app.listingChanges);
   const installRate = recentAverage(app.playVelocity);
   const ratingRate = recentAverage(app.iosRatingVelocity);
   const latestInstalls = app.playInstalls.at(-1)?.value ?? null;
@@ -219,42 +216,68 @@ export default async function CompetitorPage({
         </Section>
       ) : null}
 
-      <Section
-        title="Listing changes"
-        note="store page edits, which is an ASO experiment run in public"
-      >
-        {app.listingChanges.length > 0 ? (
-          <ul className="space-y-2 text-sm">
-            {app.listingChanges.slice(0, 12).map((change) => (
+      <Section title="Releases" note="what they shipped, newest first">
+        {releases.length > 0 ? (
+          <ul className="divide-y text-sm">
+            {releases.slice(0, 12).map((release) => (
               <li
-                key={`${change.appId}-${change.detectedAt}`}
-                className="flex flex-wrap items-baseline gap-x-2"
+                key={`${release.appId}-${release.detectedAt}`}
+                className="grid grid-cols-[4.25rem_1fr] gap-x-4 py-3"
               >
                 <span className="text-muted-foreground tnum text-xs">
-                  {formatDay(change.detectedAt)}
+                  {formatDay(release.detectedAt)}
                 </span>
-                <span className="text-muted-foreground text-xs">
-                  {change.platform === "ios" ? "App Store" : "Google Play"}
-                </span>
-                <span>changed {change.changedFields.map(fieldLabel).join(", ")}</span>
-                {change.version ? (
-                  <span className="tnum text-xs font-medium">{change.version}</span>
-                ) : null}
-                {releaseNoteExcerpt(change.releaseNotes, RELEASE_NOTE_CHARS) ? (
-                  <p className="text-muted-foreground w-full max-w-2xl pt-0.5 text-xs leading-relaxed">
-                    {releaseNoteExcerpt(change.releaseNotes, RELEASE_NOTE_CHARS)}
-                  </p>
-                ) : null}
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-x-2">
+                    <span className="text-muted-foreground [&>svg]:size-3.5">
+                      {release.platform === "ios" ? APP_STORE_MARK : GOOGLE_PLAY_MARK}
+                    </span>
+                    {release.version ? (
+                      <span className="tnum font-medium">{release.version}</span>
+                    ) : null}
+                  </div>
+                  {releaseNoteExcerpt(release.releaseNotes, RELEASE_NOTE_CHARS) ? (
+                    <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
+                      {releaseNoteExcerpt(release.releaseNotes, RELEASE_NOTE_CHARS)}
+                    </p>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
         ) : (
           <p className="text-muted-foreground text-sm">
-            Nothing changed since we started watching this listing. The baseline
+            No release seen since we started watching this listing. The baseline
             itself is not a change, so it does not appear here.
           </p>
         )}
       </Section>
+
+      {edits.length > 0 ? (
+        <Section
+          title="Store page edits"
+          note="listing changes that shipped no new version"
+        >
+          <ul className="divide-y text-sm">
+            {edits.slice(0, 12).map((edit) => (
+              <li
+                key={`${edit.appId}-${edit.detectedAt}`}
+                className="grid grid-cols-[4.25rem_1fr] gap-x-4 py-2"
+              >
+                <span className="text-muted-foreground tnum text-xs">
+                  {formatDay(edit.detectedAt)}
+                </span>
+                <span className="flex flex-wrap items-center gap-x-2">
+                  <span className="text-muted-foreground [&>svg]:size-3.5">
+                    {edit.platform === "ios" ? APP_STORE_MARK : GOOGLE_PLAY_MARK}
+                  </span>
+                  <span>changed {edit.changedFields.map(fieldLabel).join(", ")}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
 
       {description ? (
         <Section title="Current store description" note="what they say they are">

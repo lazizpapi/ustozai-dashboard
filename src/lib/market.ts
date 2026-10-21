@@ -1,3 +1,5 @@
+import { localDate } from "./growth";
+
 /**
  * Reductions for the market page, kept pure so the interesting logic is
  * pinned by tests instead of exercised for the first time in production.
@@ -104,6 +106,100 @@ export interface ListingChange {
 
 const comparable = (value: string | string[] | null | undefined): string =>
   value === null || value === undefined ? "" : JSON.stringify(value);
+
+/**
+ * The listing fields in words, in one place.
+ *
+ * This map used to exist four times, once in each surface that renders a
+ * change, and four copies of a vocabulary are four chances to drift.
+ *
+ * A field with no word here returns its own name rather than a blank. Apple
+ * can add a field tomorrow, and "subtitle" is ugly and true where an empty
+ * gap is neither.
+ */
+const FIELD_LABELS: Record<string, string> = {
+  title: "name",
+  description: "description",
+  version: "version",
+  releaseNotes: "release notes",
+  screenshots: "screenshots",
+  icon: "icon",
+};
+
+export function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? field;
+}
+
+/**
+ * One entry per app, per store, per day.
+ *
+ * Apple serves its listing from a CDN, and on 20 August different nodes
+ * answered with different versions of Praktika within the same hours. The poll
+ * recorded each faithfully, and the page then showed five releases where there
+ * had been one, which was the most confusing thing on it.
+ *
+ * The surviving entry is the last reading of the day, because that is the
+ * state the store actually ended the day in. The alternative rule, dropping a
+ * version we have seen before, was rejected: it would silently hide a genuine
+ * rollback, which is rare but real, and this rule cannot.
+ *
+ * Changed fields are unioned across the day rather than taken from the last
+ * reading. A morning wording tweak followed by an evening release is one day
+ * of activity and both halves are true.
+ */
+export function collapseSameDay(changes: ListingChange[]): ListingChange[] {
+  const byDay = new Map<string, ListingChange>();
+
+  // Oldest first, so the last write per key is the last reading of that day.
+  for (const change of [...changes].sort((a, b) =>
+    a.detectedAt.localeCompare(b.detectedAt),
+  )) {
+    const key = `${change.platform}:${change.appId}:${localDate(change.detectedAt)}`;
+    const earlier = byDay.get(key);
+
+    byDay.set(key, {
+      ...change,
+      changedFields: earlier
+        ? [...new Set([...earlier.changedFields, ...change.changedFields])].sort()
+        : change.changedFields,
+      // The day's last non-null wins: a release followed by a screenshot swap
+      // still shipped that version, and the swap carries none of its own.
+      version: change.version ?? earlier?.version ?? null,
+      releaseNotes: change.releaseNotes ?? earlier?.releaseNotes ?? null,
+    });
+  }
+
+  return [...byDay.values()].sort((a, b) => b.detectedAt.localeCompare(a.detectedAt));
+}
+
+export interface ListingActivity {
+  /** A build shipped: the version moved. */
+  releases: ListingChange[];
+  /** The store page moved and the version did not. ASO run in public. */
+  edits: ListingChange[];
+}
+
+/**
+ * Two lists, because these are two different events.
+ *
+ * "Ibrat Academy changed icon, release notes, version 2.4.1" means they
+ * shipped. "Ibrat Academy changed description" means nobody shipped and they
+ * reworded the page to win search. Rendered as the same grey sentence, a
+ * reader has to decode which is which on every row, which is what made this
+ * section hard to read.
+ *
+ * The test is the version field, matching the rule releaseMarkers already
+ * applies to chart markers: an edit that leaves the version alone is
+ * marketing, not a build.
+ */
+export function splitListingChanges(changes: ListingChange[]): ListingActivity {
+  const collapsed = collapseSameDay(changes);
+
+  return {
+    releases: collapsed.filter((change) => change.version !== null),
+    edits: collapsed.filter((change) => change.version === null),
+  };
+}
 
 /**
  * How much of a release note fits beside a dated row before it stops being a

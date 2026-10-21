@@ -9,12 +9,13 @@ import {
   competitorRankSeries,
   educationChartTop,
   marketOverview,
-  recentListingChanges,
+  recentListingActivity,
   watchedListingCount,
   type MarketApp,
 } from "@/lib/db/queries";
 import { COMPETITORS, IOS_APP_ID } from "@/lib/collectors/config";
-import { releaseNoteExcerpt, RELEASE_NOTE_CHARS } from "@/lib/market";
+import { fieldLabel, releaseNoteExcerpt, RELEASE_NOTE_CHARS } from "@/lib/market";
+import { APP_STORE_MARK, GOOGLE_PLAY_MARK } from "@/components/tv/brand-logo";
 import {
   delta,
   formatDay,
@@ -92,17 +93,16 @@ function ChartMove({ value, isNew }: { value: number | null; isNew: boolean }) {
   );
 }
 
-/** The human names for listing fields, in the timeline's phrasing. */
-const FIELD_LABELS: Record<string, string> = {
-  title: "name",
-  description: "description",
-  version: "version",
-  releaseNotes: "release notes",
-  screenshots: "screenshots",
-  icon: "icon",
-};
-
-const fieldLabel = (field: string) => FIELD_LABELS[field] ?? field;
+/**
+ * Whether a change is ours, so our rows carry the same tag the table above
+ * gives our row.
+ *
+ * The name rather than the store id, because recentListingChanges has already
+ * resolved both of our store ids to this one name and the id is not on the
+ * row by the time it arrives here.
+ */
+const OUR_NAME = "Ustoz AI";
+const isOurs = (change: { appName: string }) => change.appName === OUR_NAME;
 
 /** Outside the chart is a real answer and reads differently from no reading. */
 function Rank({ app }: { app: MarketApp }) {
@@ -119,14 +119,14 @@ function Rank({ app }: { app: MarketApp }) {
 
 export default async function MarketPage() {
   const result = await load(async () => {
-    const [apps, chartTop, listingChanges, watchedCount, race] = await Promise.all([
+    const [apps, chartTop, activity, watchedCount, race] = await Promise.all([
       marketOverview(),
       educationChartTop(),
-      recentListingChanges(),
+      recentListingActivity(),
       watchedListingCount(),
       competitorRankSeries(),
     ]);
-    return { apps, chartTop, listingChanges, watchedCount, race };
+    return { apps, chartTop, activity, watchedCount, race };
   }, "/market");
 
   if (result.kind === "unconfigured") {
@@ -134,7 +134,8 @@ export default async function MarketPage() {
   }
   if (result.kind === "no-data") return <SetupNotice reason="no-data" />;
 
-  const { apps, chartTop, listingChanges, watchedCount, race } = result.data;
+  const { apps, chartTop, activity, watchedCount, race } = result.data;
+  const { releases, edits } = activity;
   const trackedIds = new Set([
     IOS_APP_ID,
     ...COMPETITORS.flatMap((c) => (c.iosId ? [c.iosId] : [])),
@@ -343,45 +344,92 @@ export default async function MarketPage() {
         say, so it stays hidden.
       */}
       {watchedCount > 0 ? (
-        <Section
-          title="Listing changes"
-          note="store page edits across every tracked app, ours included"
-        >
-          {listingChanges.length > 0 ? (
-            <ul className="space-y-2 text-sm">
-              {listingChanges.map((change) => (
+        <Section title="Releases" note="what tracked apps shipped, newest first">
+          {releases.length > 0 ? (
+            <ul className="divide-y text-sm">
+              {releases.map((release) => (
                 <li
-                  key={`${change.appId}-${change.detectedAt}`}
-                  className="flex flex-wrap items-baseline gap-x-2"
+                  key={`${release.appId}-${release.detectedAt}`}
+                  /*
+                   * A grid, not a wrapping inline row. The fixed gutter is what
+                   * gives the dates and the app names a column to scan down,
+                   * and it keeps the notes paragraph in the body column at
+                   * every width. As an inline flex child the paragraph was
+                   * capped by max-w rather than filling the line, so above
+                   * about 1200px it sat beside the row and read as a stray
+                   * hanging indent belonging to nothing.
+                   */
+                  className="grid grid-cols-[4.25rem_1fr] gap-x-4 py-3"
                 >
                   <span className="text-muted-foreground tnum text-xs">
-                    {formatDay(change.detectedAt)}
+                    {formatDay(release.detectedAt)}
                   </span>
-                  <span className="font-medium">{change.appName}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {change.platform === "ios" ? "App Store" : "Google Play"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    changed {change.changedFields.map(fieldLabel).join(", ")}
-                  </span>
-                  {change.version ? (
-                    <span className="tnum text-xs font-medium">{change.version}</span>
-                  ) : null}
-                  {releaseNoteExcerpt(change.releaseNotes, RELEASE_NOTE_CHARS) ? (
-                    <p className="text-muted-foreground/80 w-full max-w-2xl pt-0.5 text-xs leading-relaxed">
-                      {releaseNoteExcerpt(change.releaseNotes, RELEASE_NOTE_CHARS)}
-                    </p>
-                  ) : null}
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-x-2">
+                      <span className="font-medium">{release.appName}</span>
+                      {isOurs(release) ? (
+                        <span className="text-muted-foreground text-xs">ours</span>
+                      ) : null}
+                      <span className="text-muted-foreground [&>svg]:size-3.5">
+                        {release.platform === "ios" ? APP_STORE_MARK : GOOGLE_PLAY_MARK}
+                      </span>
+                      {release.version ? (
+                        <span className="tnum text-xs">{release.version}</span>
+                      ) : null}
+                    </div>
+                    {releaseNoteExcerpt(release.releaseNotes, RELEASE_NOTE_CHARS) ? (
+                      <p className="text-muted-foreground max-w-2xl text-xs leading-relaxed">
+                        {releaseNoteExcerpt(release.releaseNotes, RELEASE_NOTE_CHARS)}
+                      </p>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
           ) : (
             <p className="text-muted-foreground text-sm">
-              No listing changes yet. Watching {watchedCount}{" "}
-              {watchedCount === 1 ? "listing" : "listings"}; a change to a
-              title, description, screenshots or version will appear here.
+              No release seen yet. Watching {watchedCount}{" "}
+              {watchedCount === 1 ? "listing" : "listings"}; a new version on
+              either store appears here.
             </p>
           )}
+        </Section>
+      ) : null}
+
+      {/*
+        The other half, and a different event. Nobody shipped: they reworded
+        the store page to win search, which is an ASO experiment run in public.
+        Below releases and one line each, because it is the weaker signal.
+      */}
+      {watchedCount > 0 && edits.length > 0 ? (
+        <Section
+          title="Store page edits"
+          note="listing changes that shipped no new version"
+        >
+          <ul className="divide-y text-sm">
+            {edits.map((edit) => (
+              <li
+                key={`${edit.appId}-${edit.detectedAt}`}
+                className="grid grid-cols-[4.25rem_1fr] gap-x-4 py-2"
+              >
+                <span className="text-muted-foreground tnum text-xs">
+                  {formatDay(edit.detectedAt)}
+                </span>
+                <span className="flex flex-wrap items-center gap-x-2">
+                  <span className="font-medium">{edit.appName}</span>
+                  {isOurs(edit) ? (
+                    <span className="text-muted-foreground text-xs">ours</span>
+                  ) : null}
+                  <span className="text-muted-foreground [&>svg]:size-3.5">
+                    {edit.platform === "ios" ? APP_STORE_MARK : GOOGLE_PLAY_MARK}
+                  </span>
+                  <span className="text-muted-foreground">
+                    changed {edit.changedFields.map(fieldLabel).join(", ")}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </Section>
       ) : null}
 
