@@ -241,11 +241,10 @@ describe("the analyst's run history", () => {
 });
 
 describe("the comment bot", () => {
-  const activity = {
-    health: { lastPolledAt: "2026-10-15T04:50:00Z", minutesSincePoll: 10, alive: true },
-    counts: { replied24h: 6, flagged24h: 1, skipped24h: 3 },
-    recent: Array.from({ length: 25 }, (_, i) => ({
-      commentId: `c${i}`,
+  const counts = { replied24h: 6, flagged24h: 1, skipped24h: 3, deleted24h: 0, wouldDelete24h: 2, stuck24h: 0 };
+  const comments = (platform: string) =>
+    Array.from({ length: 25 }, (_, i) => ({
+      commentId: `${platform}${i}`,
       at: "2026-10-15T04:00:00Z",
       category: "reply",
       author: "Aziza",
@@ -253,38 +252,53 @@ describe("the comment bot", () => {
       reply: "Rahmat!",
       reason: null,
       posted: true,
-      videoId: "v1",
-    })),
+      videoId: null,
+      platform,
+      moderation: null,
+    }));
+  const youtubeHealth = { kind: "polled" as const, lastPolledAt: "2026-10-15T04:50:00Z", minutesSincePoll: 10, alive: true };
+  const telegramHealth = { kind: "pushed" as const, lastCommentAt: "2026-10-15T04:30:00Z", minutesSinceComment: 30 };
+  const activity = {
+    channels: [
+      { platform: "youtube", health: youtubeHealth, counts, recent: comments("youtube") },
+      { platform: "telegram", health: telegramHealth, counts: { ...counts, replied24h: 4 }, recent: comments("telegram") },
+    ],
   };
 
-  it("gives the bot's health, its last day's counts and its newest comments, cut short", async () => {
+  it("gives each channel apart: its health, its last day's counts and its newest comments, cut short", async () => {
     const d = deps();
     d.commentActivity = vi.fn(async () => activity);
     const answer = (await runExtraTool("get_comment_activity", {}, d)) as {
-      health: unknown;
-      counts: unknown;
-      recent: { comment: string; commentId?: string }[];
+      channels: { channel: string; health: unknown; counts: unknown; recent: { comment: string; commentId?: string }[] }[];
       note: string;
     };
-    expect(answer.health).toEqual(activity.health);
-    expect(answer.counts).toEqual(activity.counts);
-    expect(answer.recent).toHaveLength(15);
-    expect(answer.recent[0].comment).toHaveLength(300);
-    expect(answer.recent[0]).not.toHaveProperty("commentId");
+    expect(answer.channels.map((c) => c.channel)).toEqual(["YouTube", "Telegram"]);
+    expect(answer.channels[0].health).toEqual(youtubeHealth);
+    expect(answer.channels[1].health).toEqual(telegramHealth);
+    expect(answer.channels[1].counts).toEqual({ ...counts, replied24h: 4 });
+    expect(answer.channels[0].recent).toHaveLength(10);
+    expect(answer.channels[0].recent[0].comment).toHaveLength(300);
+    expect(answer.channels[0].recent[0]).not.toHaveProperty("commentId");
     // Comments come from the public: data to report, never instructions. The
     // note comes first, so a result cut short for Jarvis still carries it.
     expect(answer.note).toMatch(/written by the public/i);
     expect(Object.keys(answer)[0]).toBe("note");
   });
 
-  it("says when the bot has stopped answering comments, so a quiet day is not heard as calm", async () => {
+  it("says which channel has stopped answering comments, so a quiet day is not heard as calm", async () => {
     const d = deps();
     d.commentActivity = vi.fn(async () => ({
-      ...activity,
-      health: { lastPolledAt: "2026-10-14T04:00:00Z", minutesSincePoll: 1500, alive: false },
+      channels: [
+        {
+          ...activity.channels[0],
+          health: { kind: "polled" as const, lastPolledAt: "2026-10-14T04:00:00Z", minutesSincePoll: 1500, alive: false },
+        },
+        activity.channels[1],
+      ],
     }));
     const answer = (await runExtraTool("get_comment_activity", {}, d)) as { note: string };
-    expect(answer.note).toMatch(/has stopped/i);
+    expect(answer.note).toMatch(/YouTube: the bot has stopped/i);
+    expect(answer.note).not.toMatch(/Telegram: the bot has stopped/i);
   });
 
   it("says plainly when the bot is not connected to the dashboard", async () => {
